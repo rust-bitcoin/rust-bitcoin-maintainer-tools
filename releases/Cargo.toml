@@ -1,0 +1,22 @@
+[package]
+name = "releases"
+version = "0.1.0"
+authors = ["Tobin C. Harding <me@tobin.cc>"]
+license = "CC0-1.0"
+repository = "https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/"
+description = "Tool for checking various release related things."
+categories = []
+keywords = []
+readme = "README.md"
+edition = "2021"
+rust-version = "1.56.1"
+
+[dependencies]
+anyhow = { version = "1.0.82", default-features = false, features = ["std"] }
+clap = { version = "4.5.4", default-features = false, features = ["std", "color", "help", "usage", "error-context", "suggestions", "derive", "cargo"] }
+crates_io_api = { version = "0.11.0", default-features = false, features = ["rustls"] }
+semver = { version = "1.0.22", default-features = false, features = ["std"] }
+serde_json = { version = "1.0.116", default-features = false, features = [] }
+serde = { version = "1.0.198", features = ["derive"] }
+tokio = { version = "1.37.0", features = ["rt", "macros"] }
+toml = { version = "0.8.12", default-features = false, features = ["display", "parse"] }
