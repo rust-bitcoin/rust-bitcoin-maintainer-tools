@@ -58,6 +58,8 @@ main() {
 
     if [ -e "$crates_script" ]; then
         verbose_say "Sourcing $crates_script"
+        # can't find the file because of the ENV var
+        # shellcheck source=/dev/null
         . "$crates_script"
         for crate in "${CRATES[@]}"; do
             verbose_say "Found crate: $crate"
@@ -120,6 +122,8 @@ build_and_test() {
         verbose_say "Sourcing $test_vars_script"
         if [ -e "$test_vars_script" ]; then
             # Set crate specific variables.
+            # can't find the file because of the ENV var
+            # shellcheck source=/dev/null
             . "$test_vars_script"
         else
             err "Missing $test_vars_script"
@@ -240,6 +244,8 @@ do_dup_deps() {
     # Add any duplicate dependencies to ignore.
     if [ -e "$duplicate_deps_script" ]; then
         verbose_say "Sourcing $duplicate_deps_script"
+        # can't find the file because of the ENV var
+        # shellcheck source=/dev/null
         . "$duplicate_deps_script"
 
         if [ -n "${DUPLICATE_DEPS+x}" ]; then
