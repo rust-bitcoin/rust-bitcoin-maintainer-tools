@@ -64,7 +64,7 @@ main() {
         # can't find the file because of the ENV var
         # shellcheck source=/dev/null
         . "$crates_script"
-        for crate in "${CRATES[@]}"; do
+        for crate in $CRATES; do
             verbose_say "Found crate: $crate"
         done
     else
@@ -111,7 +111,7 @@ main() {
 
 # Build and test for each crate, done with each toolchain.
 build_and_test() {
-    for crate in "${CRATES[@]}"; do
+    for crate in $CRATES; do
         local test_vars_script="$REPO_DIR/$crate/contrib/test_vars.sh"
 
         # Clean variables and also make sure they are defined.
@@ -287,7 +287,7 @@ build_docs_with_stable_toolchain() {
 do_bench() {
     verbose_say "Running bench tests for: $CRATES"
 
-    for crate in "${CRATES[@]}"; do
+    for crate in $CRATES; do
         pushd "$REPO_DIR/$crate" > /dev/null
         # Unit tests are ignored so if there are no bench test then this will just succeed.
         RUSTFLAGS='--cfg=bench' cargo bench
