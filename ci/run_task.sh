@@ -259,9 +259,8 @@ do_dup_deps() {
     duplicate_dependencies=$(eval "$tree_cmd")
 
     if [ "$duplicate_dependencies" -ne 0 ]; then
-        echo "Dependency tree is broken, contains duplicates"
         cargo tree  --target=all --all-features --duplicates
-        exit 1
+        say_err "Dependency tree is broken, contains duplicates"
     fi
 
     set -o pipefail
