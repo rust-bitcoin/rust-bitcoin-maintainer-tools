@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #
 # Script used to run CI jobs, can also be used from the command line.
+#
+# Shellcheck can't search dynamic paths
+# shellcheck source=/dev/null
 
 set -euox pipefail
 
