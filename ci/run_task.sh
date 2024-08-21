@@ -112,26 +112,23 @@ build_and_test() {
     for crate in "${CRATES[@]}"; do
         local test_vars_script="$REPO_DIR/$crate/contrib/test_vars.sh"
 
-        # Building the fuzz crate is more-or-less just a sanity check.
-        if [ "$crate" = "fuzz" ]; then
-            pushd "$REPO_DIR/$crate" > /dev/null
-            cargo --locked build
-            popd > /dev/null
-            break
-        fi
+        # Clean variables and also make sure they are defined.
+        FEATURES_WITH_STD=""
+        FEATURES_WITH_NO_STD=""
+        FEATURES_WITHOUT_STD=""
+        EXAMPLES=""
 
         verbose_say "Sourcing $test_vars_script"
         if [ -e "$test_vars_script" ]; then
             # Set crate specific variables.
             . "$test_vars_script"
-        else
-            err "Missing $test_vars_script"
-        fi
-        verbose_say "Got vars"
-        verbose_say "FEATURES_WITH_STD: ${FEATURES_WITH_STD:-}"
-        verbose_say "FEATURES_WITHOUT_STD: ${FEATURES_WITHOUT_STD:-}"
-        verbose_say "EXAMPLES: ${EXAMPLES:-}"
 
+            verbose_say "Got test vars:"
+            verbose_say "FEATURES_WITH_STD: ${FEATURES_WITH_STD}"
+            verbose_say "FEATURES_WITH_NO_STD: ${FEATURES_WITH_NO_STD}"
+            verbose_say "FEATURES_WITHOUT_STD: ${FEATURES_WITHOUT_STD}"
+            verbose_say "EXAMPLES: ${EXAMPLES:-}"
+        fi
         pushd "$REPO_DIR/$crate" > /dev/null
 
         do_test
@@ -146,7 +143,7 @@ do_test() {
     $cargo build
     $cargo test
 
-    if [ -n "${EXAMPLES+x}" ]; then
+    if [ -n "${EXAMPLES}" ]; then
         for example in $EXAMPLES; do # EXAMPLES is set in contrib/test_vars.sh
             name="$(echo "$example" | cut -d ':' -f 1)"
             features="$(echo "$example" | cut -d ':' -f 2)"
@@ -164,21 +161,21 @@ do_test() {
 # can be better controlled.
 do_feature_matrix() {
     # rust-miniscript only: https://github.com/rust-bitcoin/rust-miniscript/issues/681
-    if [ -n "${FEATURES_WITH_NO_STD+x}" ]; then
+    if [ -n "${FEATURES_WITH_NO_STD}" ]; then
         $cargo build --no-default-features --features="no-std"
         $cargo test --no-default-features --features="no-std"
 
-        loop_features "no-std" "${FEATURES_WITH_NO_STD:-}"
+        loop_features "no-std" "${FEATURES_WITH_NO_STD}"
     else
         $cargo build --no-default-features
         $cargo test --no-default-features
     fi
 
-    if [ -z "${FEATURES_WITH_STD+x}" ]; then
-        loop_features "std" "${FEATURES_WITH_STD:-}"
+    if [ -n "${FEATURES_WITH_STD}" ]; then
+        loop_features "std" "${FEATURES_WITH_STD}"
     fi
 
-    if [ -z "${FEATURES_WITHOUT_STD+x}" ]; then
+    if [ -n "${FEATURES_WITHOUT_STD}" ]; then
         loop_features "" "$FEATURES_WITHOUT_STD"
     fi
 }
