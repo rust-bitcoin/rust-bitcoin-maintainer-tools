@@ -75,7 +75,7 @@ All repositories MUST include a `REPO_DIR/contrib/crates.sh` script:
 CRATES=("base58" "bitcoin" "fuzz" "hashes" "internals" "io" "units")
 ```
 
-`CRATES` MUST be an array. If repository is not a workspace use `CRATES=(".")`).
+`CRATES` MUST be an array. If repository is not a workspace use `CRATES=(".")`.
 
 ### Per crate environment variables
 
@@ -195,7 +195,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Read nightly version
         id: read_toolchain
-        run: echo "nightly_version=$(cat nightly-version)" >> $GITHUB_OUTPUT
+        run: echo "nightly_version=$(cat nightly_version)" >> $GITHUB_OUTPUT
 
   Nightly:                      # 2 jobs, one per manifest.
     name: Test - nightly toolchain
