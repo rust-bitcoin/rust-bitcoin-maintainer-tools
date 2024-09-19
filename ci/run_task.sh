@@ -201,14 +201,14 @@ loop_features() {
     if (( len > 1 )); then
         for ((i = 0 ; i < len ; i++ ));
         do
-            $cargo build --features="$use ${array[i]}"
-            $cargo test --features="$use ${array[i]}"
+            $cargo build --no-default-features --features="$use ${array[i]}"
+            $cargo test --no-default-features --features="$use ${array[i]}"
 
             if (( i < len - 1 )); then
                for ((j = i + 1 ; j < len ; j++ ));
                do
-                   $cargo build --features="$use ${array[i]} ${array[j]}"
-                   $cargo test --features="$use ${array[i]} ${array[j]}"
+                   $cargo build --no-default-features --features="$use ${array[i]} ${array[j]}"
+                   $cargo test --no-default-features --features="$use ${array[i]} ${array[j]}"
                done
             fi
         done
