@@ -273,14 +273,15 @@ do_dup_deps() {
 # below this checks that we feature guarded docs imports correctly.
 build_docs_with_nightly_toolchain() {
     need_nightly
-    RUSTDOCFLAGS="--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links" $cargo doc --all-features
+    # -j1 is because docs build fails if multiple versions of `bitcoin_hashes` are present in dep tree.
+    RUSTDOCFLAGS="--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links" $cargo doc --all-features -j1
 }
 
 # Build the docs with a stable toolchain, in unison with the function
 # above this checks that we feature guarded docs imports correctly.
 build_docs_with_stable_toolchain() {
     local cargo="cargo +stable --locked" # Can't use global because of `+stable`.
-    RUSTDOCFLAGS="-D warnings" $cargo doc --all-features
+    RUSTDOCFLAGS="-D warnings" $cargo doc --all-features -j1
 }
 
 # Bench only works with a non-stable toolchain (nightly, beta).
