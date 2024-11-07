@@ -75,7 +75,7 @@ All repositories MUST include a `REPO_DIR/contrib/crates.sh` script:
 CRATES=("base58" "bitcoin" "fuzz" "hashes" "internals" "io" "units")
 ```
 
-`CRATES` MUST be an array. If repository is not a workspace use `CRATES=(".")`).
+`CRATES` MUST be an array. If repository is not a workspace use `CRATES=(".")`.
 
 ### Per crate environment variables
 
@@ -178,7 +178,7 @@ jobs:
 Have a file in the repository root with the nightly toolchain version to use.
 
 ```bash
-$ cat nightly_version
+$ cat nightly-version
 nightly-2024-04-30
 ```
 
