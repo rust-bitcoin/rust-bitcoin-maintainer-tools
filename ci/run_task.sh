@@ -132,6 +132,9 @@ build_and_test() {
             verbose_say "FEATURES_WITH_NO_STD: ${FEATURES_WITH_NO_STD}"
             verbose_say "FEATURES_WITHOUT_STD: ${FEATURES_WITHOUT_STD}"
             verbose_say "EXAMPLES: ${EXAMPLES:-}"
+            if [[ -v EXACT_FEATURES && ${#EXACT_FEATURES[@]} -gt 0 ]]; then
+                verbose_say "EXACT_FEATURES: ${EXACT_FEATURES[*]}"
+            fi
         fi
         pushd "$REPO_DIR/$crate" > /dev/null
 
@@ -164,8 +167,14 @@ do_test() {
 # Each crate defines its own feature matrix test so feature combinations
 # can be better controlled.
 do_feature_matrix() {
+    # For crates that have unusual feature requirements (e.g. `corepc`).
+    if [[ -v EXACT_FEATURES && ${#EXACT_FEATURES[@]} -gt 0 ]]; then
+        for features in "${EXACT_FEATURES[@]}"; do
+            $cargo build --no-default-features --features="$features"
+            $cargo test --no-default-features --features="$features"
+        done
     # rust-miniscript only: https://github.com/rust-bitcoin/rust-miniscript/issues/681
-    if [ -n "${FEATURES_WITH_NO_STD}" ]; then
+    elif [ -n "${FEATURES_WITH_NO_STD}" ]; then
         $cargo build --no-default-features --features="no-std"
         $cargo test --no-default-features --features="no-std"
 
@@ -219,10 +228,14 @@ loop_features() {
 do_lint() {
     need_nightly
 
-    # Lint various feature combinations to try and catch mistakes in feature gating.
-    $cargo clippy --workspace --all-targets --keep-going -- -D warnings
     $cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings
-    $cargo clippy --workspace --all-targets --no-default-features --keep-going -- -D warnings
+
+    # Ugly hack to skip `corpec` because `node` does not build with no default features.
+    if echo "$REPO_DIR" | grep -viq "corepc"; then
+        # Lint various feature combinations to try and catch mistakes in feature gating.
+        $cargo clippy --workspace --all-targets --keep-going -- -D warnings
+        $cargo clippy --workspace --all-targets --no-default-features --keep-going -- -D warnings
+    fi
 }
 
 # We should not have any duplicate dependencies. This catches mistakes made upgrading dependencies
@@ -343,3 +356,4 @@ need_nightly() {
 #
 main "$@"
 exit 0
+
