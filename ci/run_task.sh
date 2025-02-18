@@ -184,6 +184,9 @@ do_feature_matrix() {
         $cargo test --no-default-features
     fi
 
+    $cargo build --all-features
+    $cargo test --all-features
+
     if [ -n "${FEATURES_WITH_STD}" ]; then
         loop_features "std" "${FEATURES_WITH_STD}"
     fi
