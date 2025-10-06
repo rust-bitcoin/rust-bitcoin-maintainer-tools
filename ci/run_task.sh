@@ -230,15 +230,8 @@ loop_features() {
 # Lint the workspace.
 do_lint() {
     need_nightly
-
     $cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings
-
-    # Ugly hack to skip `corpec` because `node` does not build with no default features.
-    if echo "$REPO_DIR" | grep -viq "corepc"; then
-        # Lint various feature combinations to try and catch mistakes in feature gating.
-        $cargo clippy --workspace --all-targets --keep-going -- -D warnings
-        $cargo clippy --workspace --all-targets --no-default-features --keep-going -- -D warnings
-    fi
+    $cargo clippy --workspace --all-targets --keep-going -- -D warnings
 }
 
 # We should not have any duplicate dependencies. This catches mistakes made upgrading dependencies
