@@ -72,40 +72,40 @@ main() {
     fi
 
     case $task in
-	stable)
-            # Test, run examples, do feature matrix.
-            # crate/contrib/test_vars.sh is sourced in this function.
-            build_and_test
-            ;;
+    stable)
+        # Test, run examples, do feature matrix.
+        # crate/contrib/test_vars.sh is sourced in this function.
+        build_and_test
+        ;;
 
-	nightly)
-            build_and_test
-            ;;
+    nightly)
+        build_and_test
+        ;;
 
-	msrv)
-            build_and_test
-            ;;
+    msrv)
+        build_and_test
+        ;;
 
-        lint)
-            do_lint
-            do_dup_deps
-            ;;
+    lint)
+        do_lint
+        do_dup_deps
+        ;;
 
-	docs)
-            build_docs_with_stable_toolchain
-	    ;;
+    docs)
+        build_docs_with_stable_toolchain
+        ;;
 
-	docsrs)
-            build_docs_with_nightly_toolchain
-	    ;;
+    docsrs)
+        build_docs_with_nightly_toolchain
+        ;;
 
-	bench)
-	    do_bench
-	    ;;
+    bench)
+        do_bench
+        ;;
 
-        *)
-            err "Error: unknown task $task"
-            ;;
+    *)
+        err "Error: unknown task $task"
+        ;;
     esac
 }
 
@@ -332,7 +332,7 @@ say_err() {
 
 verbose_say() {
     if [ "$flag_verbose" = true ]; then
-	say "$1"
+        say "$1"
     fi
 }
 
