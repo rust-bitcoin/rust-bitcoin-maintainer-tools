@@ -87,7 +87,8 @@ main() {
         ;;
 
     lint)
-        do_lint
+        do_lint_workspace
+        do_lint_crates
         do_dup_deps
         ;;
 
@@ -228,10 +229,22 @@ loop_features() {
 }
 
 # Lint the workspace.
-do_lint() {
+do_lint_workspace() {
     need_nightly
     $cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings
     $cargo clippy --workspace --all-targets --keep-going -- -D warnings
+}
+
+# Run extra crate specific lints, e.g. clippy with no-default-features.
+do_lint_crates() {
+    need_nightly
+    for crate in $CRATES; do
+        pushd "$REPO_DIR/$crate" > /dev/null
+        if [ -e ./contrib/extra_lints.sh ]; then
+            ./contrib/extra_lints.sh
+        fi
+        popd > /dev/null
+    done
 }
 
 # We should not have any duplicate dependencies. This catches mistakes made upgrading dependencies
