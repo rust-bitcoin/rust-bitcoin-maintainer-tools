@@ -72,40 +72,41 @@ main() {
     fi
 
     case $task in
-	stable)
-            # Test, run examples, do feature matrix.
-            # crate/contrib/test_vars.sh is sourced in this function.
-            build_and_test
-            ;;
+    stable)
+        # Test, run examples, do feature matrix.
+        # crate/contrib/test_vars.sh is sourced in this function.
+        build_and_test
+        ;;
 
-	nightly)
-            build_and_test
-            ;;
+    nightly)
+        build_and_test
+        ;;
 
-	msrv)
-            build_and_test
-            ;;
+    msrv)
+        build_and_test
+        ;;
 
-        lint)
-            do_lint
-            do_dup_deps
-            ;;
+    lint)
+        do_lint_workspace
+        do_lint_crates
+        do_dup_deps
+        ;;
 
-	docs)
-            build_docs_with_stable_toolchain
-	    ;;
+    docs)
+        build_docs_with_stable_toolchain
+        ;;
 
-	docsrs)
-            build_docs_with_nightly_toolchain
-	    ;;
+    docsrs)
+        build_docs_with_nightly_toolchain
+        ;;
 
-	bench)
-	    do_bench
-	    ;;
+    bench)
+        do_bench
+        ;;
 
-        *)
-            err "Error: unknown task $task"
-            ;;
+    *)
+        err "Error: unknown task $task"
+        ;;
     esac
 }
 
@@ -228,17 +229,22 @@ loop_features() {
 }
 
 # Lint the workspace.
-do_lint() {
+do_lint_workspace() {
     need_nightly
-
     $cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings
+    $cargo clippy --workspace --all-targets --keep-going -- -D warnings
+}
 
-    # Ugly hack to skip `corpec` because `node` does not build with no default features.
-    if echo "$REPO_DIR" | grep -viq "corepc"; then
-        # Lint various feature combinations to try and catch mistakes in feature gating.
-        $cargo clippy --workspace --all-targets --keep-going -- -D warnings
-        $cargo clippy --workspace --all-targets --no-default-features --keep-going -- -D warnings
-    fi
+# Run extra crate specific lints, e.g. clippy with no-default-features.
+do_lint_crates() {
+    need_nightly
+    for crate in $CRATES; do
+        pushd "$REPO_DIR/$crate" > /dev/null
+        if [ -e ./contrib/extra_lints.sh ]; then
+            ./contrib/extra_lints.sh
+        fi
+        popd > /dev/null
+    done
 }
 
 # We should not have any duplicate dependencies. This catches mistakes made upgrading dependencies
@@ -332,7 +338,7 @@ say_err() {
 
 verbose_say() {
     if [ "$flag_verbose" = true ]; then
-	say "$1"
+        say "$1"
     fi
 }
 

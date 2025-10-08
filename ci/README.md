@@ -31,6 +31,7 @@ And for each crate there should exist a directory `REPO_DIR/CRATE/contrib/` cont
 
 - `test_vars.sh`: Defines environment variables
 - Optional: `extra_tests.sh`: Additional test script.
+- Optional: `extra_lints.sh`: Additional lint script.
 
 If the repository is not a workspace then per crate files go directly in `REPO_ROOT/contrib/`.
 
