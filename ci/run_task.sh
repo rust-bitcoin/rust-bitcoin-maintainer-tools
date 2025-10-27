@@ -298,7 +298,7 @@ do_dup_deps() {
 
     if [ "$duplicate_dependencies" -ne 0 ]; then
         cargo tree  --target=all --all-features --duplicates
-        say_err "Dependency tree is broken, contains duplicates"
+        err "Dependency tree is broken, contains duplicates"
     fi
 
     set -o pipefail
@@ -343,10 +343,6 @@ check_required_commands() {
 
 say() {
     echo "run_task: $1"
-}
-
-say_err() {
-    say "$1" >&2
 }
 
 verbose_say() {
