@@ -22,7 +22,7 @@ usage() {
     cat <<EOF
 Usage:
 
-    ./run_task.sh CRATE TASK
+    ./run_task.sh TASK
 
 TASK
   - stable          Run tests with stable toolchain.

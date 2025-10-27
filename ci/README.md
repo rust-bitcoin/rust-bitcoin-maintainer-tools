@@ -35,7 +35,7 @@ And for each crate there should exist a directory `REPO_DIR/CRATE/contrib/` cont
 
 If the repository is not a workspace then per crate files go directly in `REPO_ROOT/contrib/`.
 
-(See [Crates`](#crates) below.)
+(See [Crates](#crates) below.)
 
 ## Lock file
 
@@ -102,22 +102,22 @@ EXAMPLES=""
 #### The `EXAMPLES` variable
 
 ```bash
-EXAPMLES="example:feature"
+EXAMPLES="example:feature"
 ```
 
 ```bash
-EXAPMLES="example:feature1,feature2"
+EXAMPLES="example:feature1,feature2"
 ```
 
 ```bash
-EXAPMLES="example_a:feature1,feature2 example_b:feature1"
+EXAMPLES="example_a:feature1,feature2 example_b:feature1"
 ```
 
 
 Tip: if your example does not require any features consider using "default".
 
 ```bash
-EXAPMLES="example_a:default"
+EXAMPLES="example_a:default"
 ```
 
 ### Additional crate specific tests
@@ -212,8 +212,7 @@ jobs:
       - name: "Checkout maintainer tools"
         uses: actions/checkout@v4
         with:
-          repository: tcharding/rust-bitcoin-maintainer-tools
-          ref: 05-02-ci
+          repository: rust-bitcoin/rust-bitcoin-maintainer-tools
           path: maintainer-tools
       - name: "Select toolchain"
         uses: dtolnay/rust-toolchain@v1
