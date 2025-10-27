@@ -174,7 +174,7 @@ do_test() {
 
     if [ -e ./contrib/extra_tests.sh ];
     then
-        ./contrib/extra_tests.sh
+        . ./contrib/extra_tests.sh
     fi
 }
 
@@ -254,7 +254,7 @@ do_lint_crates() {
     for crate in $CRATES; do
         pushd "$REPO_DIR/$crate" > /dev/null
         if [ -e ./contrib/extra_lints.sh ]; then
-            ./contrib/extra_lints.sh
+            . ./contrib/extra_lints.sh
         fi
         popd > /dev/null
     done
