@@ -30,7 +30,7 @@ usage() {
     cat <<EOF
 Usage:
 
-    ./run_task.sh TASK
+    ./run_task.sh TASK [CRATE1] [CRATE2] ...
 
 TASK
   - stable          Run tests with stable toolchain.
@@ -40,6 +40,11 @@ TASK
   - docs            Build docs with stable toolchain.
   - docsrs          Build docs with nightly toolchain.
   - bench           Run the bench tests.
+
+CRATES (optional)
+  - If provided, run the task only on the specified crate(s).
+  - Multiple crates can be specified as space-delimited arguments.
+  - If not provided, run the task on all crates from contrib/crates.sh.
 
 Environment Variables:
   MAINTAINER_TOOLS_LOG_LEVEL    Control script and cargo output verbosity.
@@ -70,9 +75,16 @@ main() {
     fi
 
     verbose_say "Repository: $REPO_DIR"
-    verbose_say "Script invocation: $0 $task"
+    verbose_say "Script invocation: $0 $*"
 
-    if [ -e "$crates_script" ]; then
+    # Shift to remove the task argument, leaving only crate arguments.
+    shift
+
+    # Override crates.sh if there are crate args.
+    if [ "$#" -gt 0 ]; then
+        CRATES="$*"
+        verbose_say "Using specified crate(s): $CRATES"
+    elif [ -e "$crates_script" ]; then
         verbose_say "Sourcing $crates_script"
         # can't find the file because of the ENV var
         # shellcheck source=/dev/null
