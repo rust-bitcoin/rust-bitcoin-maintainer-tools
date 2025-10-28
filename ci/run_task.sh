@@ -57,11 +57,15 @@ main() {
     local task="${1:-usage}"
     local crates_script="$REPO_DIR/contrib/crates.sh"
 
-    # FIXME: This is a hackish way to get the help flag.
-    if [ "$task" = "usage" ] || [ "$task" = "-h" ] || [ "$task" = "--help" ]; then
-        usage
-        exit 0
-    fi
+    # Check for help flags in any position.
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help|help|usage)
+                usage
+                exit 0
+                ;;
+        esac
+    done
 
     check_required_commands
 
