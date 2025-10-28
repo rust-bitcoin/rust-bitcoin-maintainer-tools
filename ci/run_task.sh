@@ -88,15 +88,15 @@ main() {
     stable)
         # Test, run examples, do feature matrix.
         # crate/contrib/test_vars.sh is sourced in this function.
-        build_and_test
+        build_and_test "stable"
         ;;
 
     nightly)
-        build_and_test
+        build_and_test "nightly"
         ;;
 
     msrv)
-        build_and_test
+        build_and_test "msrv"
         ;;
 
     lint)
@@ -124,7 +124,11 @@ main() {
 }
 
 # Build and test for each crate, done with each toolchain.
+#
+# Usage: build_and_test "toolchain"
 build_and_test() {
+    local toolchain="$1"
+
     for crate in $CRATES; do
         local test_vars_script="$REPO_DIR/$crate/contrib/test_vars.sh"
 
@@ -152,6 +156,7 @@ build_and_test() {
         fi
         pushd "$REPO_DIR/$crate" > /dev/null
 
+        need_toolchain "$toolchain"
         do_test
         do_feature_matrix
 
@@ -243,14 +248,14 @@ loop_features() {
 
 # Lint the workspace.
 do_lint_workspace() {
-    need_nightly
+    need_toolchain "nightly"
     $cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings
     $cargo clippy --workspace --all-targets --keep-going -- -D warnings
 }
 
 # Run extra crate specific lints, e.g. clippy with no-default-features.
 do_lint_crates() {
-    need_nightly
+    need_toolchain "nightly"
     for crate in $CRATES; do
         pushd "$REPO_DIR/$crate" > /dev/null
         if [ -e ./contrib/extra_lints.sh ]; then
@@ -307,7 +312,7 @@ do_dup_deps() {
 # Build the docs with a nightly toolchain, in unison with the function
 # below this checks that we feature guarded docs imports correctly.
 build_docs_with_nightly_toolchain() {
-    need_nightly
+    need_toolchain "nightly"
     # -j1 is because docs build fails if multiple versions of `bitcoin_hashes` are present in dep tree.
     RUSTDOCFLAGS="--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links" $cargo doc --all-features -j1
 }
@@ -315,12 +320,14 @@ build_docs_with_nightly_toolchain() {
 # Build the docs with a stable toolchain, in unison with the function
 # above this checks that we feature guarded docs imports correctly.
 build_docs_with_stable_toolchain() {
+    need_toolchain "stable"
     local cargo="cargo +stable --locked" # Can't use global because of `+stable`.
     RUSTDOCFLAGS="-D warnings" $cargo doc --all-features -j1
 }
 
 # Bench only works with a non-stable toolchain (nightly, beta).
 do_bench() {
+    need_toolchain "nightly"
     verbose_say "Running bench tests for: $CRATES"
 
     for crate in $CRATES; do
@@ -367,11 +374,44 @@ need_cmd() {
     fi
 }
 
-need_nightly() {
-    cargo_ver=$(cargo --version)
-    if echo "$cargo_ver" | grep -q -v nightly; then
-        err "Need a nightly compiler; have $(cargo --version)"
-    fi
+# Check that we have the required toolchain.
+need_toolchain() {
+    local required_toolchain="$1"
+    local current_toolchain
+    current_toolchain=$(rustc --version)
+
+    case "$required_toolchain" in
+        nightly)
+            if ! echo "$current_toolchain" | grep -q nightly; then
+                err "Need a nightly compiler; have $current_toolchain"
+            fi
+            ;;
+        stable)
+            if echo "$current_toolchain" | grep -q nightly || echo "$current_toolchain" | grep -q beta; then
+                err "Need a stable compiler; have $current_toolchain"
+            fi
+            ;;
+        msrv)
+            # This check must be run in a crate directory
+            # since it is possible for crates in a workspace to have different MSRVs.
+            local manifest_path
+            manifest_path="$(pwd)/Cargo.toml"
+            local msrv_version
+            msrv_version=$(cargo metadata --format-version 1 --no-deps | jq -r ".packages[] | select(.manifest_path == \"$manifest_path\") | .rust_version // empty")
+            if [ -z "$msrv_version" ]; then
+                err "No MSRV specified in $manifest_path or not in a crate directory"
+            fi
+
+            local current_version
+            current_version=$(echo "$current_toolchain" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+            if [ "$current_version" != "$msrv_version" ]; then
+                err "Need Rust $msrv_version for MSRV testing in $manifest_path; have $current_version"
+            fi
+            ;;
+        *)
+            err "Unknown toolchain requirement: $required_toolchain"
+            ;;
+    esac
 }
 
 #
@@ -379,4 +419,3 @@ need_nightly() {
 #
 main "$@"
 exit 0
-
