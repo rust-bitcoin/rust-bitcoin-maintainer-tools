@@ -5,15 +5,23 @@
 # Shellcheck can't search dynamic paths
 # shellcheck source=/dev/null
 
-set -euox pipefail
+set -euo pipefail
 
 REPO_DIR=$(git rev-parse --show-toplevel)
 
-# Make all cargo invocations verbose.
-export CARGO_TERM_VERBOSE=true
-
-# Set to false to turn off verbose output.
-flag_verbose=true
+# Make cargo invocations verbose unless in quiet mode.
+# Also control bash debug output based on log level.
+case "${MAINTAINER_TOOLS_LOG_LEVEL:-verbose}" in
+    quiet)
+        export CARGO_TERM_VERBOSE=false
+        export CARGO_TERM_QUIET=true
+        ;;
+    *)
+        export CARGO_TERM_VERBOSE=true
+        export CARGO_TERM_QUIET=false
+        set -x
+        ;;
+esac
 
 # Use the current `Cargo.lock` file without updating it.
 cargo="cargo --locked"
@@ -22,7 +30,7 @@ usage() {
     cat <<EOF
 Usage:
 
-    ./run_task.sh CRATE TASK
+    ./run_task.sh TASK
 
 TASK
   - stable          Run tests with stable toolchain.
@@ -32,6 +40,11 @@ TASK
   - docs            Build docs with stable toolchain.
   - docsrs          Build docs with nightly toolchain.
   - bench           Run the bench tests.
+
+Environment Variables:
+  MAINTAINER_TOOLS_LOG_LEVEL    Control script and cargo output verbosity.
+    verbose (default)           Show all script and cargo messages.
+    quiet                       Suppress script messages, reduce cargo output.
 EOF
 }
 
@@ -161,7 +174,7 @@ do_test() {
 
     if [ -e ./contrib/extra_tests.sh ];
     then
-        ./contrib/extra_tests.sh
+        . ./contrib/extra_tests.sh
     fi
 }
 
@@ -241,7 +254,7 @@ do_lint_crates() {
     for crate in $CRATES; do
         pushd "$REPO_DIR/$crate" > /dev/null
         if [ -e ./contrib/extra_lints.sh ]; then
-            ./contrib/extra_lints.sh
+            . ./contrib/extra_lints.sh
         fi
         popd > /dev/null
     done
@@ -285,7 +298,7 @@ do_dup_deps() {
 
     if [ "$duplicate_dependencies" -ne 0 ]; then
         cargo tree  --target=all --all-features --duplicates
-        say_err "Dependency tree is broken, contains duplicates"
+        err "Dependency tree is broken, contains duplicates"
     fi
 
     set -o pipefail
@@ -332,14 +345,15 @@ say() {
     echo "run_task: $1"
 }
 
-say_err() {
-    say "$1" >&2
-}
-
 verbose_say() {
-    if [ "$flag_verbose" = true ]; then
-        say "$1"
-    fi
+    case "${MAINTAINER_TOOLS_LOG_LEVEL:-verbose}" in
+        quiet)
+            # Suppress verbose output.
+            ;;
+        *)
+            say "$1"
+            ;;
+    esac
 }
 
 err() {
