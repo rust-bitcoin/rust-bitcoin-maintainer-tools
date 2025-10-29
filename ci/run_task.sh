@@ -40,6 +40,7 @@ TASK
   - docs            Build docs with stable toolchain.
   - docsrs          Build docs with nightly toolchain.
   - bench           Run the bench tests.
+  - lock            Update Cargo-minimal.lock and Cargo-recent.lock files.
 
 Environment Variables:
   MAINTAINER_TOOLS_LOG_LEVEL    Control script and cargo output verbosity.
@@ -115,6 +116,11 @@ main() {
 
     bench)
         do_bench
+        ;;
+
+    lock)
+        need_toolchain "nightly"
+        do_update_lock_files
         ;;
 
     *)
@@ -329,6 +335,44 @@ do_bench() {
         RUSTFLAGS='--cfg=bench' cargo bench
         popd > /dev/null
     done
+}
+
+# Update Cargo-minimal.lock and Cargo-recent.lock files.
+do_update_lock_files() {
+    pushd "$REPO_DIR" > /dev/null
+    verbose_say "Updating lock files in repository root: $REPO_DIR"
+    
+    # The `direct-minimal-versions` and `minimal-versions` dependency
+    # resolution strategy flags each have a little quirk. `direct-minimal-versions`
+    # allows transitive versions to upgrade, so we are not testing against
+    # the actual minimum tree. `minimal-versions` allows the direct dependency
+    # versions to resolve upward due to transitive requirements, so we are
+    # not testing the manifest's versions. Combo'd together though, we
+    # can get the best of both worlds to ensure the actual minimum dependencies
+    # listed in the crate manifests build.
+    
+    # Check that all explicit direct dependency versions are not lying,
+    # as in, they are not being bumped up by transitive dependency constraints.
+    verbose_say "Checking direct minimal versions..."
+    rm -f "Cargo.lock"
+    cargo check --all-features -Z direct-minimal-versions
+    
+    # Now that our own direct dependency versions can be trusted, check
+    # against the lowest versions of the dependency tree which still
+    # satisfy constraints. Use this as the minimal version lock file.
+    verbose_say "Generating Cargo-minimal.lock..."
+    rm -f "Cargo.lock"
+    cargo check --all-features -Z minimal-versions
+    cp -f "Cargo.lock" "Cargo-minimal.lock"
+    
+    # Conservatively bump of recent dependencies.
+    verbose_say "Updating Cargo-recent.lock..."
+    cp -f "Cargo-recent.lock" "Cargo.lock"
+    cargo check --all-features
+    cp -f "Cargo.lock" "Cargo-recent.lock"
+    
+    verbose_say "Lock files updated successfully"
+    popd > /dev/null
 }
 
 # Check all the commands we use are present in the current environment.
