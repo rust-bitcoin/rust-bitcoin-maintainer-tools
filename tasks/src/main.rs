@@ -1,3 +1,5 @@
+mod bench;
+mod docs;
 mod environment;
 mod lint;
 mod toolchain;
@@ -20,6 +22,12 @@ struct Cli {
 enum Commands {
     /// Run the linter (clippy) for workspace and all crates.
     Lint,
+    /// Build documentation with stable toolchain.
+    Docs,
+    /// Build documentation with nightly toolchain for docs.rs.
+    Docsrs,
+    /// Run benchmark tests for all crates.
+    Bench,
 }
 
 fn main() {
@@ -32,6 +40,24 @@ fn main() {
         Commands::Lint => {
             if let Err(e) = lint::run(&sh) {
                 eprintln!("Error running lint task: {}", e);
+                process::exit(1);
+            }
+        }
+        Commands::Docs => {
+            if let Err(e) = docs::run(&sh) {
+                eprintln!("Error building docs: {}", e);
+                process::exit(1);
+            }
+        }
+        Commands::Docsrs => {
+            if let Err(e) = docs::run_docsrs(&sh) {
+                eprintln!("Error building docs.rs docs: {}", e);
+                process::exit(1);
+            }
+        }
+        Commands::Bench => {
+            if let Err(e) = bench::run(&sh) {
+                eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             }
         }
