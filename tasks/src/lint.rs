@@ -3,6 +3,7 @@ use xshell::Shell;
 
 use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
+use crate::toolchain::{check_toolchain, Toolchain};
 
 /// Lint configuration loaded from contrib/rbmt.toml.
 #[derive(Debug, serde::Deserialize)]
@@ -37,6 +38,7 @@ impl LintConfig {
 
 /// Run the lint task.
 pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    check_toolchain(sh, Toolchain::Nightly)?;
     quiet_println("Running lint task...");
 
     lint_workspace(sh)?;

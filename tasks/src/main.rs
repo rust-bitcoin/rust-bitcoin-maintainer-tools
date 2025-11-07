@@ -1,5 +1,6 @@
 mod environment;
 mod lint;
+mod toolchain;
 
 use clap::{Parser, Subcommand};
 use std::process;
