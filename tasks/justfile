@@ -1,0 +1,11 @@
+# List available recipes.
+_default:
+    @just --list
+
+# Run tests.
+test:
+    cargo test
+
+# Install rbmt from the local path.
+install:
+    cargo install --path .
