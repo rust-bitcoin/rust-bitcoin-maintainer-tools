@@ -2,7 +2,7 @@ use std::path::Path;
 use xshell::{cmd, Shell};
 
 /// Toolchain requirement for a task.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Toolchain {
     /// Nightly toolchain.
     Nightly,
@@ -92,7 +92,10 @@ fn get_msrv_from_manifest(manifest_path: &Path) -> Result<String, Box<dyn std::e
 }
 
 /// Extract version number from rustc --version output.
-/// Example: "rustc 1.74.0 (79e9716c9 2023-11-13)" -> Some("1.74.0")
+///
+/// # Examples
+///
+/// `"rustc 1.74.0 (79e9716c9 2023-11-13)"` -> `Some("1.74.0")`
 fn extract_version(rustc_version: &str) -> Option<&str> {
     rustc_version.split_whitespace().find_map(|part| {
         // Split off any suffix like "-nightly" or "-beta".

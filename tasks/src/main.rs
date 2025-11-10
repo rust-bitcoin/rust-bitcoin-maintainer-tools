@@ -2,6 +2,7 @@ mod bench;
 mod docs;
 mod environment;
 mod lint;
+mod test;
 mod toolchain;
 
 use clap::{Parser, Subcommand};
@@ -9,6 +10,7 @@ use std::process;
 use xshell::Shell;
 
 use environment::{change_to_repo_root, configure_log_level};
+use toolchain::Toolchain;
 
 #[derive(Parser)]
 #[command(name = "rbmt")]
@@ -28,6 +30,12 @@ enum Commands {
     Docsrs,
     /// Run benchmark tests for all crates.
     Bench,
+    /// Run tests with specified toolchain.
+    Test {
+        /// Toolchain to use: stable, nightly, or msrv.
+        #[arg(value_enum)]
+        toolchain: Toolchain,
+    },
 }
 
 fn main() {
@@ -58,6 +66,12 @@ fn main() {
         Commands::Bench => {
             if let Err(e) = bench::run(&sh) {
                 eprintln!("Error running bench tests: {}", e);
+                process::exit(1);
+            }
+        }
+        Commands::Test { toolchain } => {
+            if let Err(e) = test::run(&sh, toolchain) {
+                eprintln!("Error running tests: {}", e);
                 process::exit(1);
             }
         }
