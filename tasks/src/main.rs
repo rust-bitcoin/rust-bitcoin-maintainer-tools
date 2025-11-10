@@ -21,7 +21,11 @@ struct Cli {
     /// Lock file to use for dependencies (defaults to recent).
     #[arg(long, global = true, value_enum)]
     lock_file: Option<LockFile>,
-    
+
+    /// Filter to specific package (can be specified multiple times).
+    #[arg(short = 'p', long = "package", global = true)]
+    packages: Vec<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -64,31 +68,31 @@ fn main() {
 
     match cli.command {
         Commands::Lint => {
-            if let Err(e) = lint::run(&sh) {
+            if let Err(e) = lint::run(&sh, &cli.packages) {
                 eprintln!("Error running lint task: {}", e);
                 process::exit(1);
             }
         }
         Commands::Docs => {
-            if let Err(e) = docs::run(&sh) {
+            if let Err(e) = docs::run(&sh, &cli.packages) {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
             }
         }
         Commands::Docsrs => {
-            if let Err(e) = docs::run_docsrs(&sh) {
+            if let Err(e) = docs::run_docsrs(&sh, &cli.packages) {
                 eprintln!("Error building docs.rs docs: {}", e);
                 process::exit(1);
             }
         }
         Commands::Bench => {
-            if let Err(e) = bench::run(&sh) {
+            if let Err(e) = bench::run(&sh, &cli.packages) {
                 eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             }
         }
         Commands::Test { toolchain } => {
-            if let Err(e) = test::run(&sh, toolchain) {
+            if let Err(e) = test::run(&sh, toolchain, &cli.packages) {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             }

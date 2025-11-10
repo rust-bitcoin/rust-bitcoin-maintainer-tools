@@ -37,12 +37,12 @@ impl LintConfig {
 }
 
 /// Run the lint task.
-pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     check_toolchain(sh, Toolchain::Nightly)?;
     quiet_println("Running lint task...");
 
     lint_workspace(sh)?;
-    lint_crates(sh)?;
+    lint_crates(sh, packages)?;
     check_duplicate_deps(sh)?;
 
     quiet_println("Lint task completed successfully");
@@ -78,10 +78,10 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// even when a crate's own default features are disabled. Running clippy on each crate
 /// individually ensures that each crate truly compiles and passes lints with only its
 /// explicitly enabled features.
-fn lint_crates(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+fn lint_crates(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running crate-specific lints...");
 
-    let crate_dirs = get_crate_dirs(sh)?;
+    let crate_dirs = get_crate_dirs(sh, packages)?;
     quiet_println(&format!("Found crates: {}", crate_dirs.join(", ")));
 
     for crate_dir in crate_dirs {

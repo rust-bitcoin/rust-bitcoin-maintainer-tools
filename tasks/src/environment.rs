@@ -59,7 +59,11 @@ pub fn change_to_repo_root(sh: &Shell) {
 
 /// Get list of crate directories in the workspace using cargo metadata.
 /// Returns fully qualified paths to support various workspace layouts including nested crates.
-pub fn get_crate_dirs(sh: &Shell) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+///
+/// # Arguments
+///
+/// * `packages` - Optional filter for specific package names. If empty, returns all packages.
+pub fn get_crate_dirs(sh: &Shell, packages: &[String]) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let metadata = cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
@@ -72,6 +76,15 @@ pub fn get_crate_dirs(sh: &Shell) -> Result<Vec<String>, Box<dyn std::error::Err
             // Extract directory path from the manifest path,
             // e.g., "/path/to/repo/releases/Cargo.toml" -> "/path/to/repo/releases".
             let dir_path = manifest_path.trim_end_matches("/Cargo.toml");
+            
+            // Filter by package name if specified.
+            if !packages.is_empty() {
+                let package_name = package["name"].as_str()?;
+                if !packages.contains(&package_name.to_string()) {
+                    return None;
+                }
+            }
+            
             Some(dir_path.to_string())
         })
         .collect();

@@ -83,10 +83,10 @@ impl TestConfig {
 }
 
 /// Run build and test for all crates with the specified toolchain.
-pub fn run(sh: &Shell, toolchain: Toolchain) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, toolchain: Toolchain, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     check_toolchain(sh, toolchain)?;
 
-    let crate_dirs = get_crate_dirs(sh)?;
+    let crate_dirs = get_crate_dirs(sh, packages)?;
     quiet_println(&format!("Testing {} crates", crate_dirs.len()));
 
     for crate_dir in &crate_dirs {

@@ -6,10 +6,10 @@ use crate::toolchain::{check_toolchain, Toolchain};
 use xshell::Shell;
 
 /// Run benchmark tests for all crates in the workspace.
-pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     check_toolchain(sh, Toolchain::Nightly)?;
 
-    let crate_dirs = get_crate_dirs(sh)?;
+    let crate_dirs = get_crate_dirs(sh, packages)?;
 
     quiet_println(&format!(
         "Running bench tests for {} crates",
