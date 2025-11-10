@@ -61,6 +61,43 @@ features_with_no_std = ["serde", "rand"]
 
 * `RBMT_LOG_LEVEL=quiet` - Suppress verbose output and reduce cargo noise.
 
+## Lock Files
+
+To ensure your crate works with the full range of declared dependency versions, `rbmt` requires two lock files in your repository.
+
+* `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints.
+* `Cargo-recent.lock` - Recent/updated versions of dependencies.
+
+The `rbmt lock` command generates and maintains these files for you. You can then use `--lock-file` with any command to test against either version set.
+
+### Usage
+
+**Generate/update lock files**
+
+```bash
+rbmt lock
+```
+
+1. Verify that direct dependency versions aren't being bumped by transitive dependencies.
+2. Generate `Cargo-minimal.lock` with minimal versions across the entire dependency tree.
+3. Update `Cargo-recent.lock` with conservatively updated dependencies.
+
+**Use a specific lock file**
+
+```bash
+# Test with minimal versions.
+rbmt --lock-file minimal test stable
+
+# Test with recent versions.
+rbmt --lock-file recent test stable
+
+# Works with any command.
+rbmt --lock-file minimal lint
+rbmt --lock-file minimal docs
+```
+
+When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
+
 ## Workspace Integration
 
 `rbmt` can simply be installed globally, or as a dev-dependency for more granular control of dependency versions.
