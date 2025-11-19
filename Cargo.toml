@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "releases",
+    "tasks",
+]
+resolver = "2"
