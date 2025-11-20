@@ -76,7 +76,7 @@ pub fn get_crate_dirs(sh: &Shell, packages: &[String]) -> Result<Vec<String>, Bo
             // Extract directory path from the manifest path,
             // e.g., "/path/to/repo/releases/Cargo.toml" -> "/path/to/repo/releases".
             let dir_path = manifest_path.trim_end_matches("/Cargo.toml");
-            
+
             // Filter by package name if specified.
             if !packages.is_empty() {
                 let package_name = package["name"].as_str()?;
@@ -84,7 +84,7 @@ pub fn get_crate_dirs(sh: &Shell, packages: &[String]) -> Result<Vec<String>, Bo
                     return None;
                 }
             }
-            
+
             Some(dir_path.to_string())
         })
         .collect();
