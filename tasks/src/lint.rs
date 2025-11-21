@@ -6,13 +6,15 @@ use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
 
 /// Lint configuration loaded from contrib/rbmt.toml.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, Default)]
+#[serde(default)]
 struct Config {
     lint: LintConfig,
 }
 
 /// Lint-specific configuration.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, Default)]
+#[serde(default)]
 struct LintConfig {
     /// List of crate names that are allowed to have duplicate versions.
     allowed_duplicates: Vec<String>,
