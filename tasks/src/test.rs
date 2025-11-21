@@ -8,13 +8,15 @@ use std::path::Path;
 use xshell::Shell;
 
 /// Test configuration loaded from contrib/rbmt.toml.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 struct Config {
     test: TestConfig,
 }
 
 /// Test-specific configuration.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 struct TestConfig {
     /// Examples to run with the format "name:feature1 feature2".
     ///
