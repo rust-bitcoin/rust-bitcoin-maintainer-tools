@@ -5,7 +5,7 @@ use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
 
-/// Lint configuration loaded from contrib/rbmt.toml.
+/// Lint configuration loaded from rbmt.toml.
 #[derive(Debug, serde::Deserialize, Default)]
 #[serde(default)]
 struct Config {
