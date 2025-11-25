@@ -15,7 +15,7 @@ use lock::LockFile;
 use toolchain::Toolchain;
 
 #[derive(Parser)]
-#[command(name = "rbmt")]
+#[command(name = "cargo-rbmt")]
 #[command(about = "Rust Bitcoin Maintainer Tools", long_about = None)]
 struct Cli {
     /// Lock file to use for dependencies (defaults to recent).
@@ -51,7 +51,15 @@ enum Commands {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    // Cargo automatically adds the subcommand name as an extra argument.
+    // `cargo rbmt test` becomes `cargo-rbmt rbmt test`, so filter it out.
+    let args = std::env::args()
+        .enumerate()
+        .filter(|(i, arg)| !(*i == 1 && arg == "rbmt"))
+        .map(|(_, arg)| arg);
+
+    let cli = Cli::parse_from(args);
+
     let sh = Shell::new().unwrap();
     configure_log_level(&sh);
     change_to_repo_root(&sh);

@@ -63,19 +63,19 @@ features_with_no_std = ["serde", "rand"]
 
 ## Lock Files
 
-To ensure your crate works with the full range of declared dependency versions, `rbmt` requires two lock files in your repository.
+To ensure your crate works with the full range of declared dependency versions, `cargo-rbmt` requires two lock files in your repository.
 
 * `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints.
 * `Cargo-recent.lock` - Recent/updated versions of dependencies.
 
-The `rbmt lock` command generates and maintains these files for you. You can then use `--lock-file` with any command to test against either version set.
+The `lock` command generates and maintains these files for you. You can then use `--lock-file` with any command to test against either version set.
 
 ### Usage
 
 **Generate/update lock files**
 
 ```bash
-rbmt lock
+cargo rbmt lock
 ```
 
 1. Verify that direct dependency versions aren't being bumped by transitive dependencies.
@@ -86,49 +86,49 @@ rbmt lock
 
 ```bash
 # Test with minimal versions.
-rbmt --lock-file minimal test stable
+cargo rbmt --lock-file minimal test stable
 
 # Test with recent versions.
-rbmt --lock-file recent test stable
+cargo rbmt --lock-file recent test stable
 
 # Works with any command.
-rbmt --lock-file minimal lint
-rbmt --lock-file minimal docs
+cargo rbmt --lock-file minimal lint
+cargo rbmt --lock-file minimal docs
 ```
 
 When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
 
 ## Workspace Integration
 
-`rbmt` can simply be installed globally, or as a dev-dependency for more granular control of dependency versions.
+`cargo-rbmt` can simply be installed globally, or as a dev-dependency for more granular control of dependency versions.
 
 ### 1. Install globally
 
 Install the tool globally on your system with `cargo install`.
 
 ```bash
-cargo install rust-bitcoin-maintainer-tools@0.1.0
+cargo install cargo-rbmt@0.1.0
 ```
 
-Then run from anywhere in your repository.
+Then run from anywhere in your repository as a cargo subcommand. It can also be called directly as `cargo-rbmt`.
 
 ```bash
-rbmt lint
+cargo rbmt lint
 ```
 
 ### 2. Add as a dev-dependency
 
-Add as a dev-dependency to a workspace member. This pins the tool version in your lockfile for reproducible builds.
+Add as a dev-dependency to a workspace member. This pins the tool version in your lockfile for reproducible builds. But this also means that `cargo-rbmt` dependencies could influence version resolution for the workspace.
 
 ```toml
 [dev-dependencies]
-rust-bitcoin-maintainer-tools = "0.1.0"
+cargo-rbmt = "0.1.0"
 ```
 
 Then run via cargo.
 
 ```bash
-cargo run --bin rbmt -- lint
+cargo run --bin cargo-rbmt -- lint
 ```
 
 It might be worth wrapping in an [xtask](https://github.com/matklad/cargo-xtask) package for a clean interface.
