@@ -7,7 +7,7 @@ use xshell::{cmd, Shell};
 const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
 
 /// Path to the RBMT configuration file relative to workspace/crate root.
-pub const CONFIG_FILE_PATH: &str = "contrib/rbmt.toml";
+pub const CONFIG_FILE_PATH: &str = "rbmt.toml";
 
 /// Check if we're in quiet mode via environment variable.
 pub fn is_quiet_mode() -> bool {

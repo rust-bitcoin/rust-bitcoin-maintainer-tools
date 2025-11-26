@@ -1,5 +1,5 @@
 [package]
-name = "rust-bitcoin-maintainer-tools"
+name = "cargo-rbmt"
 version = "0.1.0"
 authors = ["Nick Johnson <nick@yonson.dev>"]
 license = "CC0-1.0"
@@ -7,7 +7,7 @@ edition = "2021"
 rust-version = "1.74.0"
 
 [[bin]]
-name = "rbmt"
+name = "cargo-rbmt"
 path = "src/main.rs"
 
 [dependencies]

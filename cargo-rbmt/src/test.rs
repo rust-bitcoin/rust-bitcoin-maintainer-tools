@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::path::Path;
 use xshell::Shell;
 
-/// Test configuration loaded from contrib/rbmt.toml.
+/// Test configuration loaded from rbmt.toml.
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct Config {
