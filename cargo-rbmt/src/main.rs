@@ -1,6 +1,7 @@
 mod bench;
 mod docs;
 mod environment;
+mod integration;
 mod lint;
 mod lock;
 mod test;
@@ -46,6 +47,8 @@ enum Commands {
         #[arg(value_enum)]
         toolchain: Toolchain,
     },
+    /// Run bitcoin core integration tests.
+    Integration,
     /// Update Cargo-minimal.lock and Cargo-recent.lock files.
     Lock,
 }
@@ -64,9 +67,10 @@ fn main() {
     configure_log_level(&sh);
     change_to_repo_root(&sh);
 
-    // Restore the specified lock file before running any command (except Lock itself).
+    // Restore the specified lock file before running any command (except Lock and Integration).
+    // Integration tests use their own lock files in the integration package directory.
     if let Some(lock_file) = cli.lock_file {
-        if !matches!(cli.command, Commands::Lock) {
+        if !matches!(cli.command, Commands::Lock | Commands::Integration) {
             if let Err(e) = lock::restore_lock_file(&sh, lock_file) {
                 eprintln!("Error restoring lock file: {}", e);
                 process::exit(1);
@@ -102,6 +106,12 @@ fn main() {
         Commands::Test { toolchain } => {
             if let Err(e) = test::run(&sh, toolchain, &cli.packages) {
                 eprintln!("Error running tests: {}", e);
+                process::exit(1);
+            }
+        }
+        Commands::Integration => {
+            if let Err(e) = integration::run(&sh, &cli.packages) {
+                eprintln!("Error running integration tests: {}", e);
                 process::exit(1);
             }
         }

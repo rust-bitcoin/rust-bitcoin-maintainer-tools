@@ -2,6 +2,10 @@
 
 Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshell](https://github.com/matklad/xshell).
 
+## Environment Variables
+
+* `RBMT_LOG_LEVEL=quiet` - Suppress verbose output and reduce cargo noise.
+
 ## Configuration
 
 Configuration for `rbmt` is stored in `rbmt.toml`. The file can live at both the workspace root (e.g. `$ROOT/rbmt.toml`) as well as per-package (e.g. `$ROOT/$PACKAGE/rbmt.toml`) within a repository.
@@ -57,9 +61,17 @@ exact_features = [
 features_with_no_std = ["serde", "rand"]
 ```
 
-### Environment Variables
+### Integration
 
-* `RBMT_LOG_LEVEL=quiet` - Suppress verbose output and reduce cargo noise.
+The `integration` command is designed to work with the [`corepc`](https://github.com/rust-bitcoin/corepc) integration testing framework, which provides Bitcoin Core binaries and testing infrastructure.
+
+```toml
+[integration]
+# Integration tests package name, defaults to "bitcoind-tests".
+package = "bitcoind-tests"
+# Versions to test. If omitted, tests all discovered versions from Cargo.toml.
+versions = ["29_0", "28_2", "27_2"]
+```
 
 ## Lock Files
 
