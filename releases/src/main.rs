@@ -115,7 +115,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(sub) = matches.subcommand_matches("check-latest-dependencies") {
         let repo = sub.get_one::<PathBuf>("repository").expect("missing directory argument");
         let crate_name = sub.get_one::<String>("crate_name");
-        check_latest_dependencies(&cli, &repo, crate_name, debug).await?;
+        check_latest_dependencies(&cli, repo, crate_name, debug).await?;
     }
 
     Ok(())
@@ -131,7 +131,7 @@ fn read_config_file(file: &Path) -> anyhow::Result<Config> {
 
 /// Prints a list of `releases`.
 fn show_releases(releases: &[CrateVersion]) -> anyhow::Result<()> {
-    println!("");
+    println!();
     for release in releases {
         println!("    - {:20} {}", release.package, release.version);
     }
@@ -185,7 +185,8 @@ async fn check_latest_dependencies(
 
     let crate_name = match crate_name {
         Some(name) => name,
-        None => repo_dir.iter().last().expect("invalid repository").to_str().unwrap(),
+        // next_back is equivalent to last() but more efficient
+        None => repo_dir.iter().next_back().expect("invalid repository").to_str().unwrap(),
     };
 
     let data = fs::read_to_string(&path)
@@ -200,7 +201,7 @@ async fn check_latest_dependencies(
     println!("    crate: {}", crate_name);
     println!("    version: {}", crate_version);
     println!("    manifest: {}", path.display());
-    println!("");
+    println!();
 
     let dependencies_section =
         manifest["dependencies"].as_table().expect("manifest has dependencies section");
@@ -231,15 +232,10 @@ async fn check_latest_dependencies(
                 let version = Version::parse(version)?;
                 if latest.major != version.major || latest.minor != version.minor {
                     println!("    - {:20} {}      {} latest: {}", package, CROSS, version, latest);
+                } else if latest.patch != version.patch {
+                    println!("    - {:20} {}      {} latest: {}", package, TICK, version, latest);
                 } else {
-                    if latest.patch != version.patch {
-                        println!(
-                            "    - {:20} {}      {} latest: {}",
-                            package, TICK, version, latest
-                        );
-                    } else {
-                        println!("    - {:20} {}      {}", package, TICK, latest);
-                    }
+                    println!("    - {:20} {}      {}", package, TICK, latest);
                 }
             }
             None => println!("    - {:20} {}", package, latest),

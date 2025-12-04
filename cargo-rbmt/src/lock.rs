@@ -11,18 +11,13 @@ use xshell::Shell;
 const CARGO_LOCK: &str = "Cargo.lock";
 
 /// Represents the different types of managed lock files.
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
 pub enum LockFile {
     /// Uses minimal versions that satisfy dependency constraints.
     Minimal,
     /// Uses recent/updated versions of dependencies.
+    #[default]
     Recent,
-}
-
-impl Default for LockFile {
-    fn default() -> Self {
-        LockFile::Recent
-    }
 }
 
 impl LockFile {

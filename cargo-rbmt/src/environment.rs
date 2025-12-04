@@ -63,7 +63,10 @@ pub fn change_to_repo_root(sh: &Shell) {
 /// # Arguments
 ///
 /// * `packages` - Optional filter for specific package names. If empty, returns all packages.
-pub fn get_crate_dirs(sh: &Shell, packages: &[String]) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+pub fn get_crate_dirs(
+    sh: &Shell,
+    packages: &[String],
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let metadata = cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
