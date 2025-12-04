@@ -233,10 +233,7 @@ async fn check_latest_dependencies(
                 if latest.major != version.major || latest.minor != version.minor {
                     println!("    - {:20} {}      {} latest: {}", package, CROSS, version, latest);
                 } else if latest.patch != version.patch {
-                    println!(
-                        "    - {:20} {}      {} latest: {}",
-                        package, TICK, version, latest
-                    );
+                    println!("    - {:20} {}      {} latest: {}", package, TICK, version, latest);
                 } else {
                     println!("    - {:20} {}      {}", package, TICK, latest);
                 }
