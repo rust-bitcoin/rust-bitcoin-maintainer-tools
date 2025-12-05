@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
@@ -46,6 +47,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
     lint_workspace(sh)?;
     lint_crates(sh, packages)?;
     check_duplicate_deps(sh)?;
+    check_clippy_toml_msrv(sh, packages)?;
 
     quiet_println("Lint task completed successfully");
     Ok(())
@@ -137,5 +139,64 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     quiet_println("No duplicate dependencies found");
+    Ok(())
+}
+
+/// Check for deprecated clippy.toml MSRV settings.
+///
+/// The bitcoin ecosystem has moved to Rust 1.74+ and should use Cargo.toml
+/// package.rust-version instead of clippy.toml msrv settings.
+fn check_clippy_toml_msrv(
+    sh: &Shell,
+    packages: &[String],
+) -> Result<(), Box<dyn std::error::Error>> {
+    const CLIPPY_CONFIG_FILES: &[&str] = &["clippy.toml", ".clippy.toml"];
+
+    quiet_println("Checking for deprecated clippy.toml MSRV settings...");
+
+    let mut clippy_files = Vec::new();
+
+    // Check workspace root.
+    let workspace_root = sh.current_dir();
+    for filename in CLIPPY_CONFIG_FILES {
+        let path = workspace_root.join(filename);
+        if path.exists() {
+            clippy_files.push(path);
+        }
+    }
+
+    // Check each package.
+    let crate_dirs = get_crate_dirs(sh, packages)?;
+    for crate_dir in crate_dirs {
+        for filename in CLIPPY_CONFIG_FILES {
+            let path = Path::new(&crate_dir).join(filename);
+            if path.exists() {
+                clippy_files.push(path);
+            }
+        }
+    }
+
+    // Check each clippy file for the msrv setting.
+    let mut problematic_files = Vec::new();
+    for path in clippy_files {
+        let contents = fs::read_to_string(&path)?;
+        let config: toml::Value = toml::from_str(&contents)?;
+
+        if config.get("msrv").is_some() {
+            problematic_files.push(path.display().to_string());
+        }
+    }
+
+    if !problematic_files.is_empty() {
+        eprintln!(
+            "\nError: Found MSRV in clippy.toml, use Cargo.toml package.rust-version instead:"
+        );
+        for file in &problematic_files {
+            eprintln!("  {}", file);
+        }
+        return Err("MSRV should be specified in Cargo.toml, not clippy.toml".into());
+    }
+
+    quiet_println("No deprecated clippy.toml MSRV settings found");
     Ok(())
 }
