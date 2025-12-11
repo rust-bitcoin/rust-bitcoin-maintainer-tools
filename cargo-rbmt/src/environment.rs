@@ -1,5 +1,5 @@
 use std::env;
-use xshell::{cmd, Shell};
+use xshell::Shell;
 
 /// Environment variable to control output verbosity.
 /// Set to "quiet" to suppress informational messages and reduce cargo output.
@@ -51,7 +51,7 @@ pub fn configure_log_level(sh: &Shell) {
 ///
 /// Panics if not in a git repository or git command fails.
 pub fn change_to_repo_root(sh: &Shell) {
-    let repo_dir = cmd!(sh, "git rev-parse --show-toplevel")
+    let repo_dir = quiet_cmd!(sh, "git rev-parse --show-toplevel")
         .read()
         .expect("Failed to get repository root, ensure you're in a git repository");
     sh.change_dir(&repo_dir);
@@ -67,7 +67,7 @@ pub fn get_crate_dirs(
     sh: &Shell,
     packages: &[String],
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let metadata = cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
     let crate_dirs: Vec<String> = json["packages"]
@@ -93,6 +93,21 @@ pub fn get_crate_dirs(
         .collect();
 
     Ok(crate_dirs)
+}
+
+/// Get the cargo target directory from metadata.
+///
+/// This respects CARGO_TARGET_DIR, .cargo/config.toml, and other cargo
+/// target directory configuration.
+pub fn get_target_directory(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let json: serde_json::Value = serde_json::from_str(&metadata)?;
+
+    let target_dir = json["target_directory"]
+        .as_str()
+        .ok_or("Missing target_directory in cargo metadata")?;
+
+    Ok(target_dir.to_string())
 }
 
 /// Helper function to run cargo commands with CI flags.
