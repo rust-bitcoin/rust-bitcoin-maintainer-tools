@@ -18,11 +18,22 @@ struct Config {
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct TestConfig {
-    /// Examples to run with the format "name:feature1 feature2".
+    /// Examples to run with different feature configurations.
+    ///
+    /// Supported formats:
+    /// * `"name"` - runs with default features.
+    /// * `"name:-"` - runs with no-default-features.
+    /// * `"name:feature1 feature2"` - runs with specific features.
     ///
     /// # Examples
     ///
-    /// `["example1:serde", "example2:serde rand"]`
+    /// ```
+    /// examples = [
+    ///     "bip32",
+    ///     "bip32:-",
+    ///     "bip32:serde rand"
+    /// ]
+    /// ```
     examples: Vec<String>,
 
     /// List of individual features to test with the conventional `std` feature enabled.
@@ -119,22 +130,41 @@ fn do_test(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std::error::Er
     // Run examples.
     for example in &config.examples {
         let parts: Vec<&str> = example.split(':').collect();
-        if parts.len() != 2 {
-            return Err(format!(
-                "Invalid example format: {}, expected 'name:features'",
-                example
-            )
-            .into());
+
+        match parts.len() {
+            1 => {
+                // Format: "name" - run with default features.
+                let name = parts[0];
+                quiet_cmd!(sh, "cargo run --locked --example {name}").run()?;
+            }
+            2 => {
+                let name = parts[0];
+                let features = parts[1];
+
+                if features == "-" {
+                    // Format: "name:-" - run with no-default-features.
+                    quiet_cmd!(
+                        sh,
+                        "cargo run --locked --no-default-features --example {name}"
+                    )
+                    .run()?;
+                } else {
+                    // Format: "name:features" - run with specific features.
+                    quiet_cmd!(
+                        sh,
+                        "cargo run --locked --example {name} --features={features}"
+                    )
+                    .run()?;
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "Invalid example format: {}, expected 'name', 'name:-', or 'name:features'",
+                    example
+                )
+                .into());
+            }
         }
-
-        let name = parts[0];
-        let features = parts[1];
-
-        quiet_println(&format!(
-            "Running example {} with features: {}",
-            name, features
-        ));
-        quiet_cmd!(sh, "cargo run --example {name} --features={features}").run()?;
     }
 
     Ok(())
