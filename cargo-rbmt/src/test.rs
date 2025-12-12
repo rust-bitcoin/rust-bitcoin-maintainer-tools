@@ -4,8 +4,47 @@ use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
 use serde::Deserialize;
+use std::ffi::OsStr;
+use std::fmt;
 use std::path::Path;
 use xshell::Shell;
+
+/// Conventinal feature flags used across rust-bitcoin crates.
+#[derive(Debug, Clone, Copy)]
+enum FeatureFlag {
+    /// Enable the standard library.
+    Std,
+    /// Legacy feature to disable standard library.
+    NoStd,
+}
+
+impl FeatureFlag {
+    /// Get the feature string for this flag.
+    fn as_str(&self) -> &'static str {
+        match self {
+            FeatureFlag::Std => "std",
+            FeatureFlag::NoStd => "no-std",
+        }
+    }
+}
+
+impl fmt::Display for FeatureFlag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl AsRef<str> for FeatureFlag {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl AsRef<OsStr> for FeatureFlag {
+    fn as_ref(&self) -> &OsStr {
+        OsStr::new(self.as_str())
+    }
+}
 
 /// Test configuration loaded from rbmt.toml.
 #[derive(Debug, Deserialize, Default)]
@@ -18,11 +57,22 @@ struct Config {
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct TestConfig {
-    /// Examples to run with the format "name:feature1 feature2".
+    /// Examples to run with different feature configurations.
+    ///
+    /// Supported formats:
+    /// * `"name"` - runs with default features.
+    /// * `"name:-"` - runs with no-default-features.
+    /// * `"name:feature1 feature2"` - runs with specific features.
     ///
     /// # Examples
     ///
-    /// `["example1:serde", "example2:serde rand"]`
+    /// ```
+    /// examples = [
+    ///     "bip32",
+    ///     "bip32:-",
+    ///     "bip32:serde rand"
+    /// ]
+    /// ```
     examples: Vec<String>,
 
     /// List of individual features to test with the conventional `std` feature enabled.
@@ -119,22 +169,41 @@ fn do_test(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std::error::Er
     // Run examples.
     for example in &config.examples {
         let parts: Vec<&str> = example.split(':').collect();
-        if parts.len() != 2 {
-            return Err(format!(
-                "Invalid example format: {}, expected 'name:features'",
-                example
-            )
-            .into());
+
+        match parts.len() {
+            1 => {
+                // Format: "name" - run with default features.
+                let name = parts[0];
+                quiet_cmd!(sh, "cargo run --locked --example {name}").run()?;
+            }
+            2 => {
+                let name = parts[0];
+                let features = parts[1];
+
+                if features == "-" {
+                    // Format: "name:-" - run with no-default-features.
+                    quiet_cmd!(
+                        sh,
+                        "cargo run --locked --no-default-features --example {name}"
+                    )
+                    .run()?;
+                } else {
+                    // Format: "name:features" - run with specific features.
+                    quiet_cmd!(
+                        sh,
+                        "cargo run --locked --example {name} --features={features}"
+                    )
+                    .run()?;
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "Invalid example format: {}, expected 'name', 'name:-', or 'name:features'",
+                    example
+                )
+                .into());
+            }
         }
-
-        let name = parts[0];
-        let features = parts[1];
-
-        quiet_println(&format!(
-            "Running example {} with features: {}",
-            name, features
-        ));
-        quiet_cmd!(sh, "cargo run --example {name} --features={features}").run()?;
     }
 
     Ok(())
@@ -165,11 +234,12 @@ fn do_feature_matrix(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std:
 
     // Handle no-std pattern (rust-miniscript).
     if !config.features_with_no_std.is_empty() {
+        let no_std = FeatureFlag::NoStd;
         quiet_println("Testing no-std");
-        quiet_cmd!(sh, "cargo build --no-default-features --features=no-std").run()?;
-        quiet_cmd!(sh, "cargo test --no-default-features --features=no-std").run()?;
+        quiet_cmd!(sh, "cargo build --no-default-features --features={no_std}").run()?;
+        quiet_cmd!(sh, "cargo test --no-default-features --features={no_std}").run()?;
 
-        loop_features(sh, "no-std", &config.features_with_no_std)?;
+        loop_features(sh, Some(FeatureFlag::NoStd), &config.features_with_no_std)?;
     } else {
         quiet_println("Testing no-default-features");
         quiet_cmd!(sh, "cargo build --no-default-features").run()?;
@@ -183,12 +253,12 @@ fn do_feature_matrix(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std:
 
     // Test features with std.
     if !config.features_with_std.is_empty() {
-        loop_features(sh, "std", &config.features_with_std)?;
+        loop_features(sh, Some(FeatureFlag::Std), &config.features_with_std)?;
     }
 
     // Test features without std.
     if !config.features_without_std.is_empty() {
-        loop_features(sh, "", &config.features_without_std)?;
+        loop_features(sh, None, &config.features_without_std)?;
     }
 
     Ok(())
@@ -196,27 +266,41 @@ fn do_feature_matrix(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std:
 
 /// Test each feature individually and all combinations of two features.
 ///
-/// This implements three feature matrix testing strategies.
-/// 1. All features together.
-/// 2. Each feature individually (only if more than one feature).
-/// 3. All unique pairs of features.
+/// This implements three feature matrix testing strategies:
+/// 1. All features together (base feature + all test features).
+/// 2. Each feature individually (base feature + one test feature).
+/// 3. All unique pairs of test features (base feature + two test features).
 ///
 /// The pair testing catches feature interaction bugs (where two features work
 /// independently, but conflict when combined) while keeping test time manageable.
-fn loop_features(
+///
+/// # Parameters
+///
+/// * `base` - Optional base feature that is always included (e.g., `Some(FeatureFlag::Std)`).
+/// * `features` - Features to test in combination.
+fn loop_features<S: AsRef<str>>(
     sh: &Shell,
-    base: &str,
-    features: &[String],
+    base: Option<FeatureFlag>,
+    features: &[S],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let base_flag = if base.is_empty() {
-        String::new()
-    } else {
-        format!("{} ", base)
-    };
+    // Helper to combine base flag and features into a feature flag string.
+    fn combine_features<S: AsRef<str>>(base: Option<FeatureFlag>, additional: &[S]) -> String {
+        match base {
+            Some(flag) => std::iter::once(flag.as_ref())
+                .chain(additional.iter().map(|s| s.as_ref()))
+                .collect::<Vec<_>>()
+                .join(" "),
+            None => additional
+                .iter()
+                .map(|s| s.as_ref())
+                .collect::<Vec<_>>()
+                .join(" "),
+        }
+    }
 
     // Test all features together.
-    let all_features = format!("{}{}", base_flag, features.join(" "));
-    quiet_println(&format!("Testing features: {}", all_features.trim()));
+    let all_features = combine_features(base, features);
+    quiet_println(&format!("Testing features: {}", all_features));
     quiet_cmd!(
         sh,
         "cargo build --no-default-features --features={all_features}"
@@ -231,8 +315,8 @@ fn loop_features(
     // Test each feature individually and all pairs (only if more than one feature).
     if features.len() > 1 {
         for i in 0..features.len() {
-            let feature_combo = format!("{}{}", base_flag, features[i]);
-            quiet_println(&format!("Testing features: {}", feature_combo.trim()));
+            let feature_combo = combine_features(base, &features[i..=i]);
+            quiet_println(&format!("Testing features: {}", feature_combo));
             quiet_cmd!(
                 sh,
                 "cargo build --no-default-features --features={feature_combo}"
@@ -246,8 +330,9 @@ fn loop_features(
 
             // Test all pairs with features[i].
             for j in (i + 1)..features.len() {
-                let feature_combo = format!("{}{} {}", base_flag, features[i], features[j]);
-                quiet_println(&format!("Testing features: {}", feature_combo.trim()));
+                let pair = [&features[i], &features[j]];
+                let feature_combo = combine_features(base, &pair);
+                quiet_println(&format!("Testing features: {}", feature_combo));
                 quiet_cmd!(
                     sh,
                     "cargo build --no-default-features --features={feature_combo}"

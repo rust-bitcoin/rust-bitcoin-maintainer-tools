@@ -28,11 +28,16 @@ The `test` command can be configured to run feature matrix testing for your pack
 
 ```toml
 [test]
-# Examples to run with specific features enabled.
-# Format: "example_name:feature1 feature2"
+# Examples to run with different feature configurations.
+#
+# Supported formats:
+# * "name" - runs with default features.
+# * "name:-" - runs with no-default-features.
+# * "name:feature1 feature2" - runs with specific features.
 examples = [
-    "example1:serde",
-    "example2:serde rand",
+    "bip32",              # Default features
+    "bip32:-",            # No default features
+    "bip32:serde rand",   # Specific features
 ]
 
 # Features to test with the conventional `std` feature enabled.
