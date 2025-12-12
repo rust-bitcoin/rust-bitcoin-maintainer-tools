@@ -1,7 +1,6 @@
 //! Benchmark testing tasks.
 
-use crate::environment::{get_crate_dirs, quiet_println};
-use crate::quiet_cmd;
+use crate::environment::{cargo, get_crate_dirs, quiet_println};
 use crate::toolchain::{check_toolchain, Toolchain};
 use xshell::Shell;
 
@@ -22,7 +21,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
         // Use pushd pattern to change and restore directory.
         let _dir = sh.push_dir(crate_dir);
 
-        quiet_cmd!(sh, "cargo bench")
+        cargo(sh, "bench")
             .env("RUSTFLAGS", "--cfg=bench")
             .run()?;
     }
