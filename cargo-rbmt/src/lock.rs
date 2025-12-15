@@ -1,4 +1,8 @@
 //! Manage cargo lock files for minimal and recent dependency versions.
+//!
+//! Note: This module uses `quiet_cmd!` directly instead of the `cargo()` helper
+//! because these commands intentionally generate and modify lockfiles. Using
+//! `--locked` would prevent the dependency resolution we need here.
 
 use crate::environment::quiet_println;
 use crate::quiet_cmd;

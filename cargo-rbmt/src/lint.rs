@@ -2,8 +2,7 @@ use std::fs;
 use std::path::Path;
 use xshell::Shell;
 
-use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
-use crate::quiet_cmd;
+use crate::environment::{cargo, get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
 use crate::toolchain::{check_toolchain, Toolchain};
 
 /// Lint configuration loaded from rbmt.toml.
@@ -58,15 +57,12 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Linting workspace...");
 
     // Run clippy on workspace with all features.
-    quiet_cmd!(
-        sh,
-        "cargo clippy --workspace --all-targets --all-features --keep-going"
-    )
-    .args(&["--", "-D", "warnings"])
-    .run()?;
+    cargo(sh, "clippy --workspace --all-targets --all-features --keep-going")
+        .args(&["--", "-D", "warnings"])
+        .run()?;
 
     // Run clippy on workspace without features.
-    quiet_cmd!(sh, "cargo clippy --workspace --all-targets --keep-going")
+    cargo(sh, "clippy --workspace --all-targets --keep-going")
         .args(&["--", "-D", "warnings"])
         .run()?;
 
@@ -93,12 +89,9 @@ fn lint_crates(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error
         let _old_dir = sh.push_dir(&crate_dir);
 
         // Run clippy without default features.
-        quiet_cmd!(
-            sh,
-            "cargo clippy --all-targets --no-default-features --keep-going"
-        )
-        .args(&["--", "-D", "warnings"])
-        .run()?;
+        cargo(sh, "clippy --all-targets --no-default-features --keep-going")
+            .args(&["--", "-D", "warnings"])
+            .run()?;
     }
 
     Ok(())
@@ -112,7 +105,7 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let allowed_duplicates = &config.allowed_duplicates;
 
     // Run cargo tree to find duplicates.
-    let output = quiet_cmd!(sh, "cargo tree --target=all --all-features --duplicates")
+    let output = cargo(sh, "tree --target=all --all-features --duplicates")
         .ignore_status()
         .read()?;
 
@@ -130,7 +123,7 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
     if !duplicates.is_empty() {
         // Show full tree for context.
-        quiet_cmd!(sh, "cargo tree --target=all --all-features --duplicates").run()?;
+        cargo(sh, "tree --target=all --all-features --duplicates").run()?;
         eprintln!("Error: Found duplicate dependencies in workspace!");
         for dup in &duplicates {
             eprintln!("  {}", dup);
