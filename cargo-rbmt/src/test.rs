@@ -140,8 +140,6 @@ pub fn run(
     toolchain: Toolchain,
     packages: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    check_toolchain(sh, toolchain)?;
-
     let crate_dirs = get_crate_dirs(sh, packages)?;
     quiet_println(&format!("Testing {} crates", crate_dirs.len()));
 
@@ -149,6 +147,8 @@ pub fn run(
         quiet_println(&format!("Testing crate: {}", crate_dir));
 
         let _dir = sh.push_dir(crate_dir);
+        // Check the package's MSRV, not the workspace root.
+        check_toolchain(sh, toolchain)?;
         let config = TestConfig::load(Path::new(crate_dir))?;
 
         do_test(sh, &config)?;
