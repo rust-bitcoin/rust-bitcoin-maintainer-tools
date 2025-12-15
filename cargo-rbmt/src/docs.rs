@@ -1,6 +1,6 @@
 //! Documentation building tasks.
 
-use crate::environment::cargo;
+use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
 use xshell::Shell;
 
@@ -11,7 +11,7 @@ use xshell::Shell;
 pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     check_toolchain(sh, Toolchain::Stable)?;
 
-    let mut cmd = cargo(sh, "doc --all-features --no-deps");
+    let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
     // Add package filters if specified.
     for package in packages {
@@ -30,7 +30,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
 pub fn run_docsrs(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     check_toolchain(sh, Toolchain::Nightly)?;
 
-    let mut cmd = cargo(sh, "doc --all-features --no-deps");
+    let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
     // Add package filters if specified.
     for package in packages {

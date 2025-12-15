@@ -2,7 +2,8 @@ use std::fs;
 use std::path::Path;
 use xshell::Shell;
 
-use crate::environment::{cargo, get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
+use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
 
 /// Lint configuration loaded from rbmt.toml.
@@ -57,12 +58,12 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Linting workspace...");
 
     // Run clippy on workspace with all features.
-    cargo(sh, "clippy --workspace --all-targets --all-features --keep-going")
+    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
         .args(&["--", "-D", "warnings"])
         .run()?;
 
     // Run clippy on workspace without features.
-    cargo(sh, "clippy --workspace --all-targets --keep-going")
+    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
         .args(&["--", "-D", "warnings"])
         .run()?;
 
@@ -89,7 +90,7 @@ fn lint_crates(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error
         let _old_dir = sh.push_dir(&crate_dir);
 
         // Run clippy without default features.
-        cargo(sh, "clippy --all-targets --no-default-features --keep-going")
+        quiet_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
             .args(&["--", "-D", "warnings"])
             .run()?;
     }
@@ -105,7 +106,7 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let allowed_duplicates = &config.allowed_duplicates;
 
     // Run cargo tree to find duplicates.
-    let output = cargo(sh, "tree --target=all --all-features --duplicates")
+    let output = quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates")
         .ignore_status()
         .read()?;
 
@@ -123,7 +124,7 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
     if !duplicates.is_empty() {
         // Show full tree for context.
-        cargo(sh, "tree --target=all --all-features --duplicates").run()?;
+        quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates").run()?;
         eprintln!("Error: Found duplicate dependencies in workspace!");
         for dup in &duplicates {
             eprintln!("  {}", dup);

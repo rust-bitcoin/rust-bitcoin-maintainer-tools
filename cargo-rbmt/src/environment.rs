@@ -109,11 +109,3 @@ pub fn get_target_directory(sh: &Shell) -> Result<String, Box<dyn std::error::Er
 
     Ok(target_dir.to_string())
 }
-
-/// Helper function to run cargo commands with CI flags.
-///
-/// The locked flag ensures using existing Cargo.lock file without
-/// updating dependencies.
-pub fn cargo<'a>(sh: &'a Shell, args: &str) -> xshell::Cmd<'a> {
-    quiet_cmd!(sh, "cargo --locked {args}")
-}
