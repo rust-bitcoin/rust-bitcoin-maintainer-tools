@@ -115,10 +115,6 @@ To ensure your package works with the full range of declared dependency versions
 
 The `lock` command generates and maintains these files for you. You can then use `--lock-file` with any command to test against either version set.
 
-### Usage
-
-**Generate/update lock files**
-
 ```bash
 cargo rbmt lock
 ```
@@ -126,8 +122,6 @@ cargo rbmt lock
 1. Verify that direct dependency versions aren't being bumped by transitive dependencies.
 2. Generate `Cargo-minimal.lock` with minimal versions across the entire dependency tree.
 3. Update `Cargo-recent.lock` with conservatively updated dependencies.
-
-**Use a specific lock file**
 
 ```bash
 # Test with minimal versions.
@@ -142,6 +136,26 @@ cargo rbmt --lock-file minimal docs
 ```
 
 When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
+
+## API Checking
+
+The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface.
+
+```bash
+cargo rbmt api
+```
+
+1. Generates API snapshots for each feature configuration (no-features, alloc-only, all-features).
+2. Validates that features are additive (enabling features only adds to the API, never removes).
+3. Checks for uncommitted changes to API files.
+
+The generated API files are stored in `api/<package-name>/`.
+
+```bash
+cargo rbmt api --baseline v0.1.0
+```
+
+Compares the current API against a baseline git reference (tag, branch, or commit) to detect breaking changes.
 
 ## Workspace Integration
 

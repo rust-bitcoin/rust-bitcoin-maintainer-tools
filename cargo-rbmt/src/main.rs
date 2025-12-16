@@ -36,7 +36,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Check for public API changes in stabilizing crates.
-    Api,
+    Api {
+        /// Git ref to use as baseline for semver comparison.
+        #[arg(long)]
+        baseline: Option<String>,
+    },
     /// Run the linter (clippy) for workspace and all crates.
     Lint,
     /// Build documentation with stable toolchain.
@@ -85,8 +89,8 @@ fn main() {
     }
 
     match cli.command {
-        Commands::Api => {
-            if let Err(e) = api::run(&sh, &cli.packages) {
+        Commands::Api { baseline } => {
+            if let Err(e) = api::run(&sh, &cli.packages, baseline.as_deref()) {
                 eprintln!("Error running API check: {}", e);
                 process::exit(1);
             }
