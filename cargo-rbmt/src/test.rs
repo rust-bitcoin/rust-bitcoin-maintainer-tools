@@ -1,6 +1,6 @@
 //! Test tasks with feature matrix testing.
 
-use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
 use serde::Deserialize;
@@ -141,8 +141,8 @@ pub fn run(
     no_debug_assertions: bool,
     packages: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let crate_dirs = get_crate_dirs(sh, packages)?;
-    quiet_println(&format!("Testing {} crates", crate_dirs.len()));
+    let package_info = get_packages(sh, packages)?;
+    quiet_println(&format!("Testing {} crates", package_info.len()));
 
     // Configure RUSTFLAGS for debug assertions.
     let _env = sh.push_env(
@@ -154,13 +154,13 @@ pub fn run(
         },
     );
 
-    for crate_dir in &crate_dirs {
-        quiet_println(&format!("Testing crate: {}", crate_dir));
+    for (_package_name, package_dir) in &package_info {
+        quiet_println(&format!("Testing crate: {}", package_dir.display()));
 
-        let _dir = sh.push_dir(crate_dir);
+        let _dir = sh.push_dir(package_dir);
         // Check the package's MSRV, not the workspace root.
         check_toolchain(sh, toolchain)?;
-        let config = TestConfig::load(Path::new(crate_dir))?;
+        let config = TestConfig::load(Path::new(package_dir))?;
 
         do_test(sh, &config)?;
         do_feature_matrix(sh, &config)?;
