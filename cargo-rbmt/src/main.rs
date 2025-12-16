@@ -20,9 +20,9 @@ use toolchain::Toolchain;
 #[command(name = "cargo-rbmt")]
 #[command(about = "Rust Bitcoin Maintainer Tools", long_about = None)]
 struct Cli {
-    /// Lock file to use for dependencies (defaults to recent).
-    #[arg(long, global = true, value_enum)]
-    lock_file: Option<LockFile>,
+    /// Lock file to use for dependencies.
+    #[arg(long, global = true, value_enum, default_value_t = LockFile::Recent)]
+    lock_file: LockFile,
 
     /// Filter to specific package (can be specified multiple times).
     #[arg(short = 'p', long = "package", global = true)]
@@ -75,12 +75,10 @@ fn main() {
 
     // Restore the specified lock file before running any command (except Lock and Integration).
     // Integration tests use their own lock files in the integration package directory.
-    if let Some(lock_file) = cli.lock_file {
-        if !matches!(cli.command, Commands::Lock | Commands::Integration) {
-            if let Err(e) = lock::restore_lock_file(&sh, lock_file) {
-                eprintln!("Error restoring lock file: {}", e);
-                process::exit(1);
-            }
+    if !matches!(cli.command, Commands::Lock | Commands::Integration) {
+        if let Err(e) = lock::restore_lock_file(&sh, cli.lock_file) {
+            eprintln!("Error restoring lock file: {}", e);
+            process::exit(1);
         }
     }
 
