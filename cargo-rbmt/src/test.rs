@@ -137,10 +137,21 @@ impl TestConfig {
 pub fn run(
     sh: &Shell,
     toolchain: Toolchain,
+    no_debug_assertions: bool,
     packages: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let crate_dirs = get_crate_dirs(sh, packages)?;
     quiet_println(&format!("Testing {} crates", crate_dirs.len()));
+
+    // Configure RUSTFLAGS for debug assertions.
+    let _env = sh.push_env(
+        "RUSTFLAGS",
+        if no_debug_assertions {
+            "-C debug-assertions=off"
+        } else {
+            "-C debug-assertions=on"
+        },
+    );
 
     for crate_dir in &crate_dirs {
         quiet_println(&format!("Testing crate: {}", crate_dir));

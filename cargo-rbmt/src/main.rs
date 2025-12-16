@@ -47,6 +47,9 @@ enum Commands {
         /// Toolchain to use: stable, nightly, or msrv.
         #[arg(value_enum)]
         toolchain: Toolchain,
+        /// Disable debug assertions in compiled code.
+        #[arg(long)]
+        no_debug_assertions: bool,
     },
     /// Run bitcoin core integration tests.
     Integration,
@@ -106,8 +109,11 @@ fn main() {
                 process::exit(1);
             }
         }
-        Commands::Test { toolchain } => {
-            if let Err(e) = test::run(&sh, toolchain, &cli.packages) {
+        Commands::Test {
+            toolchain,
+            no_debug_assertions,
+        } => {
+            if let Err(e) = test::run(&sh, toolchain, no_debug_assertions, &cli.packages) {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             }
