@@ -78,6 +78,17 @@ package = "bitcoind-tests"
 versions = ["29_0", "28_2", "27_2"]
 ```
 
+### Prerelease
+
+The `prerelease` command performs readiness checks before releasing a package. By default, all packages are checked unless they explicitly opt-out.
+
+```toml
+[prerelease]
+# Set to true to skip pre-release checks for this package.
+# Use this for packages that are not yet ready for release.
+skip = true
+```
+
 ## Lock Files
 
 To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` requires two lock files in your repository.

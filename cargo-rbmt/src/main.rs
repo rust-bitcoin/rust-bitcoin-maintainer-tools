@@ -4,6 +4,7 @@ mod environment;
 mod integration;
 mod lint;
 mod lock;
+mod prerelease;
 mod test;
 mod toolchain;
 
@@ -51,6 +52,8 @@ enum Commands {
     Integration,
     /// Update Cargo-minimal.lock and Cargo-recent.lock files.
     Lock,
+    /// Run pre-release readiness checks.
+    Prerelease,
 }
 
 fn main() {
@@ -118,6 +121,12 @@ fn main() {
         Commands::Lock => {
             if let Err(e) = lock::run(&sh) {
                 eprintln!("Error updating lock files: {}", e);
+                process::exit(1);
+            }
+        }
+        Commands::Prerelease => {
+            if let Err(e) = prerelease::run(&sh, &cli.packages) {
+                eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             }
         }
