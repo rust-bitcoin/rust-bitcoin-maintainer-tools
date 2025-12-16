@@ -1,6 +1,7 @@
 //! Integration test tasks for packages with bitcoind-tests or similar test packages.
 
-use crate::environment::{cargo, get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
+use crate::quiet_cmd;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use xshell::{cmd, Shell};
@@ -109,7 +110,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
         // Run tests for each version.
         for version in &versions_to_test {
             quiet_println(&format!("  Testing with version: {}", version));
-            cargo(sh, "test --features={version}").run()?;
+            quiet_cmd!(sh, "cargo --locked test --features={version}").run()?;
         }
     }
 

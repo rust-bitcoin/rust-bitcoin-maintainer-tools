@@ -1,8 +1,8 @@
 //! Manage cargo lock files for minimal and recent dependency versions.
 //!
-//! Note: This module uses `quiet_cmd!` directly instead of the `cargo()` helper
-//! because these commands intentionally generate and modify lockfiles. Using
-//! `--locked` would prevent the dependency resolution we need here.
+//! Note: These commands intentionally omit `--locked` because they need to
+//! generate and modify lockfiles. Using `--locked` would prevent the dependency
+//! resolution we need here.
 
 use crate::environment::quiet_println;
 use crate::quiet_cmd;
@@ -22,6 +22,8 @@ pub enum LockFile {
     /// Uses recent/updated versions of dependencies.
     #[default]
     Recent,
+    /// Uses the existing Cargo.lock as-is (for binary crates).
+    Existing,
 }
 
 impl LockFile {
@@ -30,6 +32,7 @@ impl LockFile {
         match self {
             LockFile::Minimal => "Cargo-minimal.lock",
             LockFile::Recent => "Cargo-recent.lock",
+            LockFile::Existing => CARGO_LOCK,
         }
     }
 }
@@ -105,6 +108,11 @@ fn copy_lock_file(sh: &Shell, target: LockFile) -> Result<(), Box<dyn std::error
 
 /// Restore a specific lock file to Cargo.lock.
 pub fn restore_lock_file(sh: &Shell, source: LockFile) -> Result<(), Box<dyn std::error::Error>> {
+    // Existing uses Cargo.lock as-is, no need to restore.
+    if matches!(source, LockFile::Existing) {
+        return Ok(());
+    }
+
     let src_path = sh.current_dir().join(source.filename());
     let dest_path = sh.current_dir().join(CARGO_LOCK);
     fs::copy(&src_path, &dest_path)?;
