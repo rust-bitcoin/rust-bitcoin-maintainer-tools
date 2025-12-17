@@ -1,11 +1,30 @@
+# This justfile is functional for cargo-rbmt, but also showcases a pattern for
+# how to integrate rbmt into a justfile.
+#
+# The generic `_rbmt` recipe handles toolchain selection (stable, nightly, MSRV),
+# lock file selection (existing, recent, minimal), and installation of rbmt.
+#
+# Specific recipes (`lint`, `test`) call the generic `_rbmt` recipe with
+# appropriate defaults.
+
 # List available recipes.
 _default:
     @just --list
 
-# Run tests.
-test:
-    cargo test
+# Install rbmt from the local workspace path.
+@_install:
+    cargo install --quiet --path .
 
-# Install rbmt from the local path.
-install:
-    cargo install --path .
+# Format files.
+@fmt:
+    cargo +nightly fmt --all
+
+# Run CI tasks using rbmt.
+@_rbmt task toolchain="stable" lock="existing": _install
+    RBMT_LOG_LEVEL=quiet cargo +{{toolchain}} rbmt --lock-file {{lock}} {{task}}
+
+# Lint with clippy.
+@lint: (_rbmt "lint" "nightly")
+
+# Run tests.
+@test: (_rbmt "test stable")
