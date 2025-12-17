@@ -1,8 +1,7 @@
 use std::fs;
-use std::path::Path;
 use xshell::Shell;
 
-use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
 
@@ -88,12 +87,13 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 fn lint_packages(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running package-specific lints...");
 
-    let crate_dirs = get_crate_dirs(sh, packages)?;
-    quiet_println(&format!("Found crates: {}", crate_dirs.join(", ")));
+    let package_info = get_packages(sh, packages)?;
+    let package_names: Vec<_> = package_info.iter().map(|(name, _)| name.as_str()).collect();
+    quiet_println(&format!("Found crates: {}", package_names.join(", ")));
 
-    for crate_dir in crate_dirs {
+    for (_package_name, package_dir) in package_info {
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
-        let _old_dir = sh.push_dir(&crate_dir);
+        let _old_dir = sh.push_dir(&package_dir);
 
         // Run clippy without default features.
         quiet_cmd!(
@@ -182,10 +182,10 @@ fn check_clippy_toml_msrv(
     }
 
     // Check each package.
-    let crate_dirs = get_crate_dirs(sh, packages)?;
-    for crate_dir in crate_dirs {
+    let package_info = get_packages(sh, packages)?;
+    for (_package_name, package_dir) in package_info {
         for filename in CLIPPY_CONFIG_FILES {
-            let path = Path::new(&crate_dir).join(filename);
+            let path = package_dir.join(filename);
             if path.exists() {
                 clippy_files.push(path);
             }

@@ -1,6 +1,6 @@
 //! Pre-release readiness checks.
 
-use crate::environment::{get_crate_dirs, get_target_directory, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_packages, get_target_dir, quiet_println, CONFIG_FILE_PATH};
 use crate::lock::LockFile;
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
@@ -43,38 +43,46 @@ impl PrereleaseConfig {
 
 /// Run pre-release readiness checks for all packages.
 pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let package_dirs = get_crate_dirs(sh, packages)?;
+    let package_info = get_packages(sh, packages)?;
     quiet_println(&format!(
         "Running pre-release checks on {} packages",
-        package_dirs.len()
+        package_info.len()
     ));
 
     let mut skipped = Vec::new();
 
-    for package_dir in &package_dirs {
+    for (_package_name, package_dir) in &package_info {
         let config = PrereleaseConfig::load(Path::new(package_dir))?;
 
         if config.skip {
-            skipped.push(package_dir.as_str());
+            skipped.push(package_dir);
             quiet_println(&format!(
                 "Skipping package: {} (marked as skip)",
-                package_dir
+                package_dir.display()
             ));
             continue;
         }
 
-        quiet_println(&format!("Checking package: {}", package_dir));
+        quiet_println(&format!("Checking package: {}", package_dir.display()));
 
         let _dir = sh.push_dir(package_dir);
 
         // Run all pre-release checks. Return immediately on first failure.
         if let Err(e) = check_todos(sh) {
-            eprintln!("Pre-release check failed for {}: {}", package_dir, e);
+            eprintln!(
+                "Pre-release check failed for {}: {}",
+                package_dir.display(),
+                e
+            );
             return Err(e);
         }
 
         if let Err(e) = check_publish(sh) {
-            eprintln!("Pre-release check failed for {}: {}", package_dir, e);
+            eprintln!(
+                "Pre-release check failed for {}: {}",
+                package_dir.display(),
+                e
+            );
             return Err(e);
         }
     }
@@ -154,7 +162,7 @@ fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
 /// Get the path to the publish directory for the current package from cargo metadata.
 fn get_publish_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-    let target_dir = get_target_directory(sh)?;
+    let target_dir = get_target_dir(sh)?;
 
     // Find the package that matches the current directory.
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;

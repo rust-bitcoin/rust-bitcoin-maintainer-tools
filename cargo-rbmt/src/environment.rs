@@ -1,4 +1,5 @@
 use std::env;
+use std::path::PathBuf;
 use xshell::Shell;
 
 /// Environment variable to control output verbosity.
@@ -57,49 +58,47 @@ pub fn change_to_repo_root(sh: &Shell) {
     sh.change_dir(&repo_dir);
 }
 
-/// Get list of crate directories in the workspace using cargo metadata.
-/// Returns fully qualified paths to support various workspace layouts including nested crates.
+/// Get list of package names and their directories in the workspace using cargo metadata.
+/// Returns tuples of (package_name, directory_path) to support various workspace layouts including nested crates.
 ///
 /// # Arguments
 ///
 /// * `packages` - Optional filter for specific package names. If empty, returns all packages.
-pub fn get_crate_dirs(
+pub fn get_packages(
     sh: &Shell,
     packages: &[String],
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+) -> Result<Vec<(String, PathBuf)>, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
-    let crate_dirs: Vec<String> = json["packages"]
+    let package_info: Vec<(String, PathBuf)> = json["packages"]
         .as_array()
         .ok_or("Missing 'packages' field in cargo metadata")?
         .iter()
         .filter_map(|package| {
+            let package_name = package["name"].as_str()?;
             let manifest_path = package["manifest_path"].as_str()?;
             // Extract directory path from the manifest path,
             // e.g., "/path/to/repo/releases/Cargo.toml" -> "/path/to/repo/releases".
             let dir_path = manifest_path.trim_end_matches("/Cargo.toml");
 
             // Filter by package name if specified.
-            if !packages.is_empty() {
-                let package_name = package["name"].as_str()?;
-                if !packages.contains(&package_name.to_string()) {
-                    return None;
-                }
+            if !packages.is_empty() && !packages.iter().any(|p| p == package_name) {
+                return None;
             }
 
-            Some(dir_path.to_string())
+            Some((package_name.to_owned(), PathBuf::from(dir_path)))
         })
         .collect();
 
-    Ok(crate_dirs)
+    Ok(package_info)
 }
 
 /// Get the cargo target directory from metadata.
 ///
 /// This respects CARGO_TARGET_DIR, .cargo/config.toml, and other cargo
 /// target directory configuration.
-pub fn get_target_directory(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 

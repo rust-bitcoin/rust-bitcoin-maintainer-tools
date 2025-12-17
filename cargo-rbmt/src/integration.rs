@@ -1,6 +1,6 @@
 //! Integration test tasks for packages with bitcoind-tests or similar test packages.
 
-use crate::environment::{get_crate_dirs, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -55,15 +55,15 @@ impl IntegrationConfig {
 ///
 /// * `packages` - Optional filter for specific package names.
 pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let crate_dirs = get_crate_dirs(sh, packages)?;
+    let package_info = get_packages(sh, packages)?;
     quiet_println(&format!(
         "Looking for integration tests in {} crate(s)",
-        crate_dirs.len()
+        package_info.len()
     ));
 
-    for crate_dir in &crate_dirs {
-        let config = IntegrationConfig::load(Path::new(crate_dir))?;
-        let integration_dir = PathBuf::from(crate_dir).join(config.package_name());
+    for (_package_name, package_dir) in &package_info {
+        let config = IntegrationConfig::load(Path::new(package_dir))?;
+        let integration_dir = PathBuf::from(package_dir).join(config.package_name());
 
         if !integration_dir.exists() {
             continue;
@@ -75,7 +75,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
 
         quiet_println(&format!(
             "Running integration tests for crate: {}",
-            crate_dir
+            package_dir.display()
         ));
 
         let _dir = sh.push_dir(&integration_dir);

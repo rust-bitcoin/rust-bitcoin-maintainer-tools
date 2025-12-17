@@ -1,3 +1,4 @@
+mod api;
 mod bench;
 mod docs;
 mod environment;
@@ -34,6 +35,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Check for public API changes in stabilizing crates.
+    Api {
+        /// Git ref to use as baseline for semver comparison.
+        #[arg(long)]
+        baseline: Option<String>,
+    },
     /// Run the linter (clippy) for workspace and all crates.
     Lint,
     /// Build documentation with stable toolchain.
@@ -74,7 +81,6 @@ fn main() {
     change_to_repo_root(&sh);
 
     // Restore the specified lock file before running any command (except Lock and Integration).
-    // Integration tests use their own lock files in the integration package directory.
     if !matches!(cli.command, Commands::Lock | Commands::Integration) {
         if let Err(e) = cli.lock_file.restore(&sh) {
             eprintln!("Error restoring lock file: {}", e);
@@ -83,6 +89,12 @@ fn main() {
     }
 
     match cli.command {
+        Commands::Api { baseline } => {
+            if let Err(e) = api::run(&sh, &cli.packages, baseline.as_deref()) {
+                eprintln!("Error running API check: {}", e);
+                process::exit(1);
+            }
+        }
         Commands::Lint => {
             if let Err(e) = lint::run(&sh, &cli.packages) {
                 eprintln!("Error running lint task: {}", e);
