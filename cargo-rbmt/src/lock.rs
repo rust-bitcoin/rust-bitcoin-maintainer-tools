@@ -35,18 +35,41 @@ impl LockFile {
             LockFile::Existing => CARGO_LOCK,
         }
     }
+
+    /// Derive this lockfile type from dependencies and activate it as Cargo.lock.
+    pub fn derive(&self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            LockFile::Minimal => derive_minimal_lockfile(sh),
+            LockFile::Recent => update_recent_lockfile(sh),
+            LockFile::Existing => {
+                // No-op, use existing Cargo.lock.
+                Ok(())
+            }
+        }
+    }
+
+    /// Restore a previously derived lockfile to Cargo.lock.
+    pub fn restore(&self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            LockFile::Minimal | LockFile::Recent => {
+                fs::copy(
+                    sh.current_dir().join(self.filename()),
+                    sh.current_dir().join(CARGO_LOCK),
+                )?;
+                Ok(())
+            }
+            LockFile::Existing => {
+                // No-op, Cargo.lock is already in place.
+                Ok(())
+            }
+        }
+    }
 }
 
 /// Update Cargo-minimal.lock and Cargo-recent.lock files.
 ///
 /// * `Cargo-minimal.lock` - Uses minimal versions that satisfy dependency constraints.
 /// * `Cargo-recent.lock` - Uses recent/updated versions of dependencies.
-///
-/// The minimal versions strategy uses a combination of `-Z direct-minimal-versions`
-/// and `-Z minimal-versions` to ensure two rules.
-///
-/// 1. Direct dependency versions in manifests are accurate (not bumped by transitive deps).
-/// 2. The entire dependency tree uses minimal versions that still satisfy constraints.
 ///
 /// This helps catch cases where you've specified a minimum version that's too high,
 /// or where your code relies on features from newer versions than declared.
@@ -55,7 +78,21 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
     let repo_dir = sh.current_dir();
     quiet_println(&format!("Updating lock files in: {}", repo_dir.display()));
+    LockFile::Minimal.derive(sh)?;
+    LockFile::Recent.derive(sh)?;
+    quiet_println("Lock files updated successfully");
 
+    Ok(())
+}
+
+/// Derive a minimal versions lockfile.
+///
+/// The minimal versions strategy uses a combination of `-Z direct-minimal-versions`
+/// and `-Z minimal-versions` to ensure two rules:
+///
+/// 1. Direct dependency versions in manifests are accurate (not bumped by transitive deps).
+/// 2. The entire dependency tree uses minimal versions that still satisfy constraints.
+fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     // The `direct-minimal-versions` and `minimal-versions` dependency resolution strategy
     // flags each have a little quirk. `direct-minimal-versions` allows transitive versions
     // to upgrade, so we are not testing against the actual minimum tree. `minimal-versions`
@@ -72,19 +109,33 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
     // Now that our own direct dependency versions can be trusted, check
     // against the lowest versions of the dependency tree which still
-    // satisfy constraints. Use this as the minimal version lock file.
-    quiet_println("Generating Cargo-minimal.lock...");
+    // satisfy constraints.
+    quiet_println("Generating minimal versions lockfile...");
     remove_lock_file(sh)?;
     quiet_cmd!(sh, "cargo check --all-features -Z minimal-versions").run()?;
+
+    // Save a copy to Cargo-minimal.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Minimal)?;
 
-    // Conservatively bump of recent dependencies.
-    quiet_println("Updating Cargo-recent.lock...");
-    restore_lock_file(sh, LockFile::Recent)?;
-    quiet_cmd!(sh, "cargo check --all-features").run()?;
-    copy_lock_file(sh, LockFile::Recent)?;
+    Ok(())
+}
 
-    quiet_println("Lock files updated successfully");
+/// Updates or creates a recent versions lockfile.
+///
+/// This uses `cargo check` to conservatively update dependency versions within
+/// the constraints specified in Cargo.toml. Cargo will keep existing dependencies
+/// at their current versions if they still satisfy constraints, only update when
+/// necessary (e.g., when adding new dependencies or constraints change).
+fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    quiet_println("Generating recent versions lockfile...");
+
+    // Try to restore existing Cargo-recent.lock for conservative updates.
+    // If it doesn't exist cargo check will create a fresh one.
+    let _ = LockFile::Recent.restore(sh);
+    quiet_cmd!(sh, "cargo check --all-features").run()?;
+
+    // Save a copy to Cargo-recent.lock for workspace tracking.
+    copy_lock_file(sh, LockFile::Recent)?;
 
     Ok(())
 }
@@ -103,18 +154,5 @@ fn copy_lock_file(sh: &Shell, target: LockFile) -> Result<(), Box<dyn std::error
     let source = sh.current_dir().join(CARGO_LOCK);
     let dest = sh.current_dir().join(target.filename());
     fs::copy(&source, &dest)?;
-    Ok(())
-}
-
-/// Restore a specific lock file to Cargo.lock.
-pub fn restore_lock_file(sh: &Shell, source: LockFile) -> Result<(), Box<dyn std::error::Error>> {
-    // Existing uses Cargo.lock as-is, no need to restore.
-    if matches!(source, LockFile::Existing) {
-        return Ok(());
-    }
-
-    let src_path = sh.current_dir().join(source.filename());
-    let dest_path = sh.current_dir().join(CARGO_LOCK);
-    fs::copy(&src_path, &dest_path)?;
     Ok(())
 }
