@@ -83,15 +83,18 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-/// Check for TODO and FIXME comments in source files.
+/// Grep source code for TODO, FIXME, TBD, and doc_auto_cfg.
 fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Checking for TODO and FIXME comments...");
+    quiet_println("Greping source for todos and nonos...");
 
-    let mut todos = Vec::new();
-    let src_dir = sh.current_dir().join("src");
+    // Things which should be patched up before release.
+    const TODOS: &[&str] = &["// TODO", "/* TODO", "// FIXME", "/* FIXME", "\"TBD\""];
+    // Things which are banned and can't be released.
+    const NONOS: &[&str] = &["doc_auto_cfg"];
 
     // Recursively walk the src/ directory.
-    let mut dirs_to_visit = vec![src_dir];
+    let mut issues = Vec::new();
+    let mut dirs_to_visit = vec![sh.current_dir().join("src")];
     while let Some(dir) = dirs_to_visit.pop() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -100,33 +103,30 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
             if path.is_dir() {
                 dirs_to_visit.push(path);
             } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
-                // Check Rust source files for TODO and FIXME comments.
                 let file = fs::File::open(&path)?;
                 let reader = BufReader::new(file);
 
                 for (line_num, line) in reader.lines().enumerate() {
                     let line = line?;
-                    if line.contains("// TODO")
-                        || line.contains("/* TODO")
-                        || line.contains("// FIXME")
-                        || line.contains("/* FIXME")
+                    if TODOS.iter().any(|pattern| line.contains(pattern))
+                        || NONOS.iter().any(|pattern| line.contains(pattern))
                     {
-                        todos.push((path.clone(), line_num + 1, line));
+                        issues.push((path.clone(), line_num, line));
                     }
                 }
             }
         }
     }
 
-    if !todos.is_empty() {
-        eprintln!("\nFound {} TODO/FIXME comment(s):", todos.len());
-        for (file, line_num, line) in &todos {
+    if !issues.is_empty() {
+        eprintln!("Found {} pre-release issue(s):", issues.len());
+        for (file, line_num, line) in &issues {
             eprintln!("{}:{}:{}", file.display(), line_num, line.trim());
         }
-        return Err(format!("Found {} TODO/FIXME comments", todos.len()).into());
+        return Err(format!("Found {} pre-release issues", issues.len()).into());
     }
 
-    quiet_println("No TODO or FIXME comments found");
+    quiet_println("No pre-release issues found");
     Ok(())
 }
 
