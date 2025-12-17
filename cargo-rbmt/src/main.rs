@@ -76,7 +76,7 @@ fn main() {
     // Restore the specified lock file before running any command (except Lock and Integration).
     // Integration tests use their own lock files in the integration package directory.
     if !matches!(cli.command, Commands::Lock | Commands::Integration) {
-        if let Err(e) = lock::restore_lock_file(&sh, cli.lock_file) {
+        if let Err(e) = cli.lock_file.restore(&sh) {
             eprintln!("Error restoring lock file: {}", e);
             process::exit(1);
         }
