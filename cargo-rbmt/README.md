@@ -1,6 +1,23 @@
 # Maintainer Tools
 
+[![CI](https://github.com/nyonson/rust-bitcoin-maintainer-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/nyonson/rust-bitcoin-maintainer-tools/actions/workflows/ci.yml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.74.0-blue)](https://github.com/nyonson/rust-bitcoin-maintainer-tools/blob/master/cargo-rbmt/Cargo.toml)
+[![CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](http://creativecommons.org/publicdomain/zero/1.0/)
+
 Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshell](https://github.com/matklad/xshell).
+
+## Table of Contents
+
+- [Environment Variables](#environment-variables)
+- [Configuration](#configuration)
+- [Lint](#lint)
+- [Test](#test)
+- [Integration](#integration)
+- [Prerelease](#prerelease)
+- [Lock Files](#lock-files)
+- [Workspace Integration](#workspace-integration)
+  - [1. Install on system](#1-install-on-system)
+  - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
 
 ## Environment Variables
 
@@ -10,7 +27,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 Configuration for `rbmt` is stored in `rbmt.toml`. The file can live at both the workspace root (e.g. `$ROOT/rbmt.toml`) as well as per-package (e.g. `$ROOT/$PACKAGE/rbmt.toml`) within a repository.
 
-### Lint
+## Lint
 
 The `lint` command detects duplicate dependencies, but some may be unavoidable (e.g., during dependency updates where transitive dependencies haven't caught up). Configure the `[lint]` section to whitelist specific duplicates for a workspace (or a package if only one package in a repository).
 
@@ -22,7 +39,7 @@ allowed_duplicates = [
 ]
 ```
 
-### Test
+## Test
 
 The `test` command can be configured to run feature matrix testing for your package. Configure with the `rbmt.toml` file at the package level.
 
@@ -66,7 +83,7 @@ exact_features = [
 features_with_no_std = ["serde", "rand"]
 ```
 
-### Integration
+## Integration
 
 The `integration` command is designed to work with the [`corepc`](https://github.com/rust-bitcoin/corepc) integration testing framework, which provides Bitcoin Core binaries and testing infrastructure.
 
@@ -78,7 +95,7 @@ package = "bitcoind-tests"
 versions = ["29_0", "28_2", "27_2"]
 ```
 
-### Prerelease
+## Prerelease
 
 The `prerelease` command performs readiness checks before releasing a package. By default, all packages are checked unless they explicitly opt-out.
 

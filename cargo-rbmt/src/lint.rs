@@ -45,7 +45,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
     quiet_println("Running lint task...");
 
     lint_workspace(sh)?;
-    lint_crates(sh, packages)?;
+    lint_packages(sh, packages)?;
     check_duplicate_deps(sh)?;
     check_clippy_toml_msrv(sh, packages)?;
 
@@ -58,29 +58,35 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Linting workspace...");
 
     // Run clippy on workspace with all features.
-    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
-        .args(&["--", "-D", "warnings"])
-        .run()?;
+    quiet_cmd!(
+        sh,
+        "cargo --locked clippy --workspace --all-targets --all-features --keep-going"
+    )
+    .args(&["--", "-D", "warnings"])
+    .run()?;
 
     // Run clippy on workspace without features.
-    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
-        .args(&["--", "-D", "warnings"])
-        .run()?;
+    quiet_cmd!(
+        sh,
+        "cargo --locked clippy --workspace --all-targets --keep-going"
+    )
+    .args(&["--", "-D", "warnings"])
+    .run()?;
 
     Ok(())
 }
 
-/// Run extra crate-specific lints.
+/// Run extra package-specific lints.
 ///
-/// # Why run at the crate level?
+/// # Why run at the package level?
 ///
 /// When running `cargo clippy --workspace --no-default-features`, cargo resolves
 /// features across the entire workspace, which can enable features through dependencies
-/// even when a crate's own default features are disabled. Running clippy on each crate
-/// individually ensures that each crate truly compiles and passes lints with only its
+/// even when a package's own default features are disabled. Running clippy on each package
+/// individually ensures that each package truly compiles and passes lints with only its
 /// explicitly enabled features.
-fn lint_crates(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Running crate-specific lints...");
+fn lint_packages(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    quiet_println("Running package-specific lints...");
 
     let crate_dirs = get_crate_dirs(sh, packages)?;
     quiet_println(&format!("Found crates: {}", crate_dirs.join(", ")));
@@ -90,15 +96,24 @@ fn lint_crates(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error
         let _old_dir = sh.push_dir(&crate_dir);
 
         // Run clippy without default features.
-        quiet_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
-            .args(&["--", "-D", "warnings"])
-            .run()?;
+        quiet_cmd!(
+            sh,
+            "cargo --locked clippy --all-targets --no-default-features --keep-going"
+        )
+        .args(&["--", "-D", "warnings"])
+        .run()?;
     }
 
     Ok(())
 }
 
 /// Check for duplicate dependencies.
+///
+/// # Why run at the workspace level?
+///
+/// Running at the workspace level is more strict than per-package. If a package
+/// has duplicates, the workspace has duplicates (subset relationship). The
+/// workspace check catches all duplicates, both within-package and cross-package.
 fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Checking for duplicate dependencies...");
 
@@ -106,9 +121,12 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let allowed_duplicates = &config.allowed_duplicates;
 
     // Run cargo tree to find duplicates.
-    let output = quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates")
-        .ignore_status()
-        .read()?;
+    let output = quiet_cmd!(
+        sh,
+        "cargo --locked tree --target=all --all-features --duplicates"
+    )
+    .ignore_status()
+    .read()?;
 
     let duplicates: Vec<&str> = output
         .lines()
@@ -124,7 +142,11 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
     if !duplicates.is_empty() {
         // Show full tree for context.
-        quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates").run()?;
+        quiet_cmd!(
+            sh,
+            "cargo --locked tree --target=all --all-features --duplicates"
+        )
+        .run()?;
         eprintln!("Error: Found duplicate dependencies in workspace!");
         for dup in &duplicates {
             eprintln!("  {}", dup);
