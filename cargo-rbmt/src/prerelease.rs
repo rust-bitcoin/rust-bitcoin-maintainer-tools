@@ -1,7 +1,9 @@
 //! Pre-release readiness checks.
 
 use crate::environment::{get_crate_dirs, get_target_directory, quiet_println, CONFIG_FILE_PATH};
+use crate::lock::LockFile;
 use crate::quiet_cmd;
+use crate::toolchain::{check_toolchain, Toolchain};
 use serde::Deserialize;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -132,17 +134,21 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// A package may work with local path dependencies, but fail when published
 /// because the version specifications don't match the published versions
-/// or don't resolve correctly.
+/// or don't resolve correctly. This function tests the package with minimal
+/// dependency versions attemting to catch compatibility issues.
 fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    // Ensure we have nightly toolchain for minimal versions testing.
+    check_toolchain(sh, Toolchain::Nightly)?;
+
     quiet_cmd!(sh, "cargo publish --dry-run").run()?;
     let package_dir = get_publish_dir(sh)?;
-    quiet_println(&format!("Testing publish {}...", package_dir));
 
     let _dir = sh.push_dir(&package_dir);
-    // Broad test to try and weed out any dependency issues.
-    quiet_cmd!(sh, "cargo test --all-features --all-targets").run()?;
-    quiet_println("Publish tests passed");
+    quiet_println(&format!("Testing publish package: {}", package_dir));
+    LockFile::Minimal.derive(sh)?;
+    quiet_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
 
+    quiet_println("Publish tests passed");
     Ok(())
 }
 
