@@ -14,7 +14,7 @@ jobs:
       - name: Install Rust toolchains
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: nightly,1.74.0,stable
+          toolchain: nightly,1.85.0,stable
           components: clippy,rustfmt
 
       - name: Install cargo-rbmt from current commit
@@ -36,7 +36,7 @@ jobs:
         run: cargo +nightly rbmt --lock-file existing test nightly
 
       - name: Run tests with MSRV (existing lock)
-        run: cargo +1.74.0 rbmt --lock-file existing test msrv
+        run: cargo +1.85.0 rbmt --lock-file existing test msrv
 
       - name: Run tests with stable (recent dependencies)
         run: cargo rbmt --lock-file recent test stable

@@ -1,2 +1,3 @@
 [lint]
-allowed_duplicates = []
+# windows-sys: a transitive dependency conflict we cannot control.
+allowed_duplicates = ["windows-sys"]
