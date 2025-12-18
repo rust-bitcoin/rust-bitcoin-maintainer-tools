@@ -1,4 +1,7 @@
-//! Test tasks with feature matrix testing.
+//! Build and test tasks with feature matrix testing.
+//!
+//! `cargo build` runs before `cargo test` throughout this module to try
+//! and catch any issues involving `cfg(test)` somehow gating required code.
 
 use std::ffi::OsStr;
 use std::fmt;
@@ -130,7 +133,7 @@ impl TestConfig {
     }
 }
 
-/// Run tests for all crates with the specified toolchain.
+/// Run build and test for all crates with the specified toolchain.
 pub fn run(
     sh: &Shell,
     toolchain: Toolchain,
@@ -161,11 +164,12 @@ pub fn run(
     Ok(())
 }
 
-/// Run basic test and examples.
+/// Run basic build, test, and examples.
 fn do_test(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running basic tests");
 
-    // Basic test (includes build).
+    // Basic build and test.
+    quiet_cmd!(sh, "cargo --locked build").run()?;
     quiet_cmd!(sh, "cargo --locked test").run()?;
 
     // Run examples.
@@ -214,6 +218,8 @@ fn do_feature_matrix(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std:
         for features in &config.exact_features {
             let features_str = features.join(" ");
             quiet_println(&format!("Testing exact features: {}", features_str));
+            quiet_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}")
+                .run()?;
             quiet_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}")
                 .run()?;
         }
@@ -223,10 +229,12 @@ fn do_feature_matrix(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std:
     // Handle no-std pattern (rust-miniscript).
     if config.features_with_no_std.is_empty() {
         quiet_println("Testing no-default-features");
+        quiet_cmd!(sh, "cargo --locked build --no-default-features").run()?;
         quiet_cmd!(sh, "cargo --locked test --no-default-features").run()?;
     } else {
         let no_std = FeatureFlag::NoStd;
         quiet_println("Testing no-std");
+        quiet_cmd!(sh, "cargo --locked build --no-default-features --features={no_std}").run()?;
         quiet_cmd!(sh, "cargo --locked test --no-default-features --features={no_std}").run()?;
 
         loop_features(sh, Some(FeatureFlag::NoStd), &config.features_with_no_std)?;
@@ -234,6 +242,7 @@ fn do_feature_matrix(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std:
 
     // Test all features.
     quiet_println("Testing all-features");
+    quiet_cmd!(sh, "cargo --locked build --all-features").run()?;
     quiet_cmd!(sh, "cargo --locked test --all-features").run()?;
 
     // Test features with std.
@@ -283,6 +292,7 @@ fn loop_features<S: AsRef<str>>(
     // Test all features together.
     let all_features = combine_features(base, features);
     quiet_println(&format!("Testing features: {}", all_features));
+    quiet_cmd!(sh, "cargo --locked build --no-default-features --features={all_features}").run()?;
     quiet_cmd!(sh, "cargo --locked test --no-default-features --features={all_features}").run()?;
 
     // Test each feature individually and all pairs (only if more than one feature).
@@ -290,6 +300,8 @@ fn loop_features<S: AsRef<str>>(
         for i in 0..features.len() {
             let feature_combo = combine_features(base, &features[i..=i]);
             quiet_println(&format!("Testing features: {}", feature_combo));
+            quiet_cmd!(sh, "cargo --locked build --no-default-features --features={feature_combo}")
+                .run()?;
             quiet_cmd!(sh, "cargo --locked test --no-default-features --features={feature_combo}")
                 .run()?;
 
@@ -298,6 +310,11 @@ fn loop_features<S: AsRef<str>>(
                 let pair = [&features[i], &features[j]];
                 let feature_combo = combine_features(base, &pair);
                 quiet_println(&format!("Testing features: {}", feature_combo));
+                quiet_cmd!(
+                    sh,
+                    "cargo --locked build --no-default-features --features={feature_combo}"
+                )
+                .run()?;
                 quiet_cmd!(
                     sh,
                     "cargo --locked test --no-default-features --features={feature_combo}"
