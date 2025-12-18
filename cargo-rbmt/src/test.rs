@@ -1,13 +1,15 @@
 //! Test tasks with feature matrix testing.
 
-use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
-use crate::quiet_cmd;
-use crate::toolchain::{check_toolchain, Toolchain};
-use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fmt;
 use std::path::Path;
+
+use serde::Deserialize;
 use xshell::Shell;
+
+use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
+use crate::quiet_cmd;
+use crate::toolchain::{check_toolchain, Toolchain};
 
 /// Conventinal feature flags used across rust-bitcoin crates.
 #[derive(Debug, Clone, Copy)]
@@ -20,30 +22,24 @@ enum FeatureFlag {
 
 impl FeatureFlag {
     /// Get the feature string for this flag.
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
-            FeatureFlag::Std => "std",
-            FeatureFlag::NoStd => "no-std",
+            Self::Std => "std",
+            Self::NoStd => "no-std",
         }
     }
 }
 
 impl fmt::Display for FeatureFlag {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.as_str()) }
 }
 
 impl AsRef<str> for FeatureFlag {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
+    fn as_ref(&self) -> &str { self.as_str() }
 }
 
 impl AsRef<OsStr> for FeatureFlag {
-    fn as_ref(&self) -> &OsStr {
-        OsStr::new(self.as_str())
-    }
+    fn as_ref(&self) -> &OsStr { OsStr::new(self.as_str()) }
 }
 
 /// Test configuration loaded from rbmt.toml.
@@ -119,7 +115,7 @@ impl TestConfig {
 
         if !config_path.exists() {
             // Return empty config if file doesn't exist.
-            return Ok(TestConfig {
+            return Ok(Self {
                 examples: Vec::new(),
                 features_with_std: Vec::new(),
                 features_without_std: Vec::new(),
@@ -147,11 +143,7 @@ pub fn run(
     // Configure RUSTFLAGS for debug assertions.
     let _env = sh.push_env(
         "RUSTFLAGS",
-        if no_debug_assertions {
-            "-C debug-assertions=off"
-        } else {
-            "-C debug-assertions=on"
-        },
+        if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
     );
 
     for (_package_name, package_dir) in &package_info {
@@ -192,10 +184,12 @@ fn do_test(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std::error::Er
 
                 if features == "-" {
                     // Format: "name:-" - run with no-default-features.
-                    quiet_cmd!(sh, "cargo --locked run --no-default-features --example {name}").run()?;
+                    quiet_cmd!(sh, "cargo --locked run --no-default-features --example {name}")
+                        .run()?;
                 } else {
                     // Format: "name:features" - run with specific features.
-                    quiet_cmd!(sh, "cargo --locked run --example {name} --features={features}").run()?;
+                    quiet_cmd!(sh, "cargo --locked run --example {name} --features={features}")
+                        .run()?;
                 }
             }
             _ => {
@@ -220,21 +214,22 @@ fn do_feature_matrix(sh: &Shell, config: &TestConfig) -> Result<(), Box<dyn std:
         for features in &config.exact_features {
             let features_str = features.join(" ");
             quiet_println(&format!("Testing exact features: {}", features_str));
-            quiet_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}").run()?;
+            quiet_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}")
+                .run()?;
         }
         return Ok(());
     }
 
     // Handle no-std pattern (rust-miniscript).
-    if !config.features_with_no_std.is_empty() {
+    if config.features_with_no_std.is_empty() {
+        quiet_println("Testing no-default-features");
+        quiet_cmd!(sh, "cargo --locked test --no-default-features").run()?;
+    } else {
         let no_std = FeatureFlag::NoStd;
         quiet_println("Testing no-std");
         quiet_cmd!(sh, "cargo --locked test --no-default-features --features={no_std}").run()?;
 
         loop_features(sh, Some(FeatureFlag::NoStd), &config.features_with_no_std)?;
-    } else {
-        quiet_println("Testing no-default-features");
-        quiet_cmd!(sh, "cargo --locked test --no-default-features").run()?;
     }
 
     // Test all features.
@@ -277,14 +272,10 @@ fn loop_features<S: AsRef<str>>(
     fn combine_features<S: AsRef<str>>(base: Option<FeatureFlag>, additional: &[S]) -> String {
         match base {
             Some(flag) => std::iter::once(flag.as_ref())
-                .chain(additional.iter().map(|s| s.as_ref()))
+                .chain(additional.iter().map(std::convert::AsRef::as_ref))
                 .collect::<Vec<_>>()
                 .join(" "),
-            None => additional
-                .iter()
-                .map(|s| s.as_ref())
-                .collect::<Vec<_>>()
-                .join(" "),
+            None => additional.iter().map(std::convert::AsRef::as_ref).collect::<Vec<_>>().join(" "),
         }
     }
 
@@ -298,14 +289,19 @@ fn loop_features<S: AsRef<str>>(
         for i in 0..features.len() {
             let feature_combo = combine_features(base, &features[i..=i]);
             quiet_println(&format!("Testing features: {}", feature_combo));
-            quiet_cmd!(sh, "cargo --locked test --no-default-features --features={feature_combo}").run()?;
+            quiet_cmd!(sh, "cargo --locked test --no-default-features --features={feature_combo}")
+                .run()?;
 
             // Test all pairs with features[i].
             for j in (i + 1)..features.len() {
                 let pair = [&features[i], &features[j]];
                 let feature_combo = combine_features(base, &pair);
                 quiet_println(&format!("Testing features: {}", feature_combo));
-                quiet_cmd!(sh, "cargo --locked test --no-default-features --features={feature_combo}").run()?;
+                quiet_cmd!(
+                    sh,
+                    "cargo --locked test --no-default-features --features={feature_combo}"
+                )
+                .run()?;
             }
         }
     }

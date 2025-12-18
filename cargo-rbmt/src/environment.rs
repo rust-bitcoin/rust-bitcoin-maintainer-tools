@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+
 use xshell::Shell;
 
 /// Environment variable to control output verbosity.
@@ -11,9 +12,7 @@ const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
 pub const CONFIG_FILE_PATH: &str = "rbmt.toml";
 
 /// Check if we're in quiet mode via environment variable.
-pub fn is_quiet_mode() -> bool {
-    env::var(LOG_LEVEL_ENV_VAR).is_ok_and(|v| v == "quiet")
-}
+pub fn is_quiet_mode() -> bool { env::var(LOG_LEVEL_ENV_VAR).is_ok_and(|v| v == "quiet") }
 
 /// Helper macro to create commands that respect quiet mode.
 #[macro_export]
@@ -35,7 +34,7 @@ pub fn quiet_println(msg: &str) {
 }
 
 /// Configure shell log level and output verbosity.
-/// Sets cargo output verbosity based on LOG_LEVEL_ENV_VAR.
+/// Sets cargo output verbosity based on `LOG_LEVEL_ENV_VAR`.
 pub fn configure_log_level(sh: &Shell) {
     if is_quiet_mode() {
         sh.set_var("CARGO_TERM_VERBOSE", "false");
@@ -59,7 +58,7 @@ pub fn change_to_repo_root(sh: &Shell) {
 }
 
 /// Get list of package names and their directories in the workspace using cargo metadata.
-/// Returns tuples of (package_name, directory_path) to support various workspace layouts including nested crates.
+/// Returns tuples of (`package_name`, `directory_path`) to support various workspace layouts including nested crates.
 ///
 /// # Arguments
 ///
@@ -96,15 +95,14 @@ pub fn get_packages(
 
 /// Get the cargo target directory from metadata.
 ///
-/// This respects CARGO_TARGET_DIR, .cargo/config.toml, and other cargo
+/// This respects `CARGO_TARGET_DIR`, .cargo/config.toml, and other cargo
 /// target directory configuration.
 pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
-    let target_dir = json["target_directory"]
-        .as_str()
-        .ok_or("Missing target_directory in cargo metadata")?;
+    let target_dir =
+        json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
 
     Ok(target_dir.to_string())
 }

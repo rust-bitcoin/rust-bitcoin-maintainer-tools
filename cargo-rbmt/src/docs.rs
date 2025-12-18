@@ -1,8 +1,9 @@
 //! Documentation building tasks.
 
+use xshell::Shell;
+
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
-use xshell::Shell;
 
 /// Build documentation for end users with the stable toolchain.
 ///
@@ -37,11 +38,7 @@ pub fn run_docsrs(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::er
         cmd = cmd.args(&["-p", package]);
     }
 
-    cmd.env(
-        "RUSTDOCFLAGS",
-        "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links",
-    )
-    .run()?;
+    cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links").run()?;
 
     Ok(())
 }

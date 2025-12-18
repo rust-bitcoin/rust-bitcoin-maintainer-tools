@@ -1,10 +1,12 @@
 //! Integration test tasks for packages with bitcoind-tests or similar test packages.
 
+use std::path::{Path, PathBuf};
+
+use serde::Deserialize;
+use xshell::{cmd, Shell};
+
 use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
-use serde::Deserialize;
-use std::path::{Path, PathBuf};
-use xshell::{cmd, Shell};
 
 /// Integration test configuration loaded from rbmt.toml.
 #[derive(Debug, Deserialize, Default)]
@@ -35,7 +37,7 @@ impl IntegrationConfig {
         let config_path = crate_dir.join(CONFIG_FILE_PATH);
 
         if !config_path.exists() {
-            return Ok(IntegrationConfig::default());
+            return Ok(Self::default());
         }
 
         let contents = std::fs::read_to_string(&config_path)?;
@@ -44,9 +46,7 @@ impl IntegrationConfig {
     }
 
     /// Get the package name (defaults to "bitcoind-tests").
-    fn package_name(&self) -> &str {
-        self.package.as_deref().unwrap_or("bitcoind-tests")
-    }
+    fn package_name(&self) -> &str { self.package.as_deref().unwrap_or("bitcoind-tests") }
 }
 
 /// Run integration tests for all crates with integration test packages.
@@ -56,10 +56,7 @@ impl IntegrationConfig {
 /// * `packages` - Optional filter for specific package names.
 pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let package_info = get_packages(sh, packages)?;
-    quiet_println(&format!(
-        "Looking for integration tests in {} crate(s)",
-        package_info.len()
-    ));
+    quiet_println(&format!("Looking for integration tests in {} crate(s)", package_info.len()));
 
     for (_package_name, package_dir) in &package_info {
         let config = IntegrationConfig::load(Path::new(package_dir))?;
@@ -73,10 +70,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
             continue;
         }
 
-        quiet_println(&format!(
-            "Running integration tests for crate: {}",
-            package_dir.display()
-        ));
+        quiet_println(&format!("Running integration tests for crate: {}", package_dir.display()));
 
         let _dir = sh.push_dir(&integration_dir);
 

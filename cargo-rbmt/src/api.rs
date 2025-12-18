@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+
 use xshell::Shell;
 
 use crate::{environment, quiet_cmd, toolchain};
@@ -31,7 +32,7 @@ enum FeatureConfig {
 
 impl FeatureConfig {
     /// Get the filename for this configuration.
-    fn filename(&self) -> &'static str {
+    fn filename(self) -> &'static str {
         match self {
             Self::None => "no-features.txt",
             Self::Alloc => "alloc-only.txt",
@@ -40,7 +41,7 @@ impl FeatureConfig {
     }
 
     /// Get a display name for this configuration.
-    fn display_name(&self) -> &'static str {
+    fn display_name(self) -> &'static str {
         match self {
             Self::None => "no-features",
             Self::Alloc => "alloc-only",
@@ -49,7 +50,7 @@ impl FeatureConfig {
     }
 
     /// Get the cargo arguments for this configuration.
-    fn cargo_args(&self) -> &'static [&'static str] {
+    fn cargo_args(self) -> &'static [&'static str] {
         match self {
             Self::None => &["--no-default-features"],
             Self::Alloc => &["--no-default-features", "--features=alloc"],
@@ -101,11 +102,7 @@ fn get_package_apis(
     let workspace_root = sh.current_dir();
     let mut apis = HashMap::new();
 
-    for config in [
-        FeatureConfig::None,
-        FeatureConfig::Alloc,
-        FeatureConfig::All,
-    ] {
+    for config in [FeatureConfig::None, FeatureConfig::Alloc, FeatureConfig::All] {
         // Change to package directory to run rustdoc.
         // This is necessary because cargo doesn't allow feature flags with -p option.
         sh.change_dir(package_dir);
@@ -116,8 +113,7 @@ fn get_package_apis(
             cmd = cmd.arg(arg);
         }
         cmd = cmd.args(&["--", "-Z", "unstable-options", "--output-format", "json"]);
-        cmd.env("RUSTDOCFLAGS", RUSTDOCFLAGS_ALLOW_BROKEN_LINKS)
-            .run()?;
+        cmd.env("RUSTDOCFLAGS", RUSTDOCFLAGS_ALLOW_BROKEN_LINKS).run()?;
 
         // Change back to workspace root and parse JSON.
         sh.change_dir(&workspace_root);
@@ -157,12 +153,10 @@ fn check_apis(
         }
 
         // Check that features are additive (all-features contains everything from no-features).
-        let no_features = apis
-            .remove(&FeatureConfig::None)
-            .ok_or("No-features config not found")?;
-        let all_features = apis
-            .remove(&FeatureConfig::All)
-            .ok_or("All-features config not found")?;
+        let no_features =
+            apis.remove(&FeatureConfig::None).ok_or("No-features config not found")?;
+        let all_features =
+            apis.remove(&FeatureConfig::All).ok_or("All-features config not found")?;
 
         let diff = public_api::diff::PublicApiDiff::between(no_features, all_features);
 
@@ -215,10 +209,7 @@ fn check_semver(
     package_info: &[(String, PathBuf)],
     baseline_ref: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    environment::quiet_println(&format!(
-        "Running semver check against baseline: {}",
-        baseline_ref
-    ));
+    environment::quiet_println(&format!("Running semver check against baseline: {}", baseline_ref));
 
     // Store current branch/commit to restore later.
     let current_ref = quiet_cmd!(sh, "git rev-parse --abbrev-ref HEAD").read()?;
@@ -250,48 +241,30 @@ fn check_semver(
 
     // Check for breaking changes in each package.
     for package_name in package_info.iter().map(|(name, _)| name) {
-        let mut baseline = match baseline_apis.remove(package_name) {
-            Some(apis) => apis,
-            None => {
-                environment::quiet_println(&format!(
-                    "Warning: Package '{}' not found in baseline - skipping comparison",
-                    package_name
-                ));
-                continue;
-            }
+        let Some(mut baseline) = baseline_apis.remove(package_name) else {
+            environment::quiet_println(&format!(
+                "Warning: Package '{}' not found in baseline - skipping comparison",
+                package_name
+            ));
+            continue;
         };
 
-        let mut current = match current_apis.remove(package_name) {
-            Some(apis) => apis,
-            None => {
-                environment::quiet_println(&format!(
-                    "Warning: Package '{}' exists in baseline but not in current - possible removal",
-                    package_name
-                ));
-                continue;
-            }
+        let Some(mut current) = current_apis.remove(package_name) else {
+            environment::quiet_println(&format!(
+                "Warning: Package '{}' exists in baseline but not in current - possible removal",
+                package_name
+            ));
+            continue;
         };
 
-        for config in [
-            FeatureConfig::None,
-            FeatureConfig::Alloc,
-            FeatureConfig::All,
-        ] {
-            let baseline_api = baseline
-                .remove(&config)
-                .ok_or("Config not found in baseline")?;
-            let current_api = current
-                .remove(&config)
-                .ok_or("Config not found in current")?;
+        for config in [FeatureConfig::None, FeatureConfig::Alloc, FeatureConfig::All] {
+            let baseline_api = baseline.remove(&config).ok_or("Config not found in baseline")?;
+            let current_api = current.remove(&config).ok_or("Config not found in current")?;
 
             let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
 
             if !diff.removed.is_empty() || !diff.changed.is_empty() {
-                eprintln!(
-                    "API changes detected in {} ({})",
-                    package_name,
-                    config.display_name()
-                );
+                eprintln!("API changes detected in {} ({})", package_name, config.display_name());
                 return Err("Semver compatibility check failed: breaking changes detected".into());
             }
         }

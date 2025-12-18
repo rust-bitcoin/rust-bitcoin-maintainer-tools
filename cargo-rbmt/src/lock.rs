@@ -4,12 +4,14 @@
 //! generate and modify lockfiles. Using `--locked` would prevent the dependency
 //! resolution we need here.
 
+use std::fs;
+
+use clap::ValueEnum;
+use xshell::Shell;
+
 use crate::environment::quiet_println;
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
-use clap::ValueEnum;
-use std::fs;
-use xshell::Shell;
 
 /// The standard Cargo lockfile name.
 const CARGO_LOCK: &str = "Cargo.lock";
@@ -30,20 +32,20 @@ pub enum LockFile {
 
 impl LockFile {
     /// Get the filename for this lock file type.
-    pub fn filename(&self) -> &'static str {
+    pub fn filename(self) -> &'static str {
         match self {
-            LockFile::Minimal => "Cargo-minimal.lock",
-            LockFile::Recent => "Cargo-recent.lock",
-            LockFile::Existing => CARGO_LOCK,
+            Self::Minimal => "Cargo-minimal.lock",
+            Self::Recent => "Cargo-recent.lock",
+            Self::Existing => CARGO_LOCK,
         }
     }
 
     /// Derive this lockfile type from dependencies and activate it as Cargo.lock.
-    pub fn derive(&self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn derive(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
-            LockFile::Minimal => derive_minimal_lockfile(sh),
-            LockFile::Recent => update_recent_lockfile(sh),
-            LockFile::Existing => {
+            Self::Minimal => derive_minimal_lockfile(sh),
+            Self::Recent => update_recent_lockfile(sh),
+            Self::Existing => {
                 // No-op, use existing Cargo.lock.
                 Ok(())
             }
@@ -51,16 +53,16 @@ impl LockFile {
     }
 
     /// Restore a previously derived lockfile to Cargo.lock.
-    pub fn restore(&self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
-            LockFile::Minimal | LockFile::Recent => {
+            Self::Minimal | Self::Recent => {
                 fs::copy(
                     sh.current_dir().join(self.filename()),
                     sh.current_dir().join(CARGO_LOCK),
                 )?;
                 Ok(())
             }
-            LockFile::Existing => {
+            Self::Existing => {
                 // No-op, Cargo.lock is already in place.
                 Ok(())
             }

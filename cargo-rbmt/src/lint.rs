@@ -1,4 +1,5 @@
 use std::fs;
+
 use xshell::Shell;
 
 use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
@@ -27,9 +28,7 @@ impl LintConfig {
 
         if !config_path.exists() {
             // Return empty config if file doesn't exist.
-            return Ok(LintConfig {
-                allowed_duplicates: Vec::new(),
-            });
+            return Ok(Self { allowed_duplicates: Vec::new() });
         }
 
         let contents = fs::read_to_string(&config_path)?;
@@ -57,20 +56,14 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Linting workspace...");
 
     // Run clippy on workspace with all features.
-    quiet_cmd!(
-        sh,
-        "cargo --locked clippy --workspace --all-targets --all-features --keep-going"
-    )
-    .args(&["--", "-D", "warnings"])
-    .run()?;
+    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
+        .args(&["--", "-D", "warnings"])
+        .run()?;
 
     // Run clippy on workspace without features.
-    quiet_cmd!(
-        sh,
-        "cargo --locked clippy --workspace --all-targets --keep-going"
-    )
-    .args(&["--", "-D", "warnings"])
-    .run()?;
+    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
+        .args(&["--", "-D", "warnings"])
+        .run()?;
 
     Ok(())
 }
@@ -96,12 +89,9 @@ fn lint_packages(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::err
         let _old_dir = sh.push_dir(&package_dir);
 
         // Run clippy without default features.
-        quiet_cmd!(
-            sh,
-            "cargo --locked clippy --all-targets --no-default-features --keep-going"
-        )
-        .args(&["--", "-D", "warnings"])
-        .run()?;
+        quiet_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
+            .args(&["--", "-D", "warnings"])
+            .run()?;
     }
 
     Ok(())
@@ -121,32 +111,21 @@ fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let allowed_duplicates = &config.allowed_duplicates;
 
     // Run cargo tree to find duplicates.
-    let output = quiet_cmd!(
-        sh,
-        "cargo --locked tree --target=all --all-features --duplicates"
-    )
-    .ignore_status()
-    .read()?;
+    let output = quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates")
+        .ignore_status()
+        .read()?;
 
     let duplicates: Vec<&str> = output
         .lines()
         // Filter out non crate names.
-        .filter(|line| line.chars().next().is_some_and(|c| c.is_alphanumeric()))
+        .filter(|line| line.chars().next().is_some_and(char::is_alphanumeric))
         // Filter out whitelisted crates.
-        .filter(|line| {
-            !allowed_duplicates
-                .iter()
-                .any(|allowed| line.contains(allowed))
-        })
+        .filter(|line| !allowed_duplicates.iter().any(|allowed| line.contains(allowed)))
         .collect();
 
     if !duplicates.is_empty() {
         // Show full tree for context.
-        quiet_cmd!(
-            sh,
-            "cargo --locked tree --target=all --all-features --duplicates"
-        )
-        .run()?;
+        quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates").run()?;
         eprintln!("Error: Found duplicate dependencies in workspace!");
         for dup in &duplicates {
             eprintln!("  {}", dup);

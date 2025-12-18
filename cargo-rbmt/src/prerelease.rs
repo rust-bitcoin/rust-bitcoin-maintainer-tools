@@ -1,14 +1,16 @@
 //! Pre-release readiness checks.
 
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+
+use serde::Deserialize;
+use xshell::Shell;
+
 use crate::environment::{get_packages, get_target_dir, quiet_println, CONFIG_FILE_PATH};
 use crate::lock::LockFile;
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
-use serde::Deserialize;
-use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
-use xshell::Shell;
 
 /// Pre-release configuration loaded from rbmt.toml.
 #[derive(Debug, Deserialize, Default)]
@@ -32,7 +34,7 @@ impl PrereleaseConfig {
 
         if !config_path.exists() {
             // Return default config (skip = false) if file doesn't exist.
-            return Ok(PrereleaseConfig { skip: false });
+            return Ok(Self { skip: false });
         }
 
         let contents = std::fs::read_to_string(&config_path)?;
@@ -44,10 +46,7 @@ impl PrereleaseConfig {
 /// Run pre-release readiness checks for all packages.
 pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let package_info = get_packages(sh, packages)?;
-    quiet_println(&format!(
-        "Running pre-release checks on {} packages",
-        package_info.len()
-    ));
+    quiet_println(&format!("Running pre-release checks on {} packages", package_info.len()));
 
     let mut skipped = Vec::new();
 
@@ -56,10 +55,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
 
         if config.skip {
             skipped.push(package_dir);
-            quiet_println(&format!(
-                "Skipping package: {} (marked as skip)",
-                package_dir.display()
-            ));
+            quiet_println(&format!("Skipping package: {} (marked as skip)", package_dir.display()));
             continue;
         }
 
@@ -69,20 +65,12 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
 
         // Run all pre-release checks. Return immediately on first failure.
         if let Err(e) = check_todos(sh) {
-            eprintln!(
-                "Pre-release check failed for {}: {}",
-                package_dir.display(),
-                e
-            );
+            eprintln!("Pre-release check failed for {}: {}", package_dir.display(), e);
             return Err(e);
         }
 
         if let Err(e) = check_publish(sh) {
-            eprintln!(
-                "Pre-release check failed for {}: {}",
-                package_dir.display(),
-                e
-            );
+            eprintln!("Pre-release check failed for {}: {}", package_dir.display(), e);
             return Err(e);
         }
     }
@@ -91,14 +79,14 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-/// Grep source code for TODO, FIXME, TBD, and doc_auto_cfg.
+// Things which should be patched up before release.
+const TODOS: &[&str] = &["// TODO", "/* TODO", "// FIXME", "/* FIXME", "\"TBD\""];
+// Things which are banned and can't be released.
+const NONOS: &[&str] = &["doc_auto_cfg"];
+
+/// Grep source code for TODO, FIXME, TBD, and `doc_auto_cfg`.
 fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Greping source for todos and nonos...");
-
-    // Things which should be patched up before release.
-    const TODOS: &[&str] = &["// TODO", "/* TODO", "// FIXME", "/* FIXME", "\"TBD\""];
-    // Things which are banned and can't be released.
-    const NONOS: &[&str] = &["doc_auto_cfg"];
 
     // Recursively walk the src/ directory.
     let mut issues = Vec::new();
@@ -170,21 +158,17 @@ fn get_publish_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
     let current_dir = sh.current_dir();
     let current_manifest = current_dir.join("Cargo.toml");
 
-    let packages = json["packages"]
-        .as_array()
-        .ok_or("Missing 'packages' field in cargo metadata")?;
+    let packages =
+        json["packages"].as_array().ok_or("Missing 'packages' field in cargo metadata")?;
 
     for package in packages {
-        let manifest_path = package["manifest_path"]
-            .as_str()
-            .ok_or("Missing manifest_path in package")?;
+        let manifest_path =
+            package["manifest_path"].as_str().ok_or("Missing manifest_path in package")?;
 
         if manifest_path == current_manifest.to_str().ok_or("Invalid path")? {
             let name = package["name"].as_str().ok_or("Missing name in package")?;
 
-            let version = package["version"]
-                .as_str()
-                .ok_or("Missing version in package")?;
+            let version = package["version"].as_str().ok_or("Missing version in package")?;
 
             return Ok(format!("{}/package/{}-{}", target_dir, name, version));
         }
