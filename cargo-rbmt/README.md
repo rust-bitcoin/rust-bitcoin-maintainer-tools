@@ -9,8 +9,10 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 - [Lint](#lint)
 - [Test](#test)
 - [Integration](#integration)
+- [Fuzz](#fuzz)
 - [Prerelease](#prerelease)
 - [Lock Files](#lock-files)
+- [API Checking](#api-checking)
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
@@ -91,6 +93,10 @@ package = "bitcoind-tests"
 versions = ["29_0", "28_2", "27_2"]
 ```
 
+## Fuzz
+
+The `fuzz` command assumes there is a package in a workspace which defines fuzz targets.
+
 ## Prerelease
 
 The `prerelease` command performs readiness checks before releasing a package. By default, all packages are checked unless they explicitly opt-out.
@@ -135,7 +141,7 @@ When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` b
 
 ## API Checking
 
-The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface.
+The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. The generated API files are stored in `api/<package-name>/`.
 
 ```bash
 cargo rbmt api
@@ -145,13 +151,29 @@ cargo rbmt api
 2. Validates that features are additive (enabling features only adds to the API, never removes).
 3. Checks for uncommitted changes to API files.
 
-The generated API files are stored in `api/<package-name>/`.
-
 ```bash
 cargo rbmt api --baseline v0.1.0
 ```
 
 Compares the current API against a baseline git reference (tag, branch, or commit) to detect breaking changes.
+
+### Whitelisting Breaking Changes
+
+The `api` command checks for two types of breaking changes.
+
+* **Additivity** compares a package's `no-features` API vs. its `all-features` API to ensure its features are additive.
+* **Semver** compares some baseline version of a package's API vs the current API to ensure no breaking changes.
+
+Sometimes breaking changes are intentional and safe (e.g., replacing a specific impl with a more general blanket impl for sealed traits). Configure the `[api]` section a your package's `rbmt.toml` to whitelist specific changes:
+
+```toml
+[api]
+# Items that can be removed or changed without triggering errors.
+allow_breaking_changes = [
+    "impl MyTrait for SpecificType",
+    "pub fn deprecated_function()",
+]
+```
 
 ## Workspace Integration
 

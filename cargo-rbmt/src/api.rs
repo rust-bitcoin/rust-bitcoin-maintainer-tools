@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
 use xshell::Shell;
 
 use crate::{environment, quiet_cmd, toolchain};
@@ -56,6 +57,38 @@ impl FeatureConfig {
             Self::Alloc => &["--no-default-features", "--features=alloc"],
             Self::All => &["--all-features"],
         }
+    }
+}
+
+/// API configuration loaded from rbmt.toml.
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct Config {
+    api: ApiConfig,
+}
+
+/// API-specific configuration for a package.
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct ApiConfig {
+    /// List of API items that are allowed to be removed or changed without causing
+    /// semver or additivity check failures.
+    allow_breaking_changes: Vec<String>,
+}
+
+impl ApiConfig {
+    /// Load API configuration from the package directory.
+    fn load(_sh: &Shell, package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let config_path = package_dir.join(environment::CONFIG_FILE_PATH);
+
+        if !config_path.exists() {
+            // Return empty config if file doesn't exist.
+            return Ok(Self { allow_breaking_changes: Vec::new() });
+        }
+
+        let contents = fs::read_to_string(&config_path)?;
+        let config: Config = toml::from_str(&contents)?;
+        Ok(config.api)
     }
 }
 
@@ -131,6 +164,44 @@ fn get_package_apis(
     Ok(apis)
 }
 
+/// Check for breaking changes in a diff, respecting the whitelist.
+///
+/// Returns a list of breaking change descriptions (empty if no breaks).
+fn check_for_breaking_changes(
+    diff: &public_api::diff::PublicApiDiff,
+    allow_breaking: &[String],
+) -> Vec<String> {
+    let mut breaking = Vec::new();
+
+    for item in &diff.removed {
+        let item_str = item.to_string();
+        if allow_breaking.contains(&item_str) {
+            environment::quiet_println(&format!(
+                "Warning: Allowing removal of '{}' (whitelisted)",
+                item_str
+            ));
+        } else {
+            breaking.push(format!("Removed: {}", item_str));
+        }
+    }
+
+    for change in &diff.changed {
+        let old_str = change.old.to_string();
+        let new_str = change.new.to_string();
+
+        if allow_breaking.contains(&old_str) || allow_breaking.contains(&new_str) {
+            environment::quiet_println(&format!(
+                "Warning: Allowing change to '{}' (whitelisted)",
+                old_str
+            ));
+        } else {
+            breaking.push(format!("Changed:\n    old: {}\n    new: {}", old_str, new_str));
+        }
+    }
+
+    breaking
+}
+
 /// Check API files for all packages.
 ///
 /// For each package, generates public API files for different feature configurations,
@@ -160,24 +231,14 @@ fn check_apis(
 
         let diff = public_api::diff::PublicApiDiff::between(no_features, all_features);
 
-        if !diff.removed.is_empty() || !diff.changed.is_empty() {
+        let config = ApiConfig::load(sh, package_dir)?;
+        let breaking_changes = check_for_breaking_changes(&diff, &config.allow_breaking_changes);
+
+        if !breaking_changes.is_empty() {
             eprintln!("Non-additive features detected in {}:", package_name);
-
-            if !diff.removed.is_empty() {
-                eprintln!("  Items removed when enabling features:");
-                for item in &diff.removed {
-                    eprintln!("    - {}", item);
-                }
+            for change in breaking_changes {
+                eprintln!("  {}", change);
             }
-
-            if !diff.changed.is_empty() {
-                eprintln!("  Items changed when enabling features:");
-                for item in &diff.changed {
-                    eprintln!("    - old: {}", item.old);
-                    eprintln!("      new: {}", item.new);
-                }
-            }
-
             return Err("Non-additive features detected".into());
         }
     }
@@ -240,7 +301,7 @@ fn check_semver(
     quiet_cmd!(sh, "git switch {current_ref}").run()?;
 
     // Check for breaking changes in each package.
-    for package_name in package_info.iter().map(|(name, _)| name) {
+    for (package_name, package_dir) in package_info {
         let Some(mut baseline) = baseline_apis.remove(package_name) else {
             environment::quiet_println(&format!(
                 "Warning: Package '{}' not found in baseline - skipping comparison",
@@ -257,14 +318,22 @@ fn check_semver(
             continue;
         };
 
+        let api_config = ApiConfig::load(sh, package_dir)?;
+
         for config in [FeatureConfig::None, FeatureConfig::Alloc, FeatureConfig::All] {
             let baseline_api = baseline.remove(&config).ok_or("Config not found in baseline")?;
             let current_api = current.remove(&config).ok_or("Config not found in current")?;
 
             let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
 
-            if !diff.removed.is_empty() || !diff.changed.is_empty() {
-                eprintln!("API changes detected in {} ({})", package_name, config.display_name());
+            let breaking_changes =
+                check_for_breaking_changes(&diff, &api_config.allow_breaking_changes);
+
+            if !breaking_changes.is_empty() {
+                eprintln!("Breaking changes in {} ({}):", package_name, config.display_name());
+                for change in breaking_changes {
+                    eprintln!("  {}", change);
+                }
                 return Err("Semver compatibility check failed: breaking changes detected".into());
             }
         }
