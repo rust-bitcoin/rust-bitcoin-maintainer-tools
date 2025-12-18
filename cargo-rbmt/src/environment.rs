@@ -64,6 +64,10 @@ pub fn change_to_repo_root(sh: &Shell) {
 /// # Arguments
 ///
 /// * `packages` - Optional filter for specific package names. If empty, returns all packages.
+///
+/// # Errors
+///
+/// Returns an error if any requested package name doesn't exist in the workspace.
 pub fn get_packages(
     sh: &Shell,
     packages: &[String],
@@ -71,7 +75,7 @@ pub fn get_packages(
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
-    let package_info: Vec<(String, PathBuf)> = json["packages"]
+    let all_packages: Vec<(String, PathBuf)> = json["packages"]
         .as_array()
         .ok_or("Missing 'packages' field in cargo metadata")?
         .iter()
@@ -82,13 +86,43 @@ pub fn get_packages(
             // e.g., "/path/to/repo/releases/Cargo.toml" -> "/path/to/repo/releases".
             let dir_path = manifest_path.trim_end_matches("/Cargo.toml");
 
-            // Filter by package name if specified.
-            if !packages.is_empty() && !packages.iter().any(|p| p == package_name) {
-                return None;
-            }
-
             Some((package_name.to_owned(), PathBuf::from(dir_path)))
         })
+        .collect();
+
+    // If no package filter specified, return all packages.
+    if packages.is_empty() {
+        return Ok(all_packages);
+    }
+
+    // Validate that all requested packages exist in the workspace.
+    let available_names: Vec<&str> = all_packages.iter().map(|(name, _)| name.as_str()).collect();
+    let mut invalid_packages = Vec::new();
+
+    for requested_package in packages {
+        if !available_names.contains(&requested_package.as_str()) {
+            invalid_packages.push(requested_package.clone());
+        }
+    }
+
+    if !invalid_packages.is_empty() {
+        let mut error_msg = format!(
+            "Package not found in workspace: {}",
+            invalid_packages.join(", ")
+        );
+
+        error_msg.push_str("\n\nAvailable packages:");
+        for name in &available_names {
+            error_msg.push_str(&format!("\n  - {}", name));
+        }
+
+        return Err(error_msg.into());
+    }
+
+    // Filter to only requested packages.
+    let package_info: Vec<(String, PathBuf)> = all_packages
+        .into_iter()
+        .filter(|(name, _)| packages.iter().any(|p| p == name))
         .collect();
 
     Ok(package_info)
