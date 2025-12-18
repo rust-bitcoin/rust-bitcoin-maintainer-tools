@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "releases",
     "cargo-rbmt",
 ]
 resolver = "2"
