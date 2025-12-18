@@ -9,13 +9,13 @@ mod prerelease;
 mod test;
 mod toolchain;
 
-use clap::{Parser, Subcommand};
 use std::process;
-use xshell::Shell;
 
+use clap::{Parser, Subcommand};
 use environment::{change_to_repo_root, configure_log_level};
 use lock::LockFile;
 use toolchain::Toolchain;
+use xshell::Shell;
 
 #[derive(Parser)]
 #[command(name = "cargo-rbmt")]
@@ -95,56 +95,46 @@ fn main() {
                 process::exit(1);
             }
         }
-        Commands::Lint => {
+        Commands::Lint =>
             if let Err(e) = lint::run(&sh, &cli.packages) {
                 eprintln!("Error running lint task: {}", e);
                 process::exit(1);
-            }
-        }
-        Commands::Docs => {
+            },
+        Commands::Docs =>
             if let Err(e) = docs::run(&sh, &cli.packages) {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
-            }
-        }
-        Commands::Docsrs => {
+            },
+        Commands::Docsrs =>
             if let Err(e) = docs::run_docsrs(&sh, &cli.packages) {
                 eprintln!("Error building docs.rs docs: {}", e);
                 process::exit(1);
-            }
-        }
-        Commands::Bench => {
+            },
+        Commands::Bench =>
             if let Err(e) = bench::run(&sh, &cli.packages) {
                 eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
-            }
-        }
-        Commands::Test {
-            toolchain,
-            no_debug_assertions,
-        } => {
+            },
+        Commands::Test { toolchain, no_debug_assertions } => {
             if let Err(e) = test::run(&sh, toolchain, no_debug_assertions, &cli.packages) {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             }
         }
-        Commands::Integration => {
+        Commands::Integration =>
             if let Err(e) = integration::run(&sh, &cli.packages) {
                 eprintln!("Error running integration tests: {}", e);
                 process::exit(1);
-            }
-        }
-        Commands::Lock => {
+            },
+        Commands::Lock =>
             if let Err(e) = lock::run(&sh) {
                 eprintln!("Error updating lock files: {}", e);
                 process::exit(1);
-            }
-        }
-        Commands::Prerelease => {
+            },
+        Commands::Prerelease =>
             if let Err(e) = prerelease::run(&sh, &cli.packages) {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
-            }
-        }
+            },
     }
 }

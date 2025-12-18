@@ -4,15 +4,19 @@
 //! generate and modify lockfiles. Using `--locked` would prevent the dependency
 //! resolution we need here.
 
+use std::fs;
+
+use clap::ValueEnum;
+use xshell::Shell;
+
 use crate::environment::quiet_println;
 use crate::quiet_cmd;
 use crate::toolchain::{check_toolchain, Toolchain};
-use clap::ValueEnum;
-use std::fs;
-use xshell::Shell;
 
 /// The standard Cargo lockfile name.
 const CARGO_LOCK: &str = "Cargo.lock";
+/// The temporary backup file for Cargo.lock.
+const CARGO_LOCK_BACKUP: &str = "Cargo.lock.backup";
 
 /// Represents the different types of managed lock files.
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
@@ -28,20 +32,20 @@ pub enum LockFile {
 
 impl LockFile {
     /// Get the filename for this lock file type.
-    pub fn filename(&self) -> &'static str {
+    pub fn filename(self) -> &'static str {
         match self {
-            LockFile::Minimal => "Cargo-minimal.lock",
-            LockFile::Recent => "Cargo-recent.lock",
-            LockFile::Existing => CARGO_LOCK,
+            Self::Minimal => "Cargo-minimal.lock",
+            Self::Recent => "Cargo-recent.lock",
+            Self::Existing => CARGO_LOCK,
         }
     }
 
     /// Derive this lockfile type from dependencies and activate it as Cargo.lock.
-    pub fn derive(&self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn derive(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
-            LockFile::Minimal => derive_minimal_lockfile(sh),
-            LockFile::Recent => update_recent_lockfile(sh),
-            LockFile::Existing => {
+            Self::Minimal => derive_minimal_lockfile(sh),
+            Self::Recent => update_recent_lockfile(sh),
+            Self::Existing => {
                 // No-op, use existing Cargo.lock.
                 Ok(())
             }
@@ -49,16 +53,16 @@ impl LockFile {
     }
 
     /// Restore a previously derived lockfile to Cargo.lock.
-    pub fn restore(&self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
-            LockFile::Minimal | LockFile::Recent => {
+            Self::Minimal | Self::Recent => {
                 fs::copy(
                     sh.current_dir().join(self.filename()),
                     sh.current_dir().join(CARGO_LOCK),
                 )?;
                 Ok(())
             }
-            LockFile::Existing => {
+            Self::Existing => {
                 // No-op, Cargo.lock is already in place.
                 Ok(())
             }
@@ -73,13 +77,20 @@ impl LockFile {
 ///
 /// This helps catch cases where you've specified a minimum version that's too high,
 /// or where your code relies on features from newer versions than declared.
+///
+/// The original Cargo.lock is preserved and restored after generation in case
+/// it is being tracked for publication.
 pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     check_toolchain(sh, Toolchain::Nightly)?;
 
     let repo_dir = sh.current_dir();
     quiet_println(&format!("Updating lock files in: {}", repo_dir.display()));
+
+    backup_existing(sh)?;
     LockFile::Minimal.derive(sh)?;
     LockFile::Recent.derive(sh)?;
+    restore_existing(sh)?;
+
     quiet_println("Lock files updated successfully");
 
     Ok(())
@@ -131,6 +142,7 @@ fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> 
 
     // Try to restore existing Cargo-recent.lock for conservative updates.
     // If it doesn't exist cargo check will create a fresh one.
+    remove_lock_file(sh)?;
     let _ = LockFile::Recent.restore(sh);
     quiet_cmd!(sh, "cargo check --all-features").run()?;
 
@@ -154,5 +166,26 @@ fn copy_lock_file(sh: &Shell, target: LockFile) -> Result<(), Box<dyn std::error
     let source = sh.current_dir().join(CARGO_LOCK);
     let dest = sh.current_dir().join(target.filename());
     fs::copy(&source, &dest)?;
+    Ok(())
+}
+
+/// Backup the existing Cargo.lock file.
+fn backup_existing(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    let source = sh.current_dir().join(CARGO_LOCK);
+    let backup = sh.current_dir().join(CARGO_LOCK_BACKUP);
+    if source.exists() {
+        fs::copy(&source, &backup)?;
+    }
+    Ok(())
+}
+
+/// Restore the existing Cargo.lock file from backup.
+fn restore_existing(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    let backup = sh.current_dir().join(CARGO_LOCK_BACKUP);
+    let dest = sh.current_dir().join(CARGO_LOCK);
+    if backup.exists() {
+        fs::copy(&backup, &dest)?;
+        fs::remove_file(&backup)?;
+    }
     Ok(())
 }

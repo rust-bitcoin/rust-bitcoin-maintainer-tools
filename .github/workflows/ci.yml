@@ -29,11 +29,17 @@ jobs:
       - name: Build documentation (docs.rs / nightly)
         run: cargo +nightly rbmt --lock-file existing docsrs
 
-      - name: Run tests with stable
+      - name: Run tests with stable (existing lock)
         run: cargo rbmt --lock-file existing test stable
 
-      - name: Run tests with nightly
+      - name: Run tests with nightly (existing lock)
         run: cargo +nightly rbmt --lock-file existing test nightly
 
-      - name: Run tests with MSRV
+      - name: Run tests with MSRV (existing lock)
         run: cargo +1.74.0 rbmt --lock-file existing test msrv
+
+      - name: Run tests with stable (recent dependencies)
+        run: cargo rbmt --lock-file recent test stable
+
+      - name: Run tests with stable (minimal dependencies)
+        run: cargo rbmt --lock-file minimal test stable
