@@ -275,7 +275,8 @@ fn loop_features<S: AsRef<str>>(
                 .chain(additional.iter().map(std::convert::AsRef::as_ref))
                 .collect::<Vec<_>>()
                 .join(" "),
-            None => additional.iter().map(std::convert::AsRef::as_ref).collect::<Vec<_>>().join(" "),
+            None =>
+                additional.iter().map(std::convert::AsRef::as_ref).collect::<Vec<_>>().join(" "),
         }
     }
 

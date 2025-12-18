@@ -105,10 +105,8 @@ pub fn get_packages(
     }
 
     if !invalid_packages.is_empty() {
-        let mut error_msg = format!(
-            "Package not found in workspace: {}",
-            invalid_packages.join(", ")
-        );
+        let mut error_msg =
+            format!("Package not found in workspace: {}", invalid_packages.join(", "));
 
         error_msg.push_str("\n\nAvailable packages:");
         for name in &available_names {
@@ -119,10 +117,8 @@ pub fn get_packages(
     }
 
     // Filter to only requested packages.
-    let package_info: Vec<(String, PathBuf)> = all_packages
-        .into_iter()
-        .filter(|(name, _)| packages.iter().any(|p| p == name))
-        .collect();
+    let package_info: Vec<(String, PathBuf)> =
+        all_packages.into_iter().filter(|(name, _)| packages.iter().any(|p| p == name)).collect();
 
     Ok(package_info)
 }
