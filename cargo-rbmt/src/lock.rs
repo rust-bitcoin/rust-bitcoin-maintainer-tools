@@ -5,6 +5,7 @@
 //! resolution we need here.
 
 use std::fs;
+use std::path::PathBuf;
 
 use clap::ValueEnum;
 use xshell::Shell;
@@ -17,6 +18,41 @@ use crate::toolchain::{check_toolchain, Toolchain};
 const CARGO_LOCK: &str = "Cargo.lock";
 /// The temporary backup file for Cargo.lock.
 const CARGO_LOCK_BACKUP: &str = "Cargo.lock.backup";
+
+/// RAII guard that backs up and restores the original Cargo.lock file.
+struct LockFileGuard {
+    backup_path: PathBuf,
+    restore_path: PathBuf,
+}
+
+impl LockFileGuard {
+    fn new(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
+        let source = sh.current_dir().join(CARGO_LOCK);
+        let backup = sh.current_dir().join(CARGO_LOCK_BACKUP);
+
+        // Backup the existing Cargo.lock file if it exists.
+        if source.exists() {
+            fs::copy(&source, &backup)?;
+        }
+
+        Ok(Self { backup_path: backup, restore_path: source })
+    }
+}
+
+impl Drop for LockFileGuard {
+    fn drop(&mut self) {
+        // Restore the existing Cargo.lock file from backup (best effort).
+        if self.backup_path.exists() {
+            if let Err(e) = fs::copy(&self.backup_path, &self.restore_path) {
+                eprintln!("Warning: Failed to restore Cargo.lock from backup: {}", e);
+                return;
+            }
+            if let Err(e) = fs::remove_file(&self.backup_path) {
+                eprintln!("Warning: Failed to remove Cargo.lock backup: {}", e);
+            }
+        }
+    }
+}
 
 /// Represents the different types of managed lock files.
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
@@ -86,13 +122,13 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let repo_dir = sh.current_dir();
     quiet_println(&format!("Updating lock files in: {}", repo_dir.display()));
 
-    backup_existing(sh)?;
+    // Create guard to back up and ensure restoration, even on error.
+    let _guard = LockFileGuard::new(sh)?;
+
     LockFile::Minimal.derive(sh)?;
     LockFile::Recent.derive(sh)?;
-    restore_existing(sh)?;
 
     quiet_println("Lock files updated successfully");
-
     Ok(())
 }
 
@@ -166,26 +202,5 @@ fn copy_lock_file(sh: &Shell, target: LockFile) -> Result<(), Box<dyn std::error
     let source = sh.current_dir().join(CARGO_LOCK);
     let dest = sh.current_dir().join(target.filename());
     fs::copy(&source, &dest)?;
-    Ok(())
-}
-
-/// Backup the existing Cargo.lock file.
-fn backup_existing(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    let source = sh.current_dir().join(CARGO_LOCK);
-    let backup = sh.current_dir().join(CARGO_LOCK_BACKUP);
-    if source.exists() {
-        fs::copy(&source, &backup)?;
-    }
-    Ok(())
-}
-
-/// Restore the existing Cargo.lock file from backup.
-fn restore_existing(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    let backup = sh.current_dir().join(CARGO_LOCK_BACKUP);
-    let dest = sh.current_dir().join(CARGO_LOCK);
-    if backup.exists() {
-        fs::copy(&backup, &dest)?;
-        fs::remove_file(&backup)?;
-    }
     Ok(())
 }
