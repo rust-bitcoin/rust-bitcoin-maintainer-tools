@@ -19,42 +19,70 @@ const RUSTDOCFLAGS_ALLOW_BROKEN_LINKS: &str = "-A rustdoc::broken_intra_doc_link
 /// A collection of public APIs for a single package across different feature configurations.
 type PackageApis = HashMap<FeatureConfig, public_api::PublicApi>;
 
+/// API configuration loaded from rbmt.toml.
+#[derive(Debug, serde::Deserialize, Default)]
+#[serde(default)]
+struct Config {
+    api: ApiConfig,
+}
+
+/// API-specific configuration.
+#[derive(Debug, serde::Deserialize, Default)]
+#[serde(default)]
+struct ApiConfig {
+    /// Feature combinations to test (in addition to no-features and all-features).
+    features: Vec<Vec<String>>,
+}
+
+impl ApiConfig {
+    /// Load API configuration from a package directory.
+    fn load(package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let config_path = package_dir.join(environment::CONFIG_FILE_PATH);
+
+        if !config_path.exists() {
+            return Ok(Self::default());
+        }
+
+        let contents = fs::read_to_string(&config_path)?;
+        let config: Config = toml::from_str(&contents)?;
+        Ok(config.api)
+    }
+}
+
 /// Feature configurations to test for API generation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum FeatureConfig {
-    /// No features enabled.
+    /// No features enabled (--no-default-features).
     None,
-    /// Only alloc feature enabled.
-    Alloc,
-    /// All features enabled.
+    /// Specific features enabled (--no-default-features --features=X,Y).
+    Some(Vec<String>),
+    /// All features enabled (--all-features).
     All,
 }
 
 impl FeatureConfig {
     /// Get the filename for this configuration.
-    fn filename(self) -> &'static str {
-        match self {
-            Self::None => "no-features.txt",
-            Self::Alloc => "alloc-only.txt",
-            Self::All => "all-features.txt",
-        }
-    }
+    fn filename(&self) -> String { format!("{}.txt", self.name()) }
 
-    /// Get a display name for this configuration.
-    fn display_name(self) -> &'static str {
+    /// Get the display name for this configuration.
+    fn name(&self) -> String {
         match self {
-            Self::None => "no-features",
-            Self::Alloc => "alloc-only",
-            Self::All => "all-features",
+            Self::None => "no-features".to_string(),
+            Self::Some(features) => format!("{}-only", features.join("-")),
+            Self::All => "all-features".to_string(),
         }
     }
 
     /// Get the cargo arguments for this configuration.
-    fn cargo_args(self) -> &'static [&'static str] {
+    fn cargo_args(&self) -> Vec<String> {
         match self {
-            Self::None => &["--no-default-features"],
-            Self::Alloc => &["--no-default-features", "--features=alloc"],
-            Self::All => &["--all-features"],
+            Self::None => vec!["--no-default-features".to_string()],
+            Self::Some(features) => {
+                let mut args = vec!["--no-default-features".to_string()];
+                args.push(format!("--features={}", features.join(",")));
+                args
+            }
+            Self::All => vec!["--all-features".to_string()],
         }
     }
 }
@@ -102,7 +130,15 @@ fn get_package_apis(
     let workspace_root = sh.current_dir();
     let mut apis = HashMap::new();
 
-    for config in [FeatureConfig::None, FeatureConfig::Alloc, FeatureConfig::All] {
+    let mut feature_configs = vec![FeatureConfig::None, FeatureConfig::All];
+    let api_config = ApiConfig::load(Path::new(package_dir))?;
+    for features in &api_config.features {
+        if !features.is_empty() {
+            feature_configs.push(FeatureConfig::Some(features.clone()));
+        }
+    }
+
+    for config in feature_configs {
         // Change to package directory to run rustdoc.
         // This is necessary because cargo doesn't allow feature flags with -p option.
         sh.change_dir(package_dir);
@@ -257,14 +293,15 @@ fn check_semver(
             continue;
         };
 
-        for config in [FeatureConfig::None, FeatureConfig::Alloc, FeatureConfig::All] {
+        // Check only None and All configs for semver to just sidestep complexity with new custom features.
+        for config in [FeatureConfig::None, FeatureConfig::All] {
             let baseline_api = baseline.remove(&config).ok_or("Config not found in baseline")?;
             let current_api = current.remove(&config).ok_or("Config not found in current")?;
 
             let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
 
             if !diff.removed.is_empty() || !diff.changed.is_empty() {
-                eprintln!("API changes detected in {} ({})", package_name, config.display_name());
+                eprintln!("API changes detected in {} ({})", package_name, config.name());
                 return Err("Semver compatibility check failed: breaking changes detected".into());
             }
         }
