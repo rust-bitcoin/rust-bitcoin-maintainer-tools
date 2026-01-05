@@ -135,13 +135,13 @@ When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` b
 
 ## API Checking
 
-The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface.
+The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface. **Requires running with a nightly toolchain after nightly-2025-08-02** due to docsrs dependencies.
 
 ```bash
 cargo rbmt api
 ```
 
-1. Generates API snapshots for each feature configuration (no-features, alloc-only, all-features).
+1. Generates API snapshots for feature configurations.
 2. Validates that features are additive (enabling features only adds to the API, never removes).
 3. Checks for uncommitted changes to API files.
 
