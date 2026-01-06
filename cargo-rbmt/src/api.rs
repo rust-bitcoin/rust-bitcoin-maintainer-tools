@@ -247,10 +247,6 @@ fn check_semver(
 ) -> Result<(), Box<dyn std::error::Error>> {
     environment::quiet_println(&format!("Running semver check against baseline: {}", baseline_ref));
 
-    // Store current branch/commit to restore later.
-    let current_ref = quiet_cmd!(sh, "git rev-parse --abbrev-ref HEAD").read()?;
-    let current_ref = current_ref.trim();
-
     // Generate APIs for current commit.
     environment::quiet_println("Generating APIs for current commit...");
     let mut current_apis = HashMap::new();
@@ -271,9 +267,9 @@ fn check_semver(
         baseline_apis.insert(package_name.clone(), package_apis);
     }
 
-    // Switch back to original ref.
-    environment::quiet_println(&format!("Returning to: {}", current_ref));
-    quiet_cmd!(sh, "git switch {current_ref}").run()?;
+    // Switch back to previous ref using git's internal reference stack.
+    environment::quiet_println("Returning to previous ref...");
+    quiet_cmd!(sh, "git switch --detach -").run()?;
 
     // Check for breaking changes in each package.
     for package_name in package_info.iter().map(|(name, _)| name) {
