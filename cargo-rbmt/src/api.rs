@@ -32,6 +32,9 @@ struct Config {
 struct ApiConfig {
     /// Feature combinations to test (in addition to no-features and all-features).
     features: Vec<Vec<String>>,
+    /// Default git ref to use as baseline for semver comparison.
+    /// If not set, only feature additivity and git status checks are performed.
+    baseline: Option<String>,
 }
 
 impl ApiConfig {
@@ -93,29 +96,19 @@ impl FeatureConfig {
 /// API files using the `public-api` library and comparing them with committed versions in the
 /// `api/` directory.
 ///
-/// When generating new API files (no baseline), also checks that features are additive.
-/// When a baseline ref is provided, performs semver compatibility checking by comparing the
-/// current API against the baseline.
+/// Always checks that features are additive and API files match git state.
+/// When a baseline ref is configured in the package's rbmt.toml, also performs semver
+/// compatibility checking by comparing the current API against the baseline.
 ///
 /// # Arguments
 ///
 /// * `packages` - Optional list of packages to check. If empty, checks all packages in the workspace.
-/// * `baseline` - Optional git ref to use as baseline for semver comparison.
-pub fn run(
-    sh: &Shell,
-    packages: &[String],
-    baseline: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     environment::quiet_println("Running API check...");
     toolchain::check_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
     let package_info = environment::get_packages(sh, packages)?;
-
-    if let Some(baseline_ref) = baseline {
-        check_semver(sh, &package_info, baseline_ref)?;
-    } else {
-        check_apis(sh, &package_info)?;
-    }
+    check_apis(sh, &package_info)?;
 
     environment::quiet_println("API check completed successfully");
     Ok(())
@@ -216,6 +209,12 @@ fn check_apis(
 
             return Err("Non-additive features detected".into());
         }
+
+        // If this package has a baseline configured, check semver compatibility.
+        let api_config = ApiConfig::load(Path::new(package_dir))?;
+        if let Some(baseline_ref) = api_config.baseline {
+            check_semver(sh, package_name, package_dir, &baseline_ref)?;
+        }
     }
 
     // Check for changes to the API files using git.
@@ -242,18 +241,15 @@ fn check_apis(
 /// Compares current API vs. baseline API for breaking changes (e.g. removed/changed items).
 fn check_semver(
     sh: &Shell,
-    package_info: &[(String, PathBuf)],
+    package_name: &str,
+    package_dir: &PathBuf,
     baseline_ref: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     environment::quiet_println(&format!("Running semver check against baseline: {}", baseline_ref));
 
     // Generate APIs for current commit.
     environment::quiet_println("Generating APIs for current commit...");
-    let mut current_apis = HashMap::new();
-    for (package_name, package_dir) in package_info {
-        let package_apis = get_package_apis(sh, package_name, package_dir)?;
-        current_apis.insert(package_name.clone(), package_apis);
-    }
+    let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
 
     // Switch to baseline.
     environment::quiet_println(&format!("Switching to baseline: {}", baseline_ref));
@@ -261,45 +257,22 @@ fn check_semver(
 
     // Generate APIs for baseline.
     environment::quiet_println("Generating APIs for baseline...");
-    let mut baseline_apis = HashMap::new();
-    for (package_name, package_dir) in package_info {
-        let package_apis = get_package_apis(sh, package_name, package_dir)?;
-        baseline_apis.insert(package_name.clone(), package_apis);
-    }
+    let mut baseline_apis = get_package_apis(sh, package_name, package_dir)?;
 
     // Switch back to previous ref using git's internal reference stack.
     environment::quiet_println("Returning to previous ref...");
     quiet_cmd!(sh, "git switch --detach -").run()?;
 
-    // Check for breaking changes in each package.
-    for package_name in package_info.iter().map(|(name, _)| name) {
-        let Some(mut baseline) = baseline_apis.remove(package_name) else {
-            environment::quiet_println(&format!(
-                "Warning: Package '{}' not found in baseline - skipping comparison",
-                package_name
-            ));
-            continue;
-        };
+    // Check only None and All configs for semver to just sidestep complexity with new custom features.
+    for config in [FeatureConfig::None, FeatureConfig::All] {
+        let baseline_api = baseline_apis.remove(&config).ok_or("Config not found in baseline")?;
+        let current_api = current_apis.remove(&config).ok_or("Config not found in current")?;
 
-        let Some(mut current) = current_apis.remove(package_name) else {
-            environment::quiet_println(&format!(
-                "Warning: Package '{}' exists in baseline but not in current - possible removal",
-                package_name
-            ));
-            continue;
-        };
+        let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
 
-        // Check only None and All configs for semver to just sidestep complexity with new custom features.
-        for config in [FeatureConfig::None, FeatureConfig::All] {
-            let baseline_api = baseline.remove(&config).ok_or("Config not found in baseline")?;
-            let current_api = current.remove(&config).ok_or("Config not found in current")?;
-
-            let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
-
-            if !diff.removed.is_empty() || !diff.changed.is_empty() {
-                eprintln!("API changes detected in {} ({})", package_name, config.name());
-                return Err("Semver compatibility check failed: breaking changes detected".into());
-            }
+        if !diff.removed.is_empty() || !diff.changed.is_empty() {
+            eprintln!("API changes detected in {} ({})", package_name, config.name());
+            return Err("Semver compatibility check failed: breaking changes detected".into());
         }
     }
 
