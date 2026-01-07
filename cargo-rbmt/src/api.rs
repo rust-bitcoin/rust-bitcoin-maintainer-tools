@@ -6,6 +6,31 @@ use xshell::Shell;
 
 use crate::{environment, quiet_cmd, toolchain};
 
+/// RAII guard for temporarily switching git refs.
+struct GitSwitchGuard<'a> {
+    sh: &'a Shell,
+}
+
+impl<'a> GitSwitchGuard<'a> {
+    /// Create a new guard and switch to the specified ref.
+    fn new(sh: &'a Shell, git_ref: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        environment::quiet_println(&format!("Switching to ref: {}", git_ref));
+        quiet_cmd!(sh, "git switch --detach {git_ref}").run()?;
+        Ok(Self { sh })
+    }
+}
+
+impl Drop for GitSwitchGuard<'_> {
+    fn drop(&mut self) {
+        environment::quiet_println("Returning to previous ref...");
+        // Use expect here because if this fails, we're already in a bad state
+        // and there's not much we can do about it in Drop.
+        quiet_cmd!(self.sh, "git switch --detach -")
+            .run()
+            .expect("Failed to switch back to previous git ref");
+    }
+}
+
 /// Directory where API files are stored, relative to workspace root.
 const API_DIR: &str = "api";
 
@@ -247,21 +272,11 @@ fn check_semver(
 ) -> Result<(), Box<dyn std::error::Error>> {
     environment::quiet_println(&format!("Running semver check against baseline: {}", baseline_ref));
 
-    // Generate APIs for current commit.
-    environment::quiet_println("Generating APIs for current commit...");
     let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
-
-    // Switch to baseline.
-    environment::quiet_println(&format!("Switching to baseline: {}", baseline_ref));
-    quiet_cmd!(sh, "git switch --detach {baseline_ref}").run()?;
-
-    // Generate APIs for baseline.
-    environment::quiet_println("Generating APIs for baseline...");
-    let mut baseline_apis = get_package_apis(sh, package_name, package_dir)?;
-
-    // Switch back to previous ref using git's internal reference stack.
-    environment::quiet_println("Returning to previous ref...");
-    quiet_cmd!(sh, "git switch --detach -").run()?;
+    let mut baseline_apis = {
+        let _guard = GitSwitchGuard::new(sh, baseline_ref)?;
+        get_package_apis(sh, package_name, package_dir)?
+    };
 
     // Check only None and All configs for semver to just sidestep complexity with new custom features.
     for config in [FeatureConfig::None, FeatureConfig::All] {
