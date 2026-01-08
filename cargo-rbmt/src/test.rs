@@ -159,6 +159,7 @@ pub fn run(
 
         do_test(sh, &config)?;
         do_feature_matrix(sh, &config)?;
+        do_no_std_check(sh, Path::new(package_dir))?;
     }
 
     Ok(())
@@ -324,5 +325,50 @@ fn loop_features<S: AsRef<str>>(
         }
     }
 
+    Ok(())
+}
+
+/// Detect if a package is attempting to be no-std.
+fn is_no_std_package(sh: &Shell, package_dir: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+    // Use cargo metadata to find the library target's source path.
+    let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
+    let json: serde_json::Value = serde_json::from_str(&metadata)?;
+
+    // Find the package matching our directory.
+    let packages =
+        json["packages"].as_array().ok_or("Missing 'packages' field in cargo metadata")?;
+    let current_manifest = package_dir.join("Cargo.toml");
+    let package = packages
+        .iter()
+        .find(|p| {
+            p["manifest_path"].as_str().is_some_and(|path| Path::new(path) == current_manifest)
+        })
+        .ok_or("Could not find package in metadata")?;
+
+    // Find the lib source file.
+    let targets = package["targets"].as_array().ok_or("Missing 'targets' field")?;
+    let lib_target = targets
+        .iter()
+        .find(|t| t["kind"].as_array().is_some_and(|kinds| kinds.iter().any(|k| k == "lib")));
+    let Some(lib_target) = lib_target else {
+        return Ok(false);
+    };
+    let lib_path = lib_target["src_path"].as_str().ok_or("Missing src_path in lib target")?;
+
+    // Check for #![no_std] attribute.
+    let contents = std::fs::read_to_string(lib_path)?;
+    Ok(contents.lines().any(|line| line.trim() == "#![no_std]"))
+}
+
+/// Check no-std compatibility if the package declares `#![no_std]`.
+fn do_no_std_check(sh: &Shell, package_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    const NO_STD_TARGET: &str = "thumbv7m-none-eabi";
+    if !is_no_std_package(sh, package_dir)? {
+        return Ok(());
+    }
+
+    quiet_println(&format!("Detected no-std package, checking with target: {}", NO_STD_TARGET));
+    quiet_cmd!(sh, "cargo check --target {NO_STD_TARGET} --no-default-features").run()?;
+    quiet_println("no-std check passed!");
     Ok(())
 }
