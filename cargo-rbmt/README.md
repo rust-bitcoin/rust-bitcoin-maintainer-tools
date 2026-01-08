@@ -21,11 +21,11 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 ## Configuration
 
-Configuration for `rbmt` is stored in `rbmt.toml`. The file can live at both the workspace root (e.g. `$ROOT/rbmt.toml`) as well as per-package (e.g. `$ROOT/$PACKAGE/rbmt.toml`) within a repository.
+Configuration for `rbmt` is stored in a per-package `rbmt.toml` file, a sibling to the package's manifest.
 
 ## Lint
 
-The `lint` command detects duplicate dependencies, but some may be unavoidable (e.g., during dependency updates where transitive dependencies haven't caught up). Configure the `[lint]` section to whitelist specific duplicates for a workspace (or a package if only one package in a repository).
+The `lint` command detects duplicate dependencies, but some may be unavoidable (e.g., during dependency updates where transitive dependencies haven't caught up). Configure the `[lint]` section to whitelist specific duplicates.
 
 ```toml
 [lint]
@@ -37,7 +37,7 @@ allowed_duplicates = [
 
 ## Test
 
-The `test` command can be configured to run feature matrix testing for your package. Configure with the `rbmt.toml` file at the package level.
+The `test` command can be configured to run feature matrix testing for your package.
 
 ```toml
 [test]

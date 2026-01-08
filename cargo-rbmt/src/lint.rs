@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 
 use xshell::Shell;
 
@@ -22,9 +23,9 @@ struct LintConfig {
 }
 
 impl LintConfig {
-    /// Load lint configuration from the workspace root.
-    fn load(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = sh.current_dir().join(CONFIG_FILE_PATH);
+    /// Load lint configuration from a package directory.
+    fn load(package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let config_path = package_dir.join(CONFIG_FILE_PATH);
 
         if !config_path.exists() {
             // Return empty config if file doesn't exist.
@@ -44,7 +45,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
 
     lint_workspace(sh)?;
     lint_packages(sh, packages)?;
-    check_duplicate_deps(sh)?;
+    check_duplicate_deps(sh, packages)?;
     check_clippy_toml_msrv(sh, packages)?;
 
     quiet_println("Lint task completed successfully");
@@ -99,37 +100,48 @@ fn lint_packages(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::err
 
 /// Check for duplicate dependencies.
 ///
-/// # Why run at the workspace level?
+/// # Why run at the package level?
 ///
-/// Running at the workspace level is more strict than per-package. If a package
-/// has duplicates, the workspace has duplicates (subset relationship). The
-/// workspace check catches all duplicates, both within-package and cross-package.
-fn check_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+/// Running per-package provides better error messages by identifying
+/// exactly which package has the duplicate, making it easier for users
+/// to understand and fix the issue.
+fn check_duplicate_deps(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Checking for duplicate dependencies...");
 
-    let config = LintConfig::load(sh)?;
-    let allowed_duplicates = &config.allowed_duplicates;
+    let package_info = get_packages(sh, packages)?;
+    let mut found_duplicates = false;
 
-    // Run cargo tree to find duplicates.
-    let output = quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates")
-        .ignore_status()
-        .read()?;
+    for (package_name, package_dir) in package_info {
+        let config = LintConfig::load(&package_dir)?;
 
-    let duplicates: Vec<&str> = output
-        .lines()
-        // Filter out non crate names.
-        .filter(|line| line.chars().next().is_some_and(char::is_alphanumeric))
-        // Filter out whitelisted crates.
-        .filter(|line| !allowed_duplicates.iter().any(|allowed| line.contains(allowed)))
-        .collect();
+        // Returns a RAII guard which reverts the working directory to the old value when dropped.
+        let _old_dir = sh.push_dir(&package_dir);
 
-    if !duplicates.is_empty() {
-        // Show full tree for context.
-        quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates").run()?;
-        eprintln!("Error: Found duplicate dependencies in workspace!");
-        for dup in &duplicates {
-            eprintln!("  {}", dup);
+        // Run cargo tree to find duplicates for this package.
+        let output = quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates")
+            .ignore_status()
+            .read()?;
+
+        let duplicates: Vec<&str> = output
+            .lines()
+            // Filter out non crate names.
+            .filter(|line| line.chars().next().is_some_and(char::is_alphanumeric))
+            // Filter out whitelisted crates.
+            .filter(|line| !config.allowed_duplicates.iter().any(|allowed| line.contains(allowed)))
+            .collect();
+
+        if !duplicates.is_empty() {
+            found_duplicates = true;
+            // Show full tree for context.
+            eprintln!("{}", output);
+            eprintln!("Error: Found duplicate dependencies in package '{}'!", package_name);
+            for dup in &duplicates {
+                eprintln!("  {}", dup);
+            }
         }
+    }
+
+    if found_duplicates {
         return Err("Dependency tree contains duplicates".into());
     }
 
