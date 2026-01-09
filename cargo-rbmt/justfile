@@ -30,7 +30,7 @@ _default:
 @test: (_rbmt "test stable")
 
 # Run tests with MSRV.
-@msrv: (_rbmt "test msrv" "1.74.0" "existing")
+@msrv: (_rbmt "test msrv" "1.85.0" "existing")
 
 # Update Cargo-minimal.lock and Cargo-recent.lock files.
 @lock: (_rbmt "lock" "nightly")
