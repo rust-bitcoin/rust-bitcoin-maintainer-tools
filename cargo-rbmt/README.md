@@ -11,6 +11,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 - [Integration](#integration)
 - [Prerelease](#prerelease)
 - [Lock Files](#lock-files)
+- [API](#api)
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
@@ -133,7 +134,7 @@ cargo rbmt --lock-file minimal docs
 
 When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
 
-## API Checking
+## API
 
 The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface. **Requires running with a nightly toolchain after nightly-2025-08-02** due to docsrs dependencies.
 
