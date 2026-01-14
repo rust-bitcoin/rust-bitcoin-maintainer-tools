@@ -2,7 +2,6 @@ mod api;
 mod bench;
 mod docs;
 mod environment;
-mod fuzz;
 mod integration;
 mod lint;
 mod lock;
@@ -57,12 +56,6 @@ enum Commands {
     },
     /// Run bitcoin core integration tests.
     Integration,
-    /// Run fuzz tests.
-    Fuzz {
-        /// List available fuzz targets instead of running them.
-        #[arg(long)]
-        list: bool,
-    },
     /// Update Cargo-minimal.lock and Cargo-recent.lock files.
     Lock,
     /// Run pre-release readiness checks.
@@ -83,8 +76,8 @@ fn main() {
     configure_log_level(&sh);
     change_to_repo_root(&sh);
 
-    // Restore the specified lock file before running any command (except Lock, Integration, and Fuzz).
-    if !matches!(cli.command, Commands::Lock | Commands::Integration | Commands::Fuzz { .. }) {
+    // Restore the specified lock file before running any command (except Lock and Integration).
+    if !matches!(cli.command, Commands::Lock | Commands::Integration) {
         if let Err(e) = cli.lock_file.restore(&sh) {
             eprintln!("Error restoring lock file: {}", e);
             process::exit(1);
@@ -127,15 +120,6 @@ fn main() {
             if let Err(e) = integration::run(&sh, &cli.packages) {
                 eprintln!("Error running integration tests: {}", e);
                 process::exit(1);
-            },
-        Commands::Fuzz { list } =>
-            if list {
-                if let Err(e) = fuzz::list(&sh) {
-                    eprintln!("Error listing fuzz targets: {}", e);
-                    process::exit(1);
-                }
-            } else {
-                fuzz::run(&sh);
             },
         Commands::Lock =>
             if let Err(e) = lock::run(&sh) {
