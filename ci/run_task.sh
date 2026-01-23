@@ -309,7 +309,7 @@ do_dup_deps() {
 build_docs_with_nightly_toolchain() {
     need_nightly
     # -j1 is because docs build fails if multiple versions of `bitcoin_hashes` are present in dep tree.
-    RUSTDOCFLAGS="--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links" $cargo doc --all-features -j1
+    RUSTDOCFLAGS="--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links" $cargo doc --no-deps --all-features -j1
 }
 
 # Build the docs with a stable toolchain, in unison with the function
