@@ -12,32 +12,32 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Dogfood the setup-rbmt action
+        id: setup
         uses: ./.github/actions/setup-rbmt
         with:
-          toolchains: nightly,1.85.0
-          components: clippy,rustfmt
+          toolchains: 1.85.0
           rbmt-version: ${{ github.sha }}
 
       - name: Run lint on workspace
-        run: cargo +nightly rbmt --lock-file existing lint
+        run: cargo +${{ steps.setup.outputs.nightly-version }} rbmt --lock-file existing lint
 
       - name: Build documentation (stable)
-        run: cargo rbmt --lock-file existing docs
+        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file existing docs
 
       - name: Build documentation (docs.rs / nightly)
-        run: cargo +nightly rbmt --lock-file existing docsrs
+        run: cargo +${{ steps.setup.outputs.nightly-version }} rbmt --lock-file existing docsrs
 
       - name: Run tests with stable (existing lock)
-        run: cargo rbmt --lock-file existing test stable
+        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file existing test stable
 
       - name: Run tests with nightly (existing lock)
-        run: cargo +nightly rbmt --lock-file existing test nightly
+        run: cargo +${{ steps.setup.outputs.nightly-version }} rbmt --lock-file existing test nightly
 
       - name: Run tests with MSRV (existing lock)
         run: cargo +1.85.0 rbmt --lock-file existing test msrv
 
       - name: Run tests with stable (recent dependencies)
-        run: cargo rbmt --lock-file recent test stable
+        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file recent test stable
 
       - name: Run tests with stable (minimal dependencies)
-        run: cargo rbmt --lock-file minimal test stable
+        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file minimal test stable
