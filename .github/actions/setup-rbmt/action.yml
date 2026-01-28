@@ -57,15 +57,6 @@ runs:
         echo "stable=$STABLE_VERSION" >> $GITHUB_OUTPUT
         echo "Using stable-version: $STABLE_VERSION"
 
-    # Cache ARM toolchain apt packages for faster subsequent runs.
-    - name: Cache ARM toolchain packages
-      uses: actions/cache@v5
-      with:
-        path: /var/cache/apt/archives
-        key: ${{ runner.os }}-apt-arm-toolchain-v1
-        restore-keys: |
-          ${{ runner.os }}-apt-arm-toolchain-
-
     # Setup Rust with automatic caching of toolchains and build artifacts.
     # Install nightly and stable toolchains with clippy and rustfmt, plus any additional toolchains.
     - name: Setup Rust toolchains
@@ -76,16 +67,15 @@ runs:
         # ARM target to test no-std build.
         target: thumbv7m-none-eabi
 
-    # Install ARM cross-compiler for no-std testing.
-    - name: Install ARM cross-compiler
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-arm-none-eabi
-        echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITHUB_ENV
-
     # Install cargo-rbmt using stable toolchain.
     - name: Install cargo-rbmt
       shell: bash
       run: |
         cargo +${{ steps.determine-versions.outputs.stable }} install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev ${{ steps.determine-versions.outputs.rbmt }} cargo-rbmt --locked
+
+    - name: Install additional cross compiler packages
+      shell: bash
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y gcc-arm-none-eabi
+        echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITHUB_ENV
