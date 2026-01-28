@@ -198,9 +198,8 @@ A composite action is provided to make it easy to use `cargo-rbmt` in Github Act
 steps:
   - uses: actions/checkout@v6
   - uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/setup-rbmt@master
-    with:
-      toolchains: stable
-  - run: cargo rbmt test stable
+    id: setup
+  - run: cargo +${{ steps.setup.outputs.stable }} rbmt test stable
 ```
 
 See the [action](../.github/actions/setup-rbmt/action.yml) for more details.
