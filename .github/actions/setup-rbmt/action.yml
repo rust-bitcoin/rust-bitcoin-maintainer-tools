@@ -1,52 +1,81 @@
 name: 'Setup rbmt'
 description: |
   Install environment dependencies for cargo-rbmt testing including cargo-rbmt itself.
+
+  File Conventions:
+  - rbmt-version: Pin cargo-rbmt version with rev (e.g., "v0.1.2").
+  - nightly-version: Pin nightly toolchain (e.g., "nightly-2024-01-15"), defaults to "nightly".
+  - stable-version: Pin stable toolchain (e.g., "1.74.0"), defaults to "stable".
+
+  The action reads these files from the repo root if they exist, installs both
+  nightly and stable toolchains and outputs toolchain versions for use in subsequent steps.
+  Additional toolchains (e.g., MSRVs) can be installed via the toolchains input.
+
 inputs:
   toolchains:
-    description: 'Rust toolchain versions, comma-separated (nightly,1.74.0)'
+    description: 'Additional toolchains to install, comma-separated (e.g., "1.63.0,1.70.0" for MSRV testing)'
     required: false
-    default: 'stable'
-  components:
-    description: 'Additional Rust components, comma-separated (clippy,rustfmt)'
-    required: false
-    default: ''
   rbmt-version:
-    description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install'
+    description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root, or falls back to master.'
     required: false
-    default: 'master'
+
+outputs:
+  nightly-version:
+    description: 'The nightly toolchain version from nightly-version file or "nightly" default (e.g., nightly-2024-01-15).'
+    value: ${{ steps.determine-versions.outputs.nightly }}
+  stable-version:
+    description: 'The stable toolchain version from stable-version file or "stable" default (e.g., 1.74.0).'
+    value: ${{ steps.determine-versions.outputs.stable }}
 
 runs:
   using: "composite"
   steps:
-    # Cache ARM toolchain apt packages for faster subsequent runs.
-    - name: Cache ARM toolchain packages
-      uses: actions/cache@v5
-      with:
-        path: /var/cache/apt/archives
-        key: ${{ runner.os }}-apt-arm-toolchain-v1
-        restore-keys: |
-          ${{ runner.os }}-apt-arm-toolchain-
-
-    # Setup Rust with automatic caching of toolchains and build artifacts.
-    # Always install stable for cargo-rbmt, plus the requested toolchain.
-    - name: Setup Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable,${{ inputs.toolchains }}
-        components: rust-src,${{ inputs.components }}
-        # ARM target to test no-std build.
-        target: thumbv7m-none-eabi
-
-    # Install ARM cross-compiler for no-std testing.
-    - name: Install ARM cross-compiler
+    - name: Determine versions
+      id: determine-versions
       shell: bash
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-arm-none-eabi
-        echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITHUB_ENV
+        # Determine rbmt version.
+        RBMT_VERSION="${{ inputs.rbmt-version }}"
+        [ -z "$RBMT_VERSION" ] && [ -f rbmt-version ] && RBMT_VERSION=$(cat rbmt-version)
+        [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
+        echo "rbmt=$RBMT_VERSION" >> $GITHUB_OUTPUT
+        echo "Using rbmt-version: $RBMT_VERSION"
+
+        # Determine nightly version from file or use default.
+        NIGHTLY_VERSION="nightly"
+        if [ -f nightly-version ]; then
+          NIGHTLY_VERSION=$(cat nightly-version)
+        fi
+        echo "nightly=$NIGHTLY_VERSION" >> $GITHUB_OUTPUT
+        echo "Using nightly-version: $NIGHTLY_VERSION"
+
+        # Determine stable version from file or use default.
+        STABLE_VERSION="stable"
+        if [ -f stable-version ]; then
+          STABLE_VERSION=$(cat stable-version)
+        fi
+        echo "stable=$STABLE_VERSION" >> $GITHUB_OUTPUT
+        echo "Using stable-version: $STABLE_VERSION"
+
+    # Setup Rust with automatic caching of toolchains and build artifacts.
+    # Install nightly and stable toolchains with clippy and rustfmt, plus any additional toolchains.
+    - name: Setup Rust toolchains
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: ${{ steps.determine-versions.outputs.nightly }},${{ steps.determine-versions.outputs.stable }},${{ inputs.toolchains }}
+        components: rust-src,clippy,rustfmt
+        # ARM target to test no-std build.
+        target: thumbv7m-none-eabi
 
     # Install cargo-rbmt using stable toolchain.
     - name: Install cargo-rbmt
       shell: bash
       run: |
-        cargo +stable install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev ${{ inputs.rbmt-version }} cargo-rbmt --locked
+        cargo +${{ steps.determine-versions.outputs.stable }} install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev ${{ steps.determine-versions.outputs.rbmt }} cargo-rbmt --locked
+
+    - name: Install additional cross compiler packages
+      shell: bash
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y gcc-arm-none-eabi
+        echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITHUB_ENV
