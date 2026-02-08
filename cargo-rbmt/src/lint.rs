@@ -100,11 +100,20 @@ fn lint_packages(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::err
 
 /// Check for duplicate dependencies.
 ///
+/// The goal is to catch cases where a package's transitive dependency tree contains two versions
+/// of the same crate (e.g. `bitcoin_hashes v0.13.0` and `bitcoin_hashes v0.14.0` both present). This
+/// can happen when a package directly depends on a crate at one version while a transitive
+/// dependency pulls in a different version. Downstream users inheriting this package will end up
+/// with both versions in their build, which can cause confusing type incompatibility errors across
+/// crate boundaries and unnecessarily bloat compile times and binary size.
+///
+/// Dev dependencies are excluded from this check because they are not part of the published
+/// crate graph and cannot cause problems for downstream consumers.
+///
 /// # Why run at the package level?
 ///
-/// Running per-package provides better error messages by identifying
-/// exactly which package has the duplicate, making it easier for users
-/// to understand and fix the issue.
+/// Running per-package allows each package to maintain its own whitelist of allowed duplicates
+/// via `rbmt.toml`, since some duplicates may be unavoidable for a given package but not others.
 fn check_duplicate_deps(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Checking for duplicate dependencies...");
 
@@ -117,10 +126,14 @@ fn check_duplicate_deps(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn s
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
         let _old_dir = sh.push_dir(&package_dir);
 
-        // Run cargo tree to find duplicates for this package.
-        let output = quiet_cmd!(sh, "cargo --locked tree --target=all --all-features --duplicates")
-            .ignore_status()
-            .read()?;
+        // Run cargo tree to find duplicates for this package, exclude dev dependencies
+        // since they are not exposed to downstream consumers.
+        let output = quiet_cmd!(
+            sh,
+            "cargo --locked tree --target=all --all-features --duplicates --edges no-dev"
+        )
+        .ignore_status()
+        .read()?;
 
         let duplicates: Vec<&str> = output
             .lines()
