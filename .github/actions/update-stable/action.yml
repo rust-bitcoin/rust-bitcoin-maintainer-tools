@@ -1,0 +1,63 @@
+name: 'Update Stable'
+description: |
+  Update stable-version file at repo root with latest Rust stable toolchain version,
+  and create a PR if the version changed.
+
+  Usage example (complete workflow with weekly cron schedule):
+
+  ```yaml
+  name: Update Stable
+
+  on:
+    schedule:
+      - cron: '5 0 * * 6'  # Weekly on Saturday at 00:05 UTC
+
+  permissions:
+    contents: write
+    pull-requests: write
+
+  jobs:
+    update-stable:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+
+        - name: Update stable version
+          uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/update-stable@master
+  ```
+
+inputs:
+  token:
+    description: 'GitHub token for creating pull requests. Defaults to GITHUB_TOKEN if not provided.'
+    required: false
+    default: ''
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Rust stable toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Update stable version file
+      id: stable
+      shell: bash
+      run: |
+        # Extract the version from the stable compiler.
+        STABLE_VERSION=$(rustc +stable --version | sed -ne 's/^rustc //p' | cut -d ' ' -f1)
+        # Update the stable version file at repo root.
+        echo "${STABLE_VERSION}" > stable-version
+        echo "version=${STABLE_VERSION}" >> $GITHUB_OUTPUT
+        echo "Updated stable to: ${STABLE_VERSION}"
+
+    - name: Create pull request if version changed
+      uses: peter-evans/create-pull-request@v7
+      with:
+        token: ${{ inputs.token || github.token }}
+        author: RBMT Bot <bot@example.com>
+        committer: RBMT Bot <bot@example.com>
+        title: "Update stable toolchain to ${{ steps.stable.outputs.version }}"
+        commit-message: "Update stable toolchain to ${{ steps.stable.outputs.version }}"
+        branch: automated/update-stable

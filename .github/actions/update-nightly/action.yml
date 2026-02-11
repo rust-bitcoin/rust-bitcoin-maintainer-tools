@@ -1,0 +1,64 @@
+name: 'Update Nightly'
+description: |
+  Update nightly-version file at repo root with latest Rust nightly toolchain version,
+  and create a PR if the version changed.
+
+  Usage example (complete workflow with daily cron schedule):
+
+  ```yaml
+  name: Update Nightly
+
+  on:
+    schedule:
+      - cron: '0 0 * * *'  # Daily at 00:00 UTC
+
+  permissions:
+    contents: write
+    pull-requests: write
+
+  jobs:
+    update-nightly:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+
+        - name: Update nightly version
+          uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/update-nightly@master
+  ```
+
+inputs:
+  token:
+    description: 'GitHub token for creating pull requests. Defaults to GITHUB_TOKEN if not provided.'
+    required: false
+    default: ''
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Rust nightly toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: nightly
+
+    - name: Update nightly version file
+      id: nightly
+      shell: bash
+      run: |
+        # Extract the date from the nightly compiler version.
+        NIGHTLY_DATE=$(rustc +nightly --verbose --version | sed -ne 's/^commit-date: //p')
+        NIGHTLY_VERSION="nightly-${NIGHTLY_DATE}"
+        # Update the nightly version file at repo root.
+        echo "${NIGHTLY_VERSION}" > nightly-version
+        echo "version=${NIGHTLY_VERSION}" >> $GITHUB_OUTPUT
+        echo "Updated nightly to: ${NIGHTLY_VERSION}"
+
+    - name: Create pull request if version changed
+      uses: peter-evans/create-pull-request@v7
+      with:
+        token: ${{ inputs.token || github.token }}
+        author: RBMT Bot <bot@example.com>
+        committer: RBMT Bot <bot@example.com>
+        title: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
+        commit-message: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
+        branch: automated/update-nightly
