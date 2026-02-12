@@ -73,9 +73,13 @@ runs:
       run: |
         cargo +${{ steps.determine-versions.outputs.stable }} install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev ${{ steps.determine-versions.outputs.rbmt }} cargo-rbmt --locked
 
-    - name: Install additional cross compiler packages
+    # ARM cross-compiler for C dependencies compiled at build-time (e.g. secp256k1-sys).
+    # When a crate's build.rs uses cc-rs to compile C source files for thumbv7m-none-eabi,
+    # it needs arm-none-eabi-gcc because system gcc doesn't support ARM target flags.
+    # Pure Rust crates only need rustc and rust-lld (already included with Rust).
+    - name: Install ARM cross-compiler
       shell: bash
       run: |
-        sudo apt-get update -y
-        sudo apt-get install -y gcc-arm-none-eabi
+        # --no-install-recommends reduces install size by skipping newlib.
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
         echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITHUB_ENV

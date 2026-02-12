@@ -8,6 +8,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 - [Configuration](#configuration)
 - [Lint](#lint)
 - [Test](#test)
+  - [no_std](#no_std)
 - [Integration](#integration)
 - [Prerelease](#prerelease)
 - [Lock Files](#lock-files)
@@ -80,6 +81,10 @@ exact_features = [
 # Example: ["serde", "rand"] tests: no-std+serde, no-std+rand, no-std+serde+rand
 features_with_no_std = ["serde", "rand"]
 ```
+
+### no_std
+
+When a package declares `#![no_std]` in its library source, `cargo-rbmt test` automatically performs an additional verification step on the `thumbv7m-none-eabi` target to try and detect unintentional std library usage.
 
 ## Integration
 
