@@ -67,3 +67,5 @@ runs:
         title: "Update stable toolchain to ${{ steps.stable.outputs.version }}"
         commit-message: "Update stable toolchain to ${{ steps.stable.outputs.version }}"
         branch: automated/update-stable
+        body: |
+          Automated update to `stable-version` by [update-stable](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.

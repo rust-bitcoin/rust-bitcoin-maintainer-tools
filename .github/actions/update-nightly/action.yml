@@ -68,3 +68,5 @@ runs:
         title: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
         commit-message: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
         branch: automated/update-nightly
+        body: |
+          Automated update to `nightly-version` by [update-nightly](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.
