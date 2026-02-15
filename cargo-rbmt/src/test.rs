@@ -109,6 +109,9 @@ struct TestConfig {
     ///
     /// `["serde", "rand"]` tests `no-std+serde`, `no-std+serde`, `no-std+serde+rand`.
     features_with_no_std: Vec<String>,
+
+    /// Always run tests with `--release` for this package.
+    release: bool,
 }
 
 impl TestConfig {
@@ -124,6 +127,7 @@ impl TestConfig {
                 features_without_std: Vec::new(),
                 exact_features: Vec::new(),
                 features_with_no_std: Vec::new(),
+                release: false,
             });
         }
 
@@ -162,6 +166,7 @@ pub fn run(
         // Check the package's MSRV, not the workspace root.
         check_toolchain(sh, toolchain)?;
         let config = TestConfig::load(Path::new(package_dir))?;
+        let release = release || config.release;
 
         do_test(sh, &config, release)?;
         do_feature_matrix(sh, &config, release)?;
