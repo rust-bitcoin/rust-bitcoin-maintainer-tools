@@ -3,6 +3,7 @@ mod bench;
 mod docs;
 mod environment;
 mod integration;
+mod kani;
 mod lint;
 mod lock;
 mod prerelease;
@@ -56,6 +57,8 @@ enum Commands {
     },
     /// Run bitcoin core integration tests.
     Integration,
+    /// Run kani verification.
+    Kani,
     /// Update Cargo-minimal.lock and Cargo-recent.lock files.
     Lock,
     /// Run pre-release readiness checks.
@@ -119,6 +122,11 @@ fn main() {
         Commands::Integration =>
             if let Err(e) = integration::run(&sh, &cli.packages) {
                 eprintln!("Error running integration tests: {}", e);
+                process::exit(1);
+            },
+        Commands::Kani =>
+            if let Err(e) = kani::run(&sh, &cli.packages) {
+                eprintln!("Error running kani verification: {}", e);
                 process::exit(1);
             },
         Commands::Lock =>
