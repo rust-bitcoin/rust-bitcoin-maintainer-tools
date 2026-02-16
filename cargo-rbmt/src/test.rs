@@ -367,8 +367,8 @@ fn do_no_std_check(sh: &Shell, package_dir: &Path) -> Result<(), Box<dyn std::er
         return Ok(());
     }
 
-    quiet_println(&format!("Detected no-std package, checking with target: {}", NO_STD_TARGET));
-    quiet_cmd!(sh, "cargo check --target {NO_STD_TARGET} --no-default-features").run()?;
-    quiet_println("no-std check passed!");
+    quiet_println(&format!("Detected no-std package, building for target: {}", NO_STD_TARGET));
+    quiet_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run()?;
+    quiet_println("no-std build passed!");
     Ok(())
 }
