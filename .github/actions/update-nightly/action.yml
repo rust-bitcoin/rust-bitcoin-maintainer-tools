@@ -29,7 +29,13 @@ description: |
 
 inputs:
   token:
-    description: 'GitHub token for creating pull requests. Defaults to GITHUB_TOKEN if not provided.'
+    description: |
+      GitHub token for creating pull requests. Defaults to GITHUB_TOKEN if not provided.
+
+      Using the default GITHUB_TOKEN is simple, but less secure because it requires the
+      "Allow GitHub Actions to create and approve pull requests" to be enabled on a repository.
+      A Personal Access Token (PAT) with `repo` privileges can be set as a repository
+      secret instead and passed in explicitly here (e.g. ${{ secrets.RBMT_TOKEN }}).
     required: false
     default: ''
 
@@ -62,3 +68,5 @@ runs:
         title: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
         commit-message: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
         branch: automated/update-nightly
+        body: |
+          Automated update to `nightly-version` by [update-nightly](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.
