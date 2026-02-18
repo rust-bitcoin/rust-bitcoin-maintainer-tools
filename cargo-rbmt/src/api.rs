@@ -162,7 +162,8 @@ fn get_package_apis(
         sh.change_dir(package_dir);
 
         // Generate rustdoc JSON.
-        let mut cmd = quiet_cmd!(sh, "cargo rustdoc");
+        // Use --lib to avoid ambiguity errors in packages with multiple targets (e.g. lib + bin).
+        let mut cmd = quiet_cmd!(sh, "cargo rustdoc --lib");
         for arg in config.cargo_args() {
             cmd = cmd.arg(arg);
         }
