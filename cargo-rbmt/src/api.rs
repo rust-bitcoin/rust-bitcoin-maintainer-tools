@@ -52,14 +52,20 @@ struct Config {
 }
 
 /// API-specific configuration.
-#[derive(Debug, serde::Deserialize, Default)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(default)]
 struct ApiConfig {
+    /// Whether to run API checks for this package. Defaults to `true`.
+    enabled: bool,
     /// Feature combinations to test (in addition to no-features and all-features).
     features: Vec<Vec<String>>,
     /// Default git ref to use as baseline for semver comparison.
     /// If not set, only feature additivity and git status checks are performed.
     baseline: Option<String>,
+}
+
+impl Default for ApiConfig {
+    fn default() -> Self { Self { enabled: true, features: Vec::new(), baseline: None } }
 }
 
 impl ApiConfig {
@@ -162,7 +168,8 @@ fn get_package_apis(
         sh.change_dir(package_dir);
 
         // Generate rustdoc JSON.
-        let mut cmd = quiet_cmd!(sh, "cargo rustdoc");
+        // Use --lib to avoid ambiguity errors in packages with multiple targets (e.g. lib + bin).
+        let mut cmd = quiet_cmd!(sh, "cargo rustdoc --lib");
         for arg in config.cargo_args() {
             cmd = cmd.arg(arg);
         }
@@ -194,6 +201,12 @@ fn check_apis(
     package_info: &[(String, PathBuf)],
 ) -> Result<(), Box<dyn std::error::Error>> {
     for (package_name, package_dir) in package_info {
+        let api_config = ApiConfig::load(package_dir)?;
+
+        if !api_config.enabled {
+            continue;
+        }
+
         let mut apis = get_package_apis(sh, package_name, package_dir)?;
 
         // Write API files.
@@ -236,7 +249,6 @@ fn check_apis(
         }
 
         // If this package has a baseline configured, check semver compatibility.
-        let api_config = ApiConfig::load(Path::new(package_dir))?;
         if let Some(baseline_ref) = api_config.baseline {
             check_semver(sh, package_name, package_dir, &baseline_ref)?;
         }
