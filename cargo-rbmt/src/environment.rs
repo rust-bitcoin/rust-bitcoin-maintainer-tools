@@ -94,31 +94,59 @@ pub fn get_packages(
         return Ok(all_packages);
     }
 
-    // Validate that all requested packages exist in the workspace.
-    let available_names: Vec<&str> = all_packages.iter().map(|(name, _)| name.as_str()).collect();
-    let mut invalid_packages = Vec::new();
+    // Resolve each requested string to a canonical manifest name,
+    // falling back to directory basename matching if no manifest name matches.
+    let mut resolved_names: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
 
-    for requested_package in packages {
-        if !available_names.contains(&requested_package.as_str()) {
-            invalid_packages.push(requested_package.clone());
+    for requested in packages {
+        // Exact manifest name match.
+        if all_packages.iter().any(|(name, _)| name == requested) {
+            resolved_names.push(requested.clone());
+            continue;
+        }
+
+        // Fall back to directory basename match.
+        let dir_matches: Vec<&(String, PathBuf)> = all_packages
+            .iter()
+            .filter(|(_, dir)| {
+                dir.file_name().and_then(|n| n.to_str()).is_some_and(|n| n == requested)
+            })
+            .collect();
+
+        match dir_matches.len() {
+            0 => {
+                errors.push(format!("Package not found in workspace: '{}'", requested));
+            }
+            1 => {
+                let (name, _) = dir_matches[0];
+                resolved_names.push(name.clone());
+            }
+            _ => {
+                errors.push(format!(
+                    "Ambiguous package '{}': use the manifest name to disambiguate.",
+                    requested
+                ));
+            }
         }
     }
 
-    if !invalid_packages.is_empty() {
-        let mut error_msg =
-            format!("Package not found in workspace: {}", invalid_packages.join(", "));
+    if !errors.is_empty() {
+        let mut error_msg = errors.join("\n\n");
 
-        error_msg.push_str("\n\nAvailable packages:");
-        for name in &available_names {
-            error_msg.push_str(&format!("\n  - {}", name));
+        error_msg.push_str("\n\nAvailable packages (manifest name / directory):");
+        for (name, dir) in &all_packages {
+            error_msg.push_str(&format!("\n  - {} ({})", name, dir.display()));
         }
 
         return Err(error_msg.into());
     }
 
-    // Filter to only requested packages.
-    let package_info: Vec<(String, PathBuf)> =
-        all_packages.into_iter().filter(|(name, _)| packages.iter().any(|p| p == name)).collect();
+    // Filter to only resolved packages.
+    let package_info: Vec<(String, PathBuf)> = all_packages
+        .into_iter()
+        .filter(|(name, _)| resolved_names.iter().any(|r| r == name))
+        .collect();
 
     Ok(package_info)
 }
