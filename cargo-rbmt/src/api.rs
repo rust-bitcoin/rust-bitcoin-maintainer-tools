@@ -31,7 +31,7 @@ impl Drop for GitSwitchGuard<'_> {
     }
 }
 
-/// Directory where API files are stored, relative to workspace root.
+/// Directory where API files are stored, relative to each package directory.
 const API_DIR: &str = "api";
 
 /// RUSTDOCFLAGS to allow broken intra-doc links during API checking.
@@ -124,8 +124,8 @@ impl FeatureConfig {
 /// Run the API check task.
 ///
 /// This command checks for changes to the public API of workspace packages by generating
-/// API files using the `public-api` library and comparing them with committed versions in the
-/// `api/` directory.
+/// API files using the `public-api` library and comparing them with committed versions in each
+/// package's own `api/` directory.
 ///
 /// Always checks that features are additive and API files match git state.
 /// When a baseline ref is given or configured, also performs semver
@@ -205,6 +205,8 @@ fn check_apis(
     package_info: &[(String, PathBuf)],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut api_dirs: Vec<PathBuf> = Vec::new();
+
     for (package_name, package_dir) in package_info {
         let api_config = ApiConfig::load(package_dir)?;
 
@@ -212,12 +214,13 @@ fn check_apis(
             continue;
         }
 
+        check_api_excluded(package_dir, package_name)?;
         let mut apis = get_package_apis(sh, package_name, package_dir)?;
 
-        // Write API files.
-        let workspace_root = sh.current_dir();
-        let package_api_dir = workspace_root.join(API_DIR).join(package_name);
+        // Write API files into the package's own api/ directory.
+        let package_api_dir = package_dir.join(API_DIR);
         fs::create_dir_all(&package_api_dir)?;
+        api_dirs.push(package_api_dir.clone());
 
         for (config, public_api) in &apis {
             let output_file = package_api_dir.join(config.filename());
@@ -259,16 +262,38 @@ fn check_apis(
         }
     }
 
-    let status_output = quiet_cmd!(sh, "git status --porcelain {API_DIR}").read()?;
-    if !status_output.trim().is_empty() {
-        // Show the diff for context.
-        quiet_cmd!(sh, "git diff --color=always {API_DIR}").run()?;
+    for api_dir in &api_dirs {
+        let status_output = quiet_cmd!(sh, "git status --porcelain {api_dir}").read()?;
+        if !status_output.trim().is_empty() {
+            // Show the diff for context.
+            quiet_cmd!(sh, "git diff --color=always {api_dir}").run()?;
 
-        eprintln!();
-        return Err(
-            "You have introduced changes to the public API, commit the changes to api/ currently in your working directory"
-                .into(),
-        );
+            eprintln!();
+            return Err(format!(
+                "You have introduced changes to the public API, commit the changes to {} currently in your working directory",
+                api_dir.display()
+            ).into());
+        }
+    }
+
+    Ok(())
+}
+
+/// Check that the package's manifest excludes the `api/` directory from publishing.
+fn check_api_excluded(
+    package_dir: &Path,
+    package_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let manifest = environment::Manifest::read(package_dir)?;
+
+    if !manifest.exclude.iter().any(|e| e.starts_with("api")) {
+        return Err(format!(
+            "Package '{}' has an api/ directory but does not exclude it from publishing. \
+             Add \"api\" to the `exclude` list in {}/Cargo.toml.",
+            package_name,
+            package_dir.display(),
+        )
+        .into());
     }
 
     Ok(())
