@@ -132,26 +132,24 @@ fn check_duplicate_deps(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn s
         // since they are not exposed to downstream consumers.
         let output = quiet_cmd!(
             sh,
-            "cargo --locked tree --target=all --all-features --duplicates --edges no-dev"
+            "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
         )
         .ignore_status()
         .read()?;
 
-        let duplicates: Vec<&str> = output
-            .lines()
-            // Filter out non crate names.
-            .filter(|line| line.chars().next().is_some_and(char::is_alphanumeric))
-            // Filter out whitelisted crates.
-            .filter(|line| !config.allowed_duplicates.iter().any(|allowed| line.contains(allowed)))
-            .collect();
-
-        if !duplicates.is_empty() {
+        let tree = DuplicateTree::parse(
+            &output,
+            &[package_name.as_str()].into(),
+            &config.allowed_duplicates,
+        );
+        if !tree.duplicates().is_empty() {
             found_duplicates = true;
-            // Show full tree for context.
             eprintln!("{}", output);
             eprintln!("Error: Found duplicate dependencies in package '{}'!", package_name);
-            for dup in &duplicates {
-                eprintln!("  {}", dup);
+            for (name, versions) in tree.duplicates() {
+                for version in versions.keys() {
+                    eprintln!("  {} {}", name, version);
+                }
             }
         }
     }
@@ -170,18 +168,18 @@ fn check_duplicate_deps(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn s
 /// workspace members depend on different versions of the same crate. For example, if pkg1
 /// depends on `bitcoin_hashes 0.13` and pkg2 depends on `bitcoin_hashes 0.14`, each package's
 /// individual tree is clean but a downstream consumer of both packages will end up with both
-/// versions in their build.
-///
-/// This check is not considered as essential as [`check_duplicate_deps`]. A duplicate dependency
-/// in a single package has a much higher chance of causing downstream issues than one across
-/// packages since it may not be an issue depending on what versions of the packages downstream
-/// users are using.
+/// versions in their build. Skipped entirely for single-package workspaces since it cannot find
+/// anything the per-package check didn't already catch.
 ///
 /// Dev dependencies are excluded from this check because they are not part of the published
 /// crate graph and cannot cause problems for downstream consumers.
 ///
-/// Skipped entirely for single-package workspaces since it cannot find anything the per-package
-/// check didn't already catch.
+/// This check is not considered as essential as [`check_duplicate_deps`]. A duplicate dependency
+/// in a single package has a much higher chance of causing downstream issues than one across
+/// packages since it may not be an issue depending on what versions of the packages downstream
+/// users are using. This functionality could probably also be accomplished just with
+/// [`check_duplicate_deps`] if a workspace contains a facade package which re-exports all
+/// the other packages of the workspace.
 fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let package_info = get_packages(sh, &[])?;
 
@@ -195,12 +193,12 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
     let package_names: HashSet<&str> = package_info.iter().map(|(name, _)| name.as_str()).collect();
     let output = quiet_cmd!(
         sh,
-        "cargo tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
+        "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
     )
     .ignore_status()
     .read()?;
 
-    let tree = DuplicateTree::parse(&output, &package_names);
+    let tree = DuplicateTree::parse(&output, &package_names, &[]);
     let cross_package_dupes = tree.cross_package_duplicates();
     // Currently logging a warning instead of hard failure until we gain confidence in the check.
     if !cross_package_dupes.is_empty() {
@@ -270,7 +268,7 @@ struct DuplicateTree {
 
 impl DuplicateTree {
     /// Parse the raw output of `cargo tree --duplicates --prefix depth`.
-    fn parse(output: &str, member_packages: &HashSet<&str>) -> Self {
+    fn parse(output: &str, member_packages: &HashSet<&str>, allowed_duplicates: &[String]) -> Self {
         let mut inner: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> = BTreeMap::new();
         // Current duplicate version being parsed.
         let mut current_duplicate: Option<(String, String)> = None;
@@ -279,6 +277,11 @@ impl DuplicateTree {
             let Some(dep) = Dependency::parse(line) else { continue };
 
             if dep.depth == 0 {
+                // Skip crates that are explicitly allowed to have duplicate versions.
+                if allowed_duplicates.iter().any(|a| a == &dep.name) {
+                    current_duplicate = None;
+                    continue;
+                }
                 // Start of a new version block. Ensure a slot exists for this (name, version).
                 inner.entry(dep.name.clone()).or_default().entry(dep.version.clone()).or_default();
                 current_duplicate = Some((dep.name, dep.version));
@@ -297,6 +300,9 @@ impl DuplicateTree {
 
         Self { inner }
     }
+
+    /// All duplicate crates found in the tree.
+    fn duplicates(&self) -> &BTreeMap<String, BTreeMap<String, BTreeSet<String>>> { &self.inner }
 
     /// Returns cross-package duplicates, crates with different versions pulled in by
     /// different workspace members.
@@ -470,7 +476,7 @@ mod tests {
 1bitcoin_hashes v0.14.1 (*)
 2pkg2 v0.1.0
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into());
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
         let dupes = tree.cross_package_duplicates();
         assert!(dupes.contains_key("bitcoin_hashes"));
         assert!(dupes.contains_key("hex-conservative"));
@@ -491,7 +497,7 @@ mod tests {
 1some-lib v2.0.0
 2pkg2 v0.1.0
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into());
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
         let dupes = tree.cross_package_duplicates();
         assert!(dupes.contains_key("hex-conservative"));
         assert!(dupes["hex-conservative"].contains_key("v0.1.2"));
@@ -507,7 +513,7 @@ mod tests {
 0foo v0.2.0
 1pkg1 v0.1.0
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into());
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
         assert!(tree.cross_package_duplicates().is_empty());
     }
 
@@ -526,7 +532,7 @@ mod tests {
 0bitcoin_hashes v0.14.1
 1pkg2 v0.1.0
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into());
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
         let dupes = tree.cross_package_duplicates();
         assert_eq!(dupes.len(), 1);
         assert_eq!(dupes["bitcoin_hashes"]["v0.13.0"], BTreeSet::from(["pkg1".to_string()]));
@@ -544,13 +550,35 @@ mod tests {
 1pkg1 v0.1.0
 1pkg2 v0.1.0
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into());
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
         assert!(tree.cross_package_duplicates().is_empty());
     }
 
     #[test]
     fn cross_package_empty_output_no_dupes() {
-        let tree = DuplicateTree::parse("", &["pkg1", "pkg2", "pkg3"].into());
+        let tree = DuplicateTree::parse("", &["pkg1", "pkg2", "pkg3"].into(), &[]);
         assert!(tree.cross_package_duplicates().is_empty());
+    }
+
+    #[test]
+    fn allowed_duplicates_not_reported() {
+        let output = "\
+0bitcoin_hashes v0.13.0
+1pkg1 v0.1.0
+
+0bitcoin_hashes v0.14.1
+1pkg2 v0.1.0
+
+0hex-conservative v0.1.2
+1pkg1 v0.1.0
+
+0hex-conservative v0.2.2
+1pkg2 v0.1.0
+";
+        let allowed = vec!["bitcoin_hashes".to_string()];
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &allowed);
+        let dupes = tree.duplicates();
+        assert!(!dupes.contains_key("bitcoin_hashes"), "allowed duplicate should be filtered");
+        assert!(dupes.contains_key("hex-conservative"), "non-allowed duplicate should be reported");
     }
 }
