@@ -128,20 +128,24 @@ impl FeatureConfig {
 /// `api/` directory.
 ///
 /// Always checks that features are additive and API files match git state.
-/// When a baseline ref is configured in the package's rbmt.toml, also performs semver
+/// When a baseline ref is given or configured, also performs semver
 /// compatibility checking by comparing the current API against the baseline.
 ///
 /// # Arguments
 ///
 /// * `packages` - Optional list of packages to check. If empty, checks all packages in the workspace.
-pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+/// * `baseline` - Git ref for optional semver comparison.
+pub fn run(
+    sh: &Shell,
+    packages: &[String],
+    baseline: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
     environment::quiet_println("Running API check...");
     toolchain::check_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
     let package_info = environment::get_packages(sh, packages)?;
-    check_apis(sh, &package_info)?;
+    check_apis(sh, &package_info, baseline)?;
 
-    environment::quiet_println("API check completed successfully");
     Ok(())
 }
 
@@ -199,6 +203,7 @@ fn get_package_apis(
 fn check_apis(
     sh: &Shell,
     package_info: &[(String, PathBuf)],
+    baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for (package_name, package_dir) in package_info {
         let api_config = ApiConfig::load(package_dir)?;
@@ -248,14 +253,11 @@ fn check_apis(
             return Err("Non-additive features detected".into());
         }
 
-        // If this package has a baseline configured, check semver compatibility.
-        if let Some(baseline_ref) = api_config.baseline {
-            check_semver(sh, package_name, package_dir, &baseline_ref)?;
+        // CLI flag takes priority over config.
+        if let Some(baseline) = baseline.or(api_config.baseline.as_deref()) {
+            check_semver(sh, package_name, package_dir, baseline)?;
         }
     }
-
-    // Check for changes to the API files using git.
-    environment::quiet_println("Checking for API changes...");
 
     let status_output = quiet_cmd!(sh, "git status --porcelain {API_DIR}").read()?;
     if !status_output.trim().is_empty() {
@@ -269,39 +271,72 @@ fn check_apis(
         );
     }
 
-    environment::quiet_println("No changes to the current public API");
     Ok(())
 }
 
 /// Run semver compatibility check against a baseline ref.
 ///
-/// Compares current API vs. baseline API for breaking changes (e.g. removed/changed items).
+/// Compares the current all-features API against the baseline to report removed, changed, and
+/// added items. This check is informational and never fails, it just prints a summary of API
+/// differences to help maintainers assess semver impact.
+///
+/// Only checks the all-features configuration. This means items that were moved behind a
+/// feature gate (from unconditional to `#[cfg(feature = "...")]`) will not be detected as
+/// removed, since they still appear in the all-features API. Detecting such changes would
+/// require checking every feature combination from the baseline.
 fn check_semver(
     sh: &Shell,
     package_name: &str,
     package_dir: &PathBuf,
-    baseline_ref: &str,
+    baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    environment::quiet_println(&format!("Running semver check against baseline: {}", baseline_ref));
+    environment::quiet_println(&format!("Running semver check against baseline: {}", baseline));
 
     let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
     let mut baseline_apis = {
-        let _guard = GitSwitchGuard::new(sh, baseline_ref)?;
+        let _guard = GitSwitchGuard::new(sh, baseline)?;
         get_package_apis(sh, package_name, package_dir)?
     };
 
-    // Check only None and All configs for semver to just sidestep complexity with new custom features.
-    for config in [FeatureConfig::None, FeatureConfig::All] {
-        let baseline_api = baseline_apis.remove(&config).ok_or("Config not found in baseline")?;
-        let current_api = current_apis.remove(&config).ok_or("Config not found in current")?;
+    let baseline_api = baseline_apis
+        .remove(&FeatureConfig::All)
+        .ok_or("All-features config not found in baseline")?;
+    let current_api = current_apis
+        .remove(&FeatureConfig::All)
+        .ok_or("All-features config not found in current")?;
 
-        let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
+    let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
 
-        if !diff.removed.is_empty() || !diff.changed.is_empty() {
-            eprintln!("API changes detected in {} ({})", package_name, config.name());
-            return Err("Semver compatibility check failed: breaking changes detected".into());
+    eprintln!("Semver check vs {}:", baseline);
+
+    if !diff.removed.is_empty() {
+        eprintln!("  Removed (possibly breaking):");
+        for item in &diff.removed {
+            eprintln!("    - {}", item);
         }
     }
+
+    if !diff.changed.is_empty() {
+        eprintln!("  Changed (possibly breaking):");
+        for item in &diff.changed {
+            eprintln!("    old: {}", item.old);
+            eprintln!("    new: {}", item.new);
+        }
+    }
+
+    if !diff.added.is_empty() {
+        eprintln!("  Added:");
+        for item in &diff.added {
+            eprintln!("    + {}", item);
+        }
+    }
+
+    eprintln!(
+        "  Summary: {} removed, {} changed, {} added",
+        diff.removed.len(),
+        diff.changed.len(),
+        diff.added.len()
+    );
 
     Ok(())
 }
