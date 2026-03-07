@@ -13,6 +13,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 - [Prerelease](#prerelease)
 - [Lock Files](#lock-files)
 - [API](#api)
+- [Toolchains](#toolchains)
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
@@ -159,6 +160,22 @@ cargo rbmt api --baseline v0.1.0
 ```
 
 Compares the current API against a baseline git reference (tag, branch, or commit) to detect breaking changes.
+
+## Toolchains
+
+The `toolchains` command installs the three required toolchains for `cargo-rbmt` commands, `nightly`, `stable`, and `MSRV`. Toolchain versions are read from the repository. `nightly` and `stable` are set in `nightly-version` and `stable-version` files respectively. `MSRV` is read from package manifests. Workspaces must declare a single consistent MSRV across all packages. Workspaces with conflicting `rust-version` fields are not supported.
+
+This command requires `rustup` on the system, which is not the case for all other `cargo-rbmt` commands.
+
+The command prints `export` statements to stdout and all other output to stderr, so it can be used with `eval` to set toolchain version environment variables in the calling shell:
+
+```bash
+eval "$(cargo rbmt toolchains)"
+
+cargo +$RBMT_NIGHTLY rbmt lint
+cargo +$RBMT_STABLE rbmt test stable
+cargo +$RBMT_MSRV rbmt test msrv
+```
 
 ## Workspace Integration
 

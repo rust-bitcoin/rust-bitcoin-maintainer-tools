@@ -8,6 +8,7 @@ mod lock;
 mod prerelease;
 mod test;
 mod toolchain;
+mod toolchains;
 
 use std::process;
 
@@ -67,6 +68,8 @@ enum Commands {
     Lock,
     /// Run pre-release readiness checks.
     Prerelease,
+    /// Install and manage nightly, stable, and MSRV toolchains.
+    Toolchains,
 }
 
 fn main() {
@@ -83,8 +86,8 @@ fn main() {
     configure_log_level(&sh);
     change_to_repo_root(&sh);
 
-    // Restore the specified lock file before running any command (except Lock and Integration).
-    if !matches!(cli.command, Commands::Lock | Commands::Integration) {
+    // Restore the specified lock file before running any command (except Lock, Integration, Toolchains).
+    if !matches!(cli.command, Commands::Lock | Commands::Integration | Commands::Toolchains) {
         if let Err(e) = cli.lock_file.restore(&sh) {
             eprintln!("Error restoring lock file: {}", e);
             process::exit(1);
@@ -136,6 +139,11 @@ fn main() {
         Commands::Prerelease =>
             if let Err(e) = prerelease::run(&sh, &cli.packages) {
                 eprintln!("Error running pre-release checks: {}", e);
+                process::exit(1);
+            },
+        Commands::Toolchains =>
+            if let Err(e) = toolchains::run(&sh) {
+                eprintln!("Error setting up toolchains: {}", e);
                 process::exit(1);
             },
     }

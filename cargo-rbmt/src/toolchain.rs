@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use xshell::{cmd, Shell};
+use xshell::Shell;
+
+use crate::quiet_cmd;
 
 /// Toolchain requirement for a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -21,7 +23,7 @@ pub enum Toolchain {
 /// * Current toolchain doesn't match requirement.
 /// * For MSRV: cannot read rust-version from Cargo.toml.
 pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn std::error::Error>> {
-    let current = cmd!(sh, "rustc --version").read()?;
+    let current = quiet_cmd!(sh, "rustc --version").read()?;
 
     match required {
         Toolchain::Nightly =>
@@ -39,7 +41,7 @@ pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn st
                 return Err("Not in a crate directory (no Cargo.toml found)".into());
             }
 
-            let msrv_version = get_msrv_from_manifest(&manifest_path)?;
+            let msrv_version = get_msrv_from_manifest(sh, &manifest_path)?;
             let current_version =
                 extract_version(&current).ok_or("Could not parse rustc version")?;
 
@@ -58,28 +60,65 @@ pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn st
     Ok(())
 }
 
-/// Extract MSRV from Cargo.toml using cargo metadata.
-fn get_msrv_from_manifest(manifest_path: &Path) -> Result<String, Box<dyn std::error::Error>> {
-    let sh = Shell::new()?;
-    let metadata = cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
-    let data: serde_json::Value = serde_json::from_str(&metadata)?;
+/// Extract the single MSRV shared across the workspace.
+///
+/// Collects all `rust-version` fields declared by packages in the workspace and
+/// requires exactly one distinct value. Workspaces with multiple MSRVs are
+/// not supported.
+pub fn get_workspace_msrv(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+    let mut msrvs: Vec<String> =
+        collect_msrvs(sh)?.into_iter().filter_map(|(_, rust_version)| rust_version).collect();
 
+    msrvs.sort();
+    msrvs.dedup();
+
+    match msrvs.as_slice() {
+        [] => Err("No MSRV (rust-version) found in any Cargo.toml in the workspace".into()),
+        [msrv] => Ok(msrv.clone()),
+        _ => Err(format!("Workspace packages have conflicting MSRVs: {}", msrvs.join(", ")).into()),
+    }
+}
+
+/// Extract MSRV from a specific Cargo.toml using cargo metadata.
+fn get_msrv_from_manifest(
+    sh: &Shell,
+    manifest_path: &Path,
+) -> Result<String, Box<dyn std::error::Error>> {
     // Convert Path to string for comparison. If path contains invalid UTF-8, fail early.
     let manifest_path_str = manifest_path.to_str().ok_or_else(|| {
         format!("Manifest path contains invalid UTF-8: {}", manifest_path.display())
     })?;
 
-    let msrv = data["packages"]
-        .as_array()
-        .and_then(|packages| {
-            packages.iter().find(|pkg| pkg["manifest_path"].as_str() == Some(manifest_path_str))
-        })
-        .and_then(|pkg| pkg["rust_version"].as_str())
+    collect_msrvs(sh)?
+        .into_iter()
+        .find(|(path, _)| path == manifest_path_str)
+        .and_then(|(_, rust_version)| rust_version)
         .ok_or_else(|| {
-            format!("No MSRV (rust-version) specified in {}", manifest_path.display())
-        })?;
+            format!("No MSRV (rust-version) specified in {}", manifest_path.display()).into()
+        })
+}
 
-    Ok(msrv.to_string())
+/// `(manifest_path, rust_version)` pair; `rust_version` is `None` when not declared.
+type ManifestMsrv = (String, Option<String>);
+
+/// Collect all MSRVs in the workspace.
+fn collect_msrvs(sh: &Shell) -> Result<Vec<ManifestMsrv>, Box<dyn std::error::Error>> {
+    let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
+    let data: serde_json::Value = serde_json::from_str(&metadata)?;
+
+    Ok(data["packages"]
+        .as_array()
+        .map(|packages| {
+            packages
+                .iter()
+                .filter_map(|pkg| {
+                    let manifest_path = pkg["manifest_path"].as_str()?.to_string();
+                    let rust_version = pkg["rust_version"].as_str().map(str::to_string);
+                    Some((manifest_path, rust_version))
+                })
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 /// Extract version number from rustc --version output.

@@ -38,17 +38,5 @@ jobs:
       - name: Run tests with stable (minimal dependencies)
         run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file minimal test stable
 
-  msrv:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Dogfood with MSRV toolchain
-        id: setup
-        uses: ./.github/actions/setup-rbmt
-        with:
-          toolchains: 1.85.0
-          rbmt-version: ${{ github.sha }}
-
       - name: Run tests with MSRV (existing lock)
-        run: cargo +1.85.0 rbmt --lock-file existing test msrv
+        run: cargo +${{ steps.setup.outputs.msrv-version }} rbmt --lock-file existing test msrv
