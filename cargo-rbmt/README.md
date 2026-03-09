@@ -167,7 +167,7 @@ The `toolchains` command installs the three required toolchains for `cargo-rbmt`
 
 This command requires `rustup` on the system, which is not the case for all other `cargo-rbmt` commands.
 
-The command prints `export` statements to stdout and all other output to stderr, so it can be used with `eval` to set toolchain version environment variables in the calling shell:
+The command prints `export` statements to stdout and all other output to stderr, so it can be used with `eval` to set toolchain version environment variables in the calling shell.
 
 ```bash
 eval "$(cargo rbmt toolchains)"
@@ -176,6 +176,8 @@ cargo +$RBMT_NIGHTLY rbmt lint
 cargo +$RBMT_STABLE rbmt test stable
 cargo +$RBMT_MSRV rbmt test msrv
 ```
+
+The `--update-nightly` and `--update-stable` flags each install the corresponding floating toolchain, query its resolved version from `rustc`, and write the result to the appropriate version file before proceeding with the normal install and export.
 
 ## Workspace Integration
 

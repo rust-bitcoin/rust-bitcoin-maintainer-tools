@@ -69,7 +69,14 @@ enum Commands {
     /// Run pre-release readiness checks.
     Prerelease,
     /// Install and manage nightly, stable, and MSRV toolchains.
-    Toolchains,
+    Toolchains {
+        /// Update the `nightly-version` file.
+        #[arg(long)]
+        update_nightly: bool,
+        /// Update the `stable-version` file.
+        #[arg(long)]
+        update_stable: bool,
+    },
 }
 
 fn main() {
@@ -87,7 +94,8 @@ fn main() {
     change_to_repo_root(&sh);
 
     // Restore the specified lock file before running any command (except Lock, Integration, Toolchains).
-    if !matches!(cli.command, Commands::Lock | Commands::Integration | Commands::Toolchains) {
+    if !matches!(cli.command, Commands::Lock | Commands::Integration | Commands::Toolchains { .. })
+    {
         if let Err(e) = cli.lock_file.restore(&sh) {
             eprintln!("Error restoring lock file: {}", e);
             process::exit(1);
@@ -141,8 +149,8 @@ fn main() {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },
-        Commands::Toolchains =>
-            if let Err(e) = toolchains::run(&sh) {
+        Commands::Toolchains { update_nightly, update_stable } =>
+            if let Err(e) = toolchains::run(&sh, update_nightly, update_stable) {
                 eprintln!("Error setting up toolchains: {}", e);
                 process::exit(1);
             },

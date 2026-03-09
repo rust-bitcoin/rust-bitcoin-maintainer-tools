@@ -18,7 +18,27 @@ const ENV_STABLE: &str = "RBMT_STABLE";
 const ENV_MSRV: &str = "RBMT_MSRV";
 
 /// Install all three toolchains (nightly, stable, MSRV) and export env vars.
-pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+///
+/// When `update_nightly` is true, the floating `nightly` toolchain is first
+/// installed, its resolved version queried from rustc, and the result written
+/// to `nightly-version` before the normal install and export path runs.
+///
+/// When `update_stable` is true, the same is done for `stable-version`.
+pub fn run(sh: &Shell, update_nightly: bool, update_stable: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if update_nightly {
+        install_toolchain(sh, "nightly")?;
+        let version = resolve_nightly_version(sh)?;
+        write_version_file("nightly-version", &version)?;
+        eprintln!("Updated nightly-version: {}", version);
+    }
+
+    if update_stable {
+        install_toolchain(sh, "stable")?;
+        let version = resolve_stable_version(sh)?;
+        write_version_file("stable-version", &version)?;
+        eprintln!("Updated stable-version: {}", version);
+    }
+
     let nightly = read_version_file("nightly-version").unwrap_or_else(|| "nightly".to_string());
     let stable = read_version_file("stable-version").unwrap_or_else(|| "stable".to_string());
     let msrv = get_workspace_msrv(sh)?;
@@ -38,6 +58,32 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     println!("export {}={}", ENV_MSRV, msrv);
 
     Ok(())
+}
+
+/// Query the resolved nightly version string (e.g. `"nightly-2025-02-17"`) from rustc.
+fn resolve_nightly_version(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+    let output = quiet_cmd!(sh, "rustc +nightly --verbose --version").read()?;
+
+    // Output contains a line: "commit-date: 2025-02-17"
+    let date = output
+        .lines()
+        .find_map(|line| line.strip_prefix("commit-date: "))
+        .ok_or("Could not find commit-date in `rustc +nightly --verbose --version` output")?;
+
+    Ok(format!("nightly-{}", date))
+}
+
+/// Query the resolved stable version string (e.g. `"1.85.0"`) from rustc.
+fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+    let output = quiet_cmd!(sh, "rustc +stable --version").read()?;
+
+    // Output: "rustc 1.85.0 (4d91de4e4 2025-02-17)"
+    let version = output
+        .strip_prefix("rustc ")
+        .and_then(|s| s.split_whitespace().next())
+        .ok_or("Could not parse version from `rustc +stable --version` output")?;
+
+    Ok(version.to_string())
 }
 
 /// Install a single toolchain with the fixed components and target.
@@ -67,4 +113,10 @@ fn read_version_file(filename: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Write a version string to a file in the current directory, with a trailing newline.
+fn write_version_file(filename: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::write(filename, format!("{}\n", version))?;
+    Ok(())
 }

@@ -1,6 +1,6 @@
 name: 'Setup rbmt'
 description: |
-  Install cargo-rbmt and all required Rust toolchains (nightly, stable, MSRV).
+  Install environment dependencies for cargo-rbmt testing including cargo-rbmt itself.
 
   * Nightly is pulled from the nightly-version file, defaults to "nightly".
   * Stable is pulled from the stable-version file, defaults to "stable".
