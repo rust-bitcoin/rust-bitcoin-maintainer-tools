@@ -2,76 +2,50 @@ name: 'Setup rbmt'
 description: |
   Install environment dependencies for cargo-rbmt testing including cargo-rbmt itself.
 
-  File Conventions:
-  - rbmt-version: Pin cargo-rbmt version with rev (e.g., "v0.1.2").
-  - nightly-version: Pin nightly toolchain (e.g., "nightly-2024-01-15"), defaults to "nightly".
-  - stable-version: Pin stable toolchain (e.g., "1.74.0"), defaults to "stable".
-
-  The action reads these files from the repo root if they exist, installs both
-  nightly and stable toolchains and outputs toolchain versions for use in subsequent steps.
-  Additional toolchains (e.g., MSRVs) can be installed via the toolchains input.
+  * Nightly is pulled from the nightly-version file, defaults to "nightly".
+  * Stable is pulled from the stable-version file, defaults to "stable".
+  * MSRV is parsed from the rust-version field in the package manifest(s).
 
 inputs:
-  toolchains:
-    description: 'Additional toolchains to install, comma-separated (e.g., "1.63.0,1.70.0" for MSRV testing)'
-    required: false
   rbmt-version:
     description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root, or falls back to master.'
     required: false
 
 outputs:
   nightly-version:
-    description: 'The nightly toolchain version from nightly-version file or "nightly" default (e.g., nightly-2024-01-15).'
-    value: ${{ steps.determine-versions.outputs.nightly }}
+    description: 'The nightly toolchain version (e.g., nightly-2024-01-15).'
+    value: ${{ steps.install-toolchains.outputs.nightly-version }}
   stable-version:
-    description: 'The stable toolchain version from stable-version file or "stable" default (e.g., 1.74.0).'
-    value: ${{ steps.determine-versions.outputs.stable }}
+    description: 'The stable toolchain version (e.g., 1.74.0).'
+    value: ${{ steps.install-toolchains.outputs.stable-version }}
+  msrv-version:
+    description: 'The MSRV toolchain version (e.g., 1.85.0).'
+    value: ${{ steps.install-toolchains.outputs.msrv-version }}
 
 runs:
   using: "composite"
   steps:
-    - name: Determine versions
-      id: determine-versions
-      shell: bash
-      run: |
-        # Determine rbmt version.
-        RBMT_VERSION="${{ inputs.rbmt-version }}"
-        [ -z "$RBMT_VERSION" ] && [ -f rbmt-version ] && RBMT_VERSION=$(cat rbmt-version)
-        [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
-        echo "rbmt=$RBMT_VERSION" >> $GITHUB_OUTPUT
-        echo "Using rbmt-version: $RBMT_VERSION"
-
-        # Determine nightly version from file or use default.
-        NIGHTLY_VERSION="nightly"
-        if [ -f nightly-version ]; then
-          NIGHTLY_VERSION=$(cat nightly-version)
-        fi
-        echo "nightly=$NIGHTLY_VERSION" >> $GITHUB_OUTPUT
-        echo "Using nightly-version: $NIGHTLY_VERSION"
-
-        # Determine stable version from file or use default.
-        STABLE_VERSION="stable"
-        if [ -f stable-version ]; then
-          STABLE_VERSION=$(cat stable-version)
-        fi
-        echo "stable=$STABLE_VERSION" >> $GITHUB_OUTPUT
-        echo "Using stable-version: $STABLE_VERSION"
-
-    # Setup Rust with automatic caching of toolchains and build artifacts.
-    # Install nightly and stable toolchains with clippy and rustfmt, plus any additional toolchains.
-    - name: Setup Rust toolchains
+    - name: Install a Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: ${{ steps.determine-versions.outputs.nightly }},${{ steps.determine-versions.outputs.stable }}${{ inputs.toolchains && format(',{0}', inputs.toolchains) || '' }}
-        components: rust-src,clippy,rustfmt
-        # ARM target to test no-std build.
-        target: thumbv7m-none-eabi
 
-    # Install cargo-rbmt using stable toolchain.
     - name: Install cargo-rbmt
       shell: bash
       run: |
-        cargo +${{ steps.determine-versions.outputs.stable }} install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev ${{ steps.determine-versions.outputs.rbmt }} cargo-rbmt --locked
+        RBMT_VERSION="${{ inputs.rbmt-version }}"
+        [ -z "$RBMT_VERSION" ] && [ -f rbmt-version ] && RBMT_VERSION=$(cat rbmt-version)
+        [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
+        cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev "$RBMT_VERSION" cargo-rbmt --locked
+
+    # Use cargo-rbmt to determine versions and install all toolchains.
+    # Forwards the RBMT_* env vars to GitHub Actions outputs for use in subsequent steps.
+    - name: Install toolchains
+      id: install-toolchains
+      shell: bash
+      run: |
+        eval "$(cargo rbmt toolchains)"
+        echo "nightly-version=$RBMT_NIGHTLY" >> $GITHUB_OUTPUT
+        echo "stable-version=$RBMT_STABLE"   >> $GITHUB_OUTPUT
+        echo "msrv-version=$RBMT_MSRV"       >> $GITHUB_OUTPUT
 
     # ARM cross-compiler for C dependencies compiled at build-time (e.g. secp256k1-sys).
     # When a crate's build.rs uses cc-rs to compile C source files for thumbv7m-none-eabi,

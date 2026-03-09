@@ -42,22 +42,16 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install Rust nightly toolchain
+    - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: nightly
+
+    - name: Install cargo-rbmt
+      shell: bash
+      run: cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git cargo-rbmt --locked
 
     - name: Update nightly version file
-      id: nightly
       shell: bash
-      run: |
-        # Extract the date from the nightly compiler version.
-        NIGHTLY_DATE=$(rustc +nightly --verbose --version | sed -ne 's/^commit-date: //p')
-        NIGHTLY_VERSION="nightly-${NIGHTLY_DATE}"
-        # Update the nightly version file at repo root.
-        echo "${NIGHTLY_VERSION}" > nightly-version
-        echo "version=${NIGHTLY_VERSION}" >> $GITHUB_OUTPUT
-        echo "Updated nightly to: ${NIGHTLY_VERSION}"
+      run: cargo rbmt toolchains --update-nightly
 
     - name: Create pull request if version changed
       uses: peter-evans/create-pull-request@v7
@@ -65,8 +59,8 @@ runs:
         token: ${{ inputs.token || github.token }}
         author: RBMT Bot <bot@example.com>
         committer: RBMT Bot <bot@example.com>
-        title: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
-        commit-message: "Update nightly toolchain to ${{ steps.nightly.outputs.version }}"
+        title: "Update nightly toolchain"
+        commit-message: "Update nightly toolchain"
         branch: automated/update-nightly
         body: |
           Automated update to `nightly-version` by [update-nightly](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.

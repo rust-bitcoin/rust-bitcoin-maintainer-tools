@@ -42,21 +42,16 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install Rust stable toolchain
+    - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
+
+    - name: Install cargo-rbmt
+      shell: bash
+      run: cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git cargo-rbmt --locked
 
     - name: Update stable version file
-      id: stable
       shell: bash
-      run: |
-        # Extract the version from the stable compiler.
-        STABLE_VERSION=$(rustc +stable --version | sed -ne 's/^rustc //p' | cut -d ' ' -f1)
-        # Update the stable version file at repo root.
-        echo "${STABLE_VERSION}" > stable-version
-        echo "version=${STABLE_VERSION}" >> $GITHUB_OUTPUT
-        echo "Updated stable to: ${STABLE_VERSION}"
+      run: cargo rbmt toolchains --update-stable
 
     - name: Create pull request if version changed
       uses: peter-evans/create-pull-request@v7
@@ -64,8 +59,8 @@ runs:
         token: ${{ inputs.token || github.token }}
         author: RBMT Bot <bot@example.com>
         committer: RBMT Bot <bot@example.com>
-        title: "Update stable toolchain to ${{ steps.stable.outputs.version }}"
-        commit-message: "Update stable toolchain to ${{ steps.stable.outputs.version }}"
+        title: "Update stable toolchain"
+        commit-message: "Update stable toolchain"
         branch: automated/update-stable
         body: |
           Automated update to `stable-version` by [update-stable](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.
