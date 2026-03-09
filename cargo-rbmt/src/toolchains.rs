@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use xshell::Shell;
 
 use crate::environment::{is_quiet_mode, quiet_println};
@@ -28,19 +26,21 @@ pub fn run(sh: &Shell, update_nightly: bool, update_stable: bool) -> Result<(), 
     if update_nightly {
         install_toolchain(sh, "nightly")?;
         let version = resolve_nightly_version(sh)?;
-        write_version_file("nightly-version", &version)?;
+        write_version_file(sh, "nightly-version", &version)?;
         eprintln!("Updated nightly-version: {}", version);
     }
 
     if update_stable {
         install_toolchain(sh, "stable")?;
         let version = resolve_stable_version(sh)?;
-        write_version_file("stable-version", &version)?;
+        write_version_file(sh, "stable-version", &version)?;
         eprintln!("Updated stable-version: {}", version);
     }
 
-    let nightly = read_version_file("nightly-version").unwrap_or_else(|| "nightly".to_string());
-    let stable = read_version_file("stable-version").unwrap_or_else(|| "stable".to_string());
+    let nightly = read_version_file(sh, "nightly-version")
+        .ok_or("nightly-version file not found in repository root")?;
+    let stable = read_version_file(sh, "stable-version")
+        .ok_or("stable-version file not found in repository root")?;
     let msrv = get_workspace_msrv(sh)?;
 
     quiet_println(&format!(
@@ -105,9 +105,13 @@ fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-/// Read a version file from the current directory, trimming whitespace.
-fn read_version_file(filename: &str) -> Option<String> {
-    let path = Path::new(filename);
+/// Read a version file from the shell's current directory, trimming whitespace.
+///
+/// Uses `sh.current_dir()` rather than a bare relative path because
+/// `sh.change_dir()` only updates xshell's internal working directory, not
+/// the process working directory used by `std::fs`.
+fn read_version_file(sh: &Shell, filename: &str) -> Option<String> {
+    let path = sh.current_dir().join(filename);
     if path.exists() {
         std::fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
     } else {
@@ -115,8 +119,8 @@ fn read_version_file(filename: &str) -> Option<String> {
     }
 }
 
-/// Write a version string to a file in the current directory, with a trailing newline.
-fn write_version_file(filename: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
-    std::fs::write(filename, format!("{}\n", version))?;
+/// Write a version string to a file in the shell's current directory, with a trailing newline.
+fn write_version_file(sh: &Shell, filename: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::write(sh.current_dir().join(filename), format!("{}\n", version))?;
     Ok(())
 }

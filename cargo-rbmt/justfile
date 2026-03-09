@@ -7,24 +7,32 @@
 # Specific recipes (`lint`, `test`) call the generic `_rbmt` recipe with
 # appropriate defaults.
 
+# Toolchain versions for the workspace.
+nightly := trim(read(justfile_directory() / "../nightly-version"))
+stable  := trim(read(justfile_directory() / "../stable-version"))
+
 # List available recipes.
 _default:
     @just --list
 
 # Install rbmt from the local workspace path.
-@_install:
+@install:
     cargo install --quiet --path .
+
+# Install workspace toolchains.
+@toolchains: install
+    RBMT_LOG_LEVEL=quiet cargo rbmt toolchains > /dev/null
 
 # Format files.
 @fmt:
-    cargo +nightly fmt --all
+    cargo +{{nightly}} fmt --all
 
 # Run CI tasks using rbmt.
-@_rbmt task toolchain="stable" lock="existing": _install
+@_rbmt task toolchain=stable lock="existing": install toolchains
     RBMT_LOG_LEVEL=quiet cargo +{{toolchain}} rbmt --lock-file {{lock}} {{task}}
 
 # Lint with clippy.
-@lint: (_rbmt "lint" "nightly")
+@lint: (_rbmt "lint" nightly)
 
 # Run tests.
 @test: (_rbmt "test stable")
@@ -33,4 +41,4 @@ _default:
 @msrv: (_rbmt "test msrv" "1.85.0" "existing")
 
 # Update Cargo-minimal.lock and Cargo-recent.lock files.
-@lock: (_rbmt "lock" "nightly")
+@lock: (_rbmt "lock" nightly)
