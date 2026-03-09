@@ -22,7 +22,15 @@ const ENV_MSRV: &str = "RBMT_MSRV";
 /// to `nightly-version` before the normal install and export path runs.
 ///
 /// When `update_stable` is true, the same is done for `stable-version`.
-pub fn run(sh: &Shell, update_nightly: bool, update_stable: bool) -> Result<(), Box<dyn std::error::Error>> {
+///
+/// When `msrv` is true, print the workspace MSRV to stdout and exit without
+/// installing any toolchains.
+pub fn run(sh: &Shell, update_nightly: bool, update_stable: bool, msrv: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if msrv {
+        let msrv = get_workspace_msrv(sh)?;
+        println!("{}", msrv);
+        return Ok(());
+    }
     if update_nightly {
         install_toolchain(sh, "nightly")?;
         let version = resolve_nightly_version(sh)?;

@@ -26,10 +26,10 @@ macro_rules! quiet_cmd {
     }};
 }
 
-/// Print a message unless in quiet mode.
+/// Print a message to stderr unless in quiet mode.
 pub fn quiet_println(msg: &str) {
     if !is_quiet_mode() {
-        println!("{}", msg);
+        eprintln!("{}", msg);
     }
 }
 

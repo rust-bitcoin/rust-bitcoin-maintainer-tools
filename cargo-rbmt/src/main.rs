@@ -76,6 +76,9 @@ enum Commands {
         /// Update the `stable-version` file.
         #[arg(long)]
         update_stable: bool,
+        /// Print the workspace MSRV and exit without installing any toolchains.
+        #[arg(long)]
+        msrv: bool,
     },
 }
 
@@ -149,8 +152,8 @@ fn main() {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },
-        Commands::Toolchains { update_nightly, update_stable } =>
-            if let Err(e) = toolchains::run(&sh, update_nightly, update_stable) {
+        Commands::Toolchains { update_nightly, update_stable, msrv } =>
+            if let Err(e) = toolchains::run(&sh, update_nightly, update_stable, msrv) {
                 eprintln!("Error setting up toolchains: {}", e);
                 process::exit(1);
             },
