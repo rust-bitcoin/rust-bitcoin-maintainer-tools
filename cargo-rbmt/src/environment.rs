@@ -1,5 +1,5 @@
-use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use xshell::Shell;
 
@@ -163,4 +163,35 @@ pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> 
         json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
 
     Ok(target_dir.to_string())
+}
+
+/// A minimal representation of a package manifest (`Cargo.toml`).
+///
+/// Only fields not available via `cargo metadata` are included here. Prefer
+/// `cargo metadata` for all other package information since it is the stable,
+/// supported interface for querying package data.
+pub struct Manifest {
+    /// The `exclude` field from `[package]`, listing paths excluded from publishing.
+    pub exclude: Vec<String>,
+}
+
+impl Manifest {
+    /// Read and parse the `Cargo.toml` in the given package directory.
+    pub fn read(package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        #[derive(serde::Deserialize)]
+        struct CargoToml {
+            package: CargoPackage,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct CargoPackage {
+            #[serde(default)]
+            exclude: Vec<String>,
+        }
+
+        let contents = fs::read_to_string(package_dir.join("Cargo.toml"))?;
+        let cargo_toml: CargoToml = toml::from_str(&contents)?;
+
+        Ok(Self { exclude: cargo_toml.package.exclude })
+    }
 }
