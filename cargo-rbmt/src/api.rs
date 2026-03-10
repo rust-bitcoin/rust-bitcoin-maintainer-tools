@@ -141,7 +141,7 @@ pub fn run(
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     environment::quiet_println("Running API check...");
-    toolchain::check_toolchain(sh, toolchain::Toolchain::Nightly)?;
+    toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
     let package_info = environment::get_packages(sh, packages)?;
     check_apis(sh, &package_info, baseline)?;

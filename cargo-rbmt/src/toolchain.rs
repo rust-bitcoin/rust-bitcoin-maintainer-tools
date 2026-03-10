@@ -4,6 +4,23 @@ use xshell::Shell;
 
 use crate::quiet_cmd;
 
+/// Environment variable that rustup's shims read to route `rustc`, `cargo`, and
+/// other toolchain commands to a specific installed toolchain.
+///
+/// When a user invokes `cargo +nightly <subcommand>`, Cargo translates the
+/// `+nightly` flag into `RUSTUP_TOOLCHAIN=nightly` before exec-ing the rustup
+/// shim, so all child processes spawned during that invocation inherit the
+/// correct toolchain automatically. Setting this variable directly has the same
+/// effect and is the supported mechanism for propagating a toolchain choice into
+/// subprocesses without repeating the `+toolchain` flag on every inner call.
+const RUSTUP_TOOLCHAIN: &str = "RUSTUP_TOOLCHAIN";
+
+/// Version file that pins the nightly toolchain.
+const NIGHTLY_VERSION_FILE: &str = "nightly-version";
+
+/// Version file that pins the stable toolchain.
+const STABLE_VERSION_FILE: &str = "stable-version";
+
 /// Toolchain requirement for a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Toolchain {
@@ -13,6 +30,69 @@ pub enum Toolchain {
     Stable,
     /// Minimum Supported Rust Version.
     Msrv,
+}
+
+impl Toolchain {
+    /// Read the pinned version for this toolchain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the version file is missing or empty, or if the
+    /// workspace MSRV cannot be determined.
+    pub fn read_version(self, sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            Self::Nightly => Self::read_version_file(sh, NIGHTLY_VERSION_FILE).ok_or_else(|| {
+                format!("{} file not found in repository root", NIGHTLY_VERSION_FILE).into()
+            }),
+            Self::Stable => Self::read_version_file(sh, STABLE_VERSION_FILE).ok_or_else(|| {
+                format!("{} file not found in repository root", STABLE_VERSION_FILE).into()
+            }),
+            Self::Msrv => get_workspace_msrv(sh),
+        }
+    }
+
+    /// Write a pinned version string for this toolchain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written, or if called on [`Toolchain::Msrv`].
+    pub fn write_version(
+        self,
+        sh: &Shell,
+        version: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            Self::Nightly => Self::write_version_file(sh, NIGHTLY_VERSION_FILE, version),
+            Self::Stable => Self::write_version_file(sh, STABLE_VERSION_FILE, version),
+            Self::Msrv => Err("MSRV is derived from Cargo.toml and cannot be written".into()),
+        }
+    }
+
+    /// Read a version file from the shell's current directory, trimming whitespace.
+    fn read_version_file(sh: &Shell, filename: &str) -> Option<String> {
+        // Uses `sh.current_dir()` rather than a bare relative path because
+        // `sh.change_dir()` only updates xshell's internal working directory, not
+        // the process working directory used by `std::fs`.
+        let path = sh.current_dir().join(filename);
+        if path.exists() {
+            std::fs::read_to_string(path)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            None
+        }
+    }
+
+    /// Write a version string to a file in the shell's current directory, with a trailing newline.
+    fn write_version_file(
+        sh: &Shell,
+        filename: &str,
+        version: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        std::fs::write(sh.current_dir().join(filename), format!("{}\n", version))?;
+        Ok(())
+    }
 }
 
 /// Check if the current toolchain matches the requirement of current crate.
@@ -58,6 +138,49 @@ pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn st
     }
 
     Ok(())
+}
+
+/// Auto-select via rustup if available, but always verify.
+///
+/// Combines [`maybe_set_rustup_toolchain`] and [`check_toolchain`] into a single
+/// call for the common case where both should always run together.
+///
+/// # Errors
+///
+/// Returns an error if the active toolchain does not match `required` after
+/// auto-selection. See [`check_toolchain`] for details.
+pub fn prepare_toolchain(
+    sh: &Shell,
+    required: Toolchain,
+) -> Result<(), Box<dyn std::error::Error>> {
+    maybe_set_rustup_toolchain(sh, required);
+    check_toolchain(sh, required)
+}
+
+/// Set `RUSTUP_TOOLCHAIN` on the [`Shell`] to the pinned toolchain version if
+/// rustup is available.
+///
+/// Reads the toolchain from the appropriate version file (`nightly-version`,
+/// `stable-version`, or `Cargo.toml` `rust-version`) and sets it via
+/// `sh.set_var`, which only affects child processes spawned through this shell
+/// instance and does not mutate the process environment seen by
+/// `std::env::var`.
+///
+/// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup
+/// already set `RUSTUP_TOOLCHAIN` in the process environment before this binary
+/// ran. We deliberately overwrite it with the pinned version because the version
+/// file is the authoritative source of truth for which toolchain each task
+/// requires. Falls back silently when rustup is not available (e.g. Nix) or
+/// when no version file is present.
+fn maybe_set_rustup_toolchain(sh: &Shell, required: Toolchain) {
+    // Only attempt if rustup is available.
+    if quiet_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
+        return;
+    }
+
+    if let Ok(toolchain) = required.read_version(sh) {
+        sh.set_var(RUSTUP_TOOLCHAIN, toolchain);
+    }
 }
 
 /// Extract the single MSRV shared across the workspace.

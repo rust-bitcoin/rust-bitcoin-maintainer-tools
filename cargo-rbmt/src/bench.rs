@@ -4,11 +4,11 @@ use xshell::Shell;
 
 use crate::environment::{get_packages, quiet_println};
 use crate::quiet_cmd;
-use crate::toolchain::{check_toolchain, Toolchain};
+use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Run benchmark tests for all crates in the workspace.
 pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    check_toolchain(sh, Toolchain::Nightly)?;
+    prepare_toolchain(sh, Toolchain::Nightly)?;
 
     let package_info = get_packages(sh, packages)?;
 

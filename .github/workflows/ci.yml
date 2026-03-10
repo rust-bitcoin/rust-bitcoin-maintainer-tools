@@ -6,37 +6,38 @@ on:
   pull_request:
 
 jobs:
-  dogfood:
+  dogfood-lints:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
       - name: Dogfood with cargo-rbmt
-        id: setup
         uses: ./.github/actions/setup-rbmt
         with:
           rbmt-version: ${{ github.sha }}
 
       - name: Run lint on workspace
-        run: cargo +${{ steps.setup.outputs.nightly-version }} rbmt --lock-file existing lint
+        run: cargo rbmt --lock-file existing lint
 
       - name: Build documentation (stable)
-        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file existing docs
+        run: cargo rbmt --lock-file existing docs
 
       - name: Build documentation (docs.rs / nightly)
-        run: cargo +${{ steps.setup.outputs.nightly-version }} rbmt --lock-file existing docsrs
+        run: cargo rbmt --lock-file existing docsrs
 
-      - name: Run tests with stable (existing lock)
-        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file existing test stable
+  dogfood-test-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lock-file: [existing, recent, minimal]
+        toolchain: [stable, msrv]
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Run tests with nightly (existing lock)
-        run: cargo +${{ steps.setup.outputs.nightly-version }} rbmt --lock-file existing test nightly
+      - name: Dogfood with cargo-rbmt
+        uses: ./.github/actions/setup-rbmt
+        with:
+          rbmt-version: ${{ github.sha }}
 
-      - name: Run tests with stable (recent dependencies)
-        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file recent test stable
-
-      - name: Run tests with stable (minimal dependencies)
-        run: cargo +${{ steps.setup.outputs.stable-version }} rbmt --lock-file minimal test stable
-
-      - name: Run tests with MSRV (existing lock)
-        run: cargo +${{ steps.setup.outputs.msrv-version }} rbmt --lock-file existing test msrv
+      - name: Run tests (${{ matrix.toolchain }}, ${{ matrix.lock-file }} lock)
+        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test ${{ matrix.toolchain }}

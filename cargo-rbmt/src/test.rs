@@ -12,7 +12,7 @@ use xshell::{Cmd, Shell};
 
 use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
-use crate::toolchain::{check_toolchain, Toolchain};
+use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Conventinal feature flags used across rust-bitcoin crates.
 #[derive(Debug, Clone, Copy)]
@@ -163,8 +163,9 @@ pub fn run(
         quiet_println(&format!("Testing crate: {}", package_dir.display()));
 
         let _dir = sh.push_dir(package_dir);
-        // Check the package's MSRV, not the workspace root.
-        check_toolchain(sh, toolchain)?;
+        // prepare_toolchain is called per-package because MSRV is read from
+        // each package's Cargo.toml individually rather than the workspace root.
+        prepare_toolchain(sh, toolchain)?;
         let config = TestConfig::load(Path::new(package_dir))?;
         let release = release || config.release;
 
