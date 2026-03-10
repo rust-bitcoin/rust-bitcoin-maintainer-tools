@@ -23,8 +23,8 @@ struct Config {
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct PrereleaseConfig {
-    /// If true, opt-out of pre-release checks for this package.
-    skip: bool,
+    /// Whether to run pre-release checks for this package. Defaults to `false`.
+    enabled: bool,
 }
 
 impl PrereleaseConfig {
@@ -33,8 +33,7 @@ impl PrereleaseConfig {
         let config_path = package_dir.join(CONFIG_FILE_PATH);
 
         if !config_path.exists() {
-            // Return default config (skip = false) if file doesn't exist.
-            return Ok(Self { skip: false });
+            return Ok(Self::default());
         }
 
         let contents = std::fs::read_to_string(&config_path)?;
@@ -52,9 +51,9 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
     for (_package_name, package_dir) in packages {
         let config = PrereleaseConfig::load(Path::new(package_dir))?;
 
-        if config.skip {
+        if !config.enabled {
             skipped.push(package_dir);
-            quiet_println(&format!("Skipping package: {} (marked as skip)", package_dir.display()));
+            quiet_println(&format!("Skipping package: {} (pre-release not enabled)", package_dir.display()));
             continue;
         }
 
