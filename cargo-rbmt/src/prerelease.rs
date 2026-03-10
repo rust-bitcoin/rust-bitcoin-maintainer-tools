@@ -10,7 +10,7 @@ use xshell::Shell;
 use crate::environment::{get_packages, get_target_dir, quiet_println, CONFIG_FILE_PATH};
 use crate::lock::LockFile;
 use crate::quiet_cmd;
-use crate::toolchain::{check_toolchain, Toolchain};
+use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Pre-release configuration loaded from rbmt.toml.
 #[derive(Debug, Deserialize, Default)]
@@ -133,9 +133,7 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// or don't resolve correctly. This function tests the package with minimal
 /// dependency versions attemting to catch compatibility issues.
 fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    // Ensure we have nightly toolchain for minimal versions testing.
-    check_toolchain(sh, Toolchain::Nightly)?;
-
+    prepare_toolchain(sh, Toolchain::Nightly)?;
     quiet_cmd!(sh, "cargo publish --dry-run").run()?;
     let package_dir = get_publish_dir(sh)?;
 

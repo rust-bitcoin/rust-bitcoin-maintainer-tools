@@ -12,7 +12,7 @@ use xshell::Shell;
 
 use crate::environment::quiet_println;
 use crate::quiet_cmd;
-use crate::toolchain::{check_toolchain, Toolchain};
+use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// The standard Cargo lockfile name.
 const CARGO_LOCK: &str = "Cargo.lock";
@@ -117,7 +117,7 @@ impl LockFile {
 /// The original Cargo.lock is preserved and restored after generation in case
 /// it is being tracked for publication.
 pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    check_toolchain(sh, Toolchain::Nightly)?;
+    prepare_toolchain(sh, Toolchain::Nightly)?;
 
     let repo_dir = sh.current_dir();
     quiet_println(&format!("Updating lock files in: {}", repo_dir.display()));

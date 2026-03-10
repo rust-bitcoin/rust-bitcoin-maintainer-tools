@@ -2,7 +2,7 @@ use xshell::Shell;
 
 use crate::environment::{is_quiet_mode, quiet_println};
 use crate::quiet_cmd;
-use crate::toolchain::get_workspace_msrv;
+use crate::toolchain::{get_workspace_msrv, read_version_file};
 
 /// Fixed components installed on every toolchain.
 const COMPONENTS: &str = "rust-src,clippy,rustfmt";
@@ -111,20 +111,6 @@ fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::err
     // passed to `eval`.
     cmd.ignore_stdout().run()?;
     Ok(())
-}
-
-/// Read a version file from the shell's current directory, trimming whitespace.
-///
-/// Uses `sh.current_dir()` rather than a bare relative path because
-/// `sh.change_dir()` only updates xshell's internal working directory, not
-/// the process working directory used by `std::fs`.
-fn read_version_file(sh: &Shell, filename: &str) -> Option<String> {
-    let path = sh.current_dir().join(filename);
-    if path.exists() {
-        std::fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-    } else {
-        None
-    }
 }
 
 /// Write a version string to a file in the shell's current directory, with a trailing newline.

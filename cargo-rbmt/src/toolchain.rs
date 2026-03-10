@@ -4,6 +4,17 @@ use xshell::Shell;
 
 use crate::quiet_cmd;
 
+/// Environment variable that rustup's shims read to route `rustc`, `cargo`, and
+/// other toolchain commands to a specific installed toolchain.
+///
+/// When a user invokes `cargo +nightly <subcommand>`, Cargo translates the
+/// `+nightly` flag into `RUSTUP_TOOLCHAIN=nightly` before exec-ing the rustup
+/// shim, so all child processes spawned during that invocation inherit the
+/// correct toolchain automatically. Setting this variable directly has the same
+/// effect and is the supported mechanism for propagating a toolchain choice into
+/// subprocesses without repeating the `+toolchain` flag on every inner call.
+const RUSTUP_TOOLCHAIN: &str = "RUSTUP_TOOLCHAIN";
+
 /// Toolchain requirement for a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Toolchain {
@@ -60,6 +71,55 @@ pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn st
     Ok(())
 }
 
+/// Auto-select via rustup if available, but always verify.
+///
+/// Combines [`maybe_set_rustup_toolchain`] and [`check_toolchain`] into a single
+/// call for the common case where both should always run together.
+///
+/// # Errors
+///
+/// Returns an error if the active toolchain does not match `required` after
+/// auto-selection. See [`check_toolchain`] for details.
+pub fn prepare_toolchain(
+    sh: &Shell,
+    required: Toolchain,
+) -> Result<(), Box<dyn std::error::Error>> {
+    maybe_set_rustup_toolchain(sh, required);
+    check_toolchain(sh, required)
+}
+
+/// Set `RUSTUP_TOOLCHAIN` on the [`Shell`] to the pinned toolchain version if
+/// rustup is available.
+///
+/// Reads the toolchain from the appropriate version file (`nightly-version`,
+/// `stable-version`, or `Cargo.toml` `rust-version`) and sets it via
+/// `sh.set_var`, which only affects child processes spawned through this shell
+/// instance and does not mutate the process environment seen by
+/// `std::env::var`.
+///
+/// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup
+/// already set `RUSTUP_TOOLCHAIN` in the process environment before this binary
+/// ran. We deliberately overwrite it with the pinned version because the version
+/// file is the authoritative source of truth for which toolchain each task
+/// requires. Falls back silently when rustup is not available (e.g. Nix) or
+/// when no version file is present.
+fn maybe_set_rustup_toolchain(sh: &Shell, required: Toolchain) {
+    // Only attempt if rustup is available; fall back silently (e.g. Nix).
+    if quiet_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
+        return;
+    }
+
+    let toolchain = match required {
+        Toolchain::Nightly => read_version_file(sh, "nightly-version"),
+        Toolchain::Stable => read_version_file(sh, "stable-version"),
+        Toolchain::Msrv => get_workspace_msrv(sh).ok(),
+    };
+
+    if let Some(toolchain) = toolchain {
+        sh.set_var(RUSTUP_TOOLCHAIN, toolchain);
+    }
+}
+
 /// Extract the single MSRV shared across the workspace.
 ///
 /// Collects all `rust-version` fields declared by packages in the workspace and
@@ -76,6 +136,19 @@ pub fn get_workspace_msrv(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
         [] => Err("No MSRV (rust-version) found in any Cargo.toml in the workspace".into()),
         [msrv] => Ok(msrv.clone()),
         _ => Err(format!("Workspace packages have conflicting MSRVs: {}", msrvs.join(", ")).into()),
+    }
+}
+
+/// Read a version file from the shell's current directory, trimming whitespace.
+pub(crate) fn read_version_file(sh: &Shell, filename: &str) -> Option<String> {
+    // Uses `sh.current_dir()` rather than a bare relative path because
+    // `sh.change_dir()` only updates xshell's internal working directory, not
+    // the process working directory used by `std::fs`.
+    let path = sh.current_dir().join(filename);
+    if path.exists() {
+        std::fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    } else {
+        None
     }
 }
 
