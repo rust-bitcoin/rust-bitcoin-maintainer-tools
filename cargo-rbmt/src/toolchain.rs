@@ -15,6 +15,12 @@ use crate::quiet_cmd;
 /// subprocesses without repeating the `+toolchain` flag on every inner call.
 const RUSTUP_TOOLCHAIN: &str = "RUSTUP_TOOLCHAIN";
 
+/// Version file that pins the nightly toolchain.
+const NIGHTLY_VERSION_FILE: &str = "nightly-version";
+
+/// Version file that pins the stable toolchain.
+const STABLE_VERSION_FILE: &str = "stable-version";
+
 /// Toolchain requirement for a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Toolchain {
@@ -24,6 +30,69 @@ pub enum Toolchain {
     Stable,
     /// Minimum Supported Rust Version.
     Msrv,
+}
+
+impl Toolchain {
+    /// Read the pinned version for this toolchain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the version file is missing or empty, or if the
+    /// workspace MSRV cannot be determined.
+    pub fn read_version(self, sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            Self::Nightly => Self::read_version_file(sh, NIGHTLY_VERSION_FILE).ok_or_else(|| {
+                format!("{} file not found in repository root", NIGHTLY_VERSION_FILE).into()
+            }),
+            Self::Stable => Self::read_version_file(sh, STABLE_VERSION_FILE).ok_or_else(|| {
+                format!("{} file not found in repository root", STABLE_VERSION_FILE).into()
+            }),
+            Self::Msrv => get_workspace_msrv(sh),
+        }
+    }
+
+    /// Write a pinned version string for this toolchain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written, or if called on [`Toolchain::Msrv`].
+    pub fn write_version(
+        self,
+        sh: &Shell,
+        version: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            Self::Nightly => Self::write_version_file(sh, NIGHTLY_VERSION_FILE, version),
+            Self::Stable => Self::write_version_file(sh, STABLE_VERSION_FILE, version),
+            Self::Msrv => Err("MSRV is derived from Cargo.toml and cannot be written".into()),
+        }
+    }
+
+    /// Read a version file from the shell's current directory, trimming whitespace.
+    fn read_version_file(sh: &Shell, filename: &str) -> Option<String> {
+        // Uses `sh.current_dir()` rather than a bare relative path because
+        // `sh.change_dir()` only updates xshell's internal working directory, not
+        // the process working directory used by `std::fs`.
+        let path = sh.current_dir().join(filename);
+        if path.exists() {
+            std::fs::read_to_string(path)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            None
+        }
+    }
+
+    /// Write a version string to a file in the shell's current directory, with a trailing newline.
+    fn write_version_file(
+        sh: &Shell,
+        filename: &str,
+        version: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        std::fs::write(sh.current_dir().join(filename), format!("{}\n", version))?;
+        Ok(())
+    }
 }
 
 /// Check if the current toolchain matches the requirement of current crate.
@@ -104,18 +173,12 @@ pub fn prepare_toolchain(
 /// requires. Falls back silently when rustup is not available (e.g. Nix) or
 /// when no version file is present.
 fn maybe_set_rustup_toolchain(sh: &Shell, required: Toolchain) {
-    // Only attempt if rustup is available; fall back silently (e.g. Nix).
+    // Only attempt if rustup is available.
     if quiet_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
         return;
     }
 
-    let toolchain = match required {
-        Toolchain::Nightly => read_version_file(sh, "nightly-version"),
-        Toolchain::Stable => read_version_file(sh, "stable-version"),
-        Toolchain::Msrv => get_workspace_msrv(sh).ok(),
-    };
-
-    if let Some(toolchain) = toolchain {
+    if let Ok(toolchain) = required.read_version(sh) {
         sh.set_var(RUSTUP_TOOLCHAIN, toolchain);
     }
 }
@@ -136,19 +199,6 @@ pub fn get_workspace_msrv(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
         [] => Err("No MSRV (rust-version) found in any Cargo.toml in the workspace".into()),
         [msrv] => Ok(msrv.clone()),
         _ => Err(format!("Workspace packages have conflicting MSRVs: {}", msrvs.join(", ")).into()),
-    }
-}
-
-/// Read a version file from the shell's current directory, trimming whitespace.
-pub(crate) fn read_version_file(sh: &Shell, filename: &str) -> Option<String> {
-    // Uses `sh.current_dir()` rather than a bare relative path because
-    // `sh.change_dir()` only updates xshell's internal working directory, not
-    // the process working directory used by `std::fs`.
-    let path = sh.current_dir().join(filename);
-    if path.exists() {
-        std::fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-    } else {
-        None
     }
 }
 

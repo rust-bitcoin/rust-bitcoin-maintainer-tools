@@ -2,7 +2,7 @@ use xshell::Shell;
 
 use crate::environment::{is_quiet_mode, quiet_println};
 use crate::quiet_cmd;
-use crate::toolchain::{get_workspace_msrv, read_version_file};
+use crate::toolchain::{get_workspace_msrv, Toolchain};
 
 /// Fixed components installed on every toolchain.
 const COMPONENTS: &str = "rust-src,clippy,rustfmt";
@@ -34,21 +34,19 @@ pub fn run(sh: &Shell, update_nightly: bool, update_stable: bool, msrv: bool) ->
     if update_nightly {
         install_toolchain(sh, "nightly")?;
         let version = resolve_nightly_version(sh)?;
-        write_version_file(sh, "nightly-version", &version)?;
+        Toolchain::Nightly.write_version(sh, &version)?;
         eprintln!("Updated nightly-version: {}", version);
     }
 
     if update_stable {
         install_toolchain(sh, "stable")?;
         let version = resolve_stable_version(sh)?;
-        write_version_file(sh, "stable-version", &version)?;
+        Toolchain::Stable.write_version(sh, &version)?;
         eprintln!("Updated stable-version: {}", version);
     }
 
-    let nightly = read_version_file(sh, "nightly-version")
-        .ok_or("nightly-version file not found in repository root")?;
-    let stable = read_version_file(sh, "stable-version")
-        .ok_or("stable-version file not found in repository root")?;
+    let nightly = Toolchain::Nightly.read_version(sh)?;
+    let stable = Toolchain::Stable.read_version(sh)?;
     let msrv = get_workspace_msrv(sh)?;
 
     quiet_println(&format!(
@@ -113,8 +111,4 @@ fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-/// Write a version string to a file in the shell's current directory, with a trailing newline.
-fn write_version_file(sh: &Shell, filename: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
-    std::fs::write(sh.current_dir().join(filename), format!("{}\n", version))?;
-    Ok(())
-}
+
