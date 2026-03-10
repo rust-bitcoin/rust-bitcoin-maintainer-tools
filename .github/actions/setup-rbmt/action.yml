@@ -11,17 +11,6 @@ inputs:
     description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root, or falls back to master.'
     required: false
 
-outputs:
-  nightly-version:
-    description: 'The nightly toolchain version (e.g., nightly-2024-01-15).'
-    value: ${{ steps.install-toolchains.outputs.nightly-version }}
-  stable-version:
-    description: 'The stable toolchain version (e.g., 1.74.0).'
-    value: ${{ steps.install-toolchains.outputs.stable-version }}
-  msrv-version:
-    description: 'The MSRV toolchain version (e.g., 1.85.0).'
-    value: ${{ steps.install-toolchains.outputs.msrv-version }}
-
 runs:
   using: "composite"
   steps:
@@ -36,16 +25,9 @@ runs:
         [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
         cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev "$RBMT_VERSION" cargo-rbmt --locked
 
-    # Use cargo-rbmt to determine versions and install all toolchains.
-    # Forwards the RBMT_* env vars to GitHub Actions outputs for use in subsequent steps.
     - name: Install toolchains
-      id: install-toolchains
       shell: bash
-      run: |
-        eval "$(cargo rbmt toolchains)"
-        echo "nightly-version=$RBMT_NIGHTLY" >> $GITHUB_OUTPUT
-        echo "stable-version=$RBMT_STABLE"   >> $GITHUB_OUTPUT
-        echo "msrv-version=$RBMT_MSRV"       >> $GITHUB_OUTPUT
+      run: cargo rbmt toolchains
 
     # ARM cross-compiler for C dependencies compiled at build-time (e.g. secp256k1-sys).
     # When a crate's build.rs uses cc-rs to compile C source files for thumbv7m-none-eabi,
