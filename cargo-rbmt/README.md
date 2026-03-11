@@ -173,8 +173,8 @@ The command prints `export` statements to stdout and all other output to stderr,
 eval "$(cargo rbmt toolchains)"
 
 cargo +$RBMT_NIGHTLY rbmt lint
-cargo +$RBMT_STABLE rbmt test stable
-cargo +$RBMT_MSRV rbmt test msrv
+cargo +$RBMT_STABLE rbmt test
+cargo +$RBMT_MSRV rbmt test --toolchain msrv
 ```
 
 The `--update-nightly` and `--update-stable` flags each install the corresponding floating toolchain, query its resolved version from `rustc`, and write the result to the appropriate version file before proceeding with the normal install and export.
@@ -223,7 +223,7 @@ steps:
   - uses: actions/checkout@v6
   - uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/setup-rbmt@master
     id: setup
-  - run: cargo +${{ steps.setup.outputs.stable }} rbmt test stable
+  - run: cargo +${{ steps.setup.outputs.stable }} rbmt test
 ```
 
 See the [action](../.github/actions/setup-rbmt/action.yml) for more details.

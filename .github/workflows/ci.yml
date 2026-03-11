@@ -40,4 +40,4 @@ jobs:
           rbmt-version: ${{ github.sha }}
 
       - name: Run tests (${{ matrix.toolchain }}, ${{ matrix.lock-file }} lock)
-        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test ${{ matrix.toolchain }}
+        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test --toolchain ${{ matrix.toolchain }}
