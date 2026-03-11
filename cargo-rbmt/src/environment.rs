@@ -11,6 +11,9 @@ const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
 /// Path to the RBMT configuration file relative to workspace/crate root.
 pub const CONFIG_FILE_PATH: &str = "rbmt.toml";
 
+/// A workspace package: its manifest name and directory path.
+pub type Package = (String, PathBuf);
+
 /// Check if we're in quiet mode via environment variable.
 pub fn is_quiet_mode() -> bool { env::var(LOG_LEVEL_ENV_VAR).is_ok_and(|v| v == "quiet") }
 
@@ -70,11 +73,11 @@ pub fn change_to_repo_root(sh: &Shell) {
 pub fn get_packages(
     sh: &Shell,
     packages: &[String],
-) -> Result<Vec<(String, PathBuf)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<Package>, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
-    let all_packages: Vec<(String, PathBuf)> = json["packages"]
+    let all_packages: Vec<Package> = json["packages"]
         .as_array()
         .ok_or("Missing 'packages' field in cargo metadata")?
         .iter()
@@ -107,7 +110,7 @@ pub fn get_packages(
         }
 
         // Fall back to directory basename match.
-        let dir_matches: Vec<&(String, PathBuf)> = all_packages
+        let dir_matches: Vec<&Package> = all_packages
             .iter()
             .filter(|(_, dir)| {
                 dir.file_name().and_then(|n| n.to_str()).is_some_and(|n| n == requested)
@@ -143,7 +146,7 @@ pub fn get_packages(
     }
 
     // Filter to only resolved packages.
-    let package_info: Vec<(String, PathBuf)> = all_packages
+    let package_info: Vec<Package> = all_packages
         .into_iter()
         .filter(|(name, _)| resolved_names.iter().any(|r| r == name))
         .collect();

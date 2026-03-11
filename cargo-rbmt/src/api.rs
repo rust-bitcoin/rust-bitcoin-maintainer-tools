@@ -137,14 +137,13 @@ impl FeatureConfig {
 /// * `baseline` - Git ref for optional semver comparison.
 pub fn run(
     sh: &Shell,
-    packages: &[String],
+    packages: &[environment::Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     environment::quiet_println("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
-    let package_info = environment::get_packages(sh, packages)?;
-    check_apis(sh, &package_info, baseline)?;
+    check_apis(sh, packages, baseline)?;
 
     Ok(())
 }
@@ -202,7 +201,7 @@ fn get_package_apis(
 /// validates that features are additive, and checks for git changes.
 fn check_apis(
     sh: &Shell,
-    package_info: &[(String, PathBuf)],
+    package_info: &[crate::environment::Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut api_dirs: Vec<PathBuf> = Vec::new();

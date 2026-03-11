@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_packages, get_target_dir, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_target_dir, quiet_println, Package, CONFIG_FILE_PATH};
 use crate::lock::LockFile;
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
@@ -44,13 +44,12 @@ impl PrereleaseConfig {
 }
 
 /// Run pre-release readiness checks for all packages.
-pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let package_info = get_packages(sh, packages)?;
-    quiet_println(&format!("Running pre-release checks on {} packages", package_info.len()));
+pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    quiet_println(&format!("Running pre-release checks on {} packages", packages.len()));
 
     let mut skipped = Vec::new();
 
-    for (_package_name, package_dir) in &package_info {
+    for (_package_name, package_dir) in packages {
         let config = PrereleaseConfig::load(Path::new(package_dir))?;
 
         if config.skip {

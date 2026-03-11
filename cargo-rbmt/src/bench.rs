@@ -2,19 +2,17 @@
 
 use xshell::Shell;
 
-use crate::environment::{get_packages, quiet_println};
+use crate::environment::{quiet_println, Package};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Run benchmark tests for all crates in the workspace.
-pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
-    let package_info = get_packages(sh, packages)?;
+    quiet_println(&format!("Running bench tests for {} crates", packages.len()));
 
-    quiet_println(&format!("Running bench tests for {} crates", package_info.len()));
-
-    for (_package_name, package_dir) in &package_info {
+    for (_package_name, package_dir) in packages {
         quiet_println(&format!("Running bench tests in: {}", package_dir.display()));
 
         // Use pushd pattern to change and restore directory.

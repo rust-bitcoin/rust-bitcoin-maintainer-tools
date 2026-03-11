@@ -2,12 +2,12 @@
 
 use xshell::Shell;
 
-use crate::environment::{get_packages, quiet_println};
+use crate::environment::{quiet_println, Package};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Format (or check the formatting of) all packages in the workspace.
-pub fn run(sh: &Shell, check: bool, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, check: bool, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     if check {
@@ -21,8 +21,7 @@ pub fn run(sh: &Shell, check: bool, packages: &[String]) -> Result<(), Box<dyn s
     if packages.is_empty() {
         cmd = cmd.arg("--all");
     } else {
-        let resolved = get_packages(sh, packages)?;
-        for (name, _) in &resolved {
+        for (name, _) in packages {
             cmd = cmd.args(&["-p", name]);
         }
     }

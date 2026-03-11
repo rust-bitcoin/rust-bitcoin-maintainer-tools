@@ -14,7 +14,7 @@ mod toolchains;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use environment::{change_to_repo_root, configure_log_level};
+use environment::{change_to_repo_root, configure_log_level, get_packages, Package};
 use lock::LockFile;
 use toolchain::Toolchain;
 use xshell::Shell;
@@ -115,45 +115,54 @@ fn main() {
         }
     }
 
+    // Resolve package names once up front for all commands.
+    let packages: Vec<Package> = match get_packages(&sh, &cli.packages) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error resolving packages: {}", e);
+            process::exit(1);
+        }
+    };
+
     match cli.command {
         Commands::Api { baseline } => {
-            if let Err(e) = api::run(&sh, &cli.packages, baseline.as_deref()) {
+            if let Err(e) = api::run(&sh, &packages, baseline.as_deref()) {
                 eprintln!("Error running API check: {}", e);
                 process::exit(1);
             }
         }
         Commands::Fmt { check } =>
-            if let Err(e) = fmt::run(&sh, check, &cli.packages) {
+            if let Err(e) = fmt::run(&sh, check, &packages) {
                 eprintln!("Error running fmt task: {}", e);
                 process::exit(1);
             },
         Commands::Lint =>
-            if let Err(e) = lint::run(&sh, &cli.packages) {
+            if let Err(e) = lint::run(&sh, &packages) {
                 eprintln!("Error running lint task: {}", e);
                 process::exit(1);
             },
         Commands::Docs =>
-            if let Err(e) = docs::run(&sh, &cli.packages) {
+            if let Err(e) = docs::run(&sh, &packages) {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
             },
         Commands::Docsrs =>
-            if let Err(e) = docs::run_docsrs(&sh, &cli.packages) {
+            if let Err(e) = docs::run_docsrs(&sh, &packages) {
                 eprintln!("Error building docs.rs docs: {}", e);
                 process::exit(1);
             },
         Commands::Bench =>
-            if let Err(e) = bench::run(&sh, &cli.packages) {
+            if let Err(e) = bench::run(&sh, &packages) {
                 eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             },
         Commands::Test { toolchain, no_debug_assertions, release } =>
-            if let Err(e) = test::run(&sh, toolchain, no_debug_assertions, release, &cli.packages) {
+            if let Err(e) = test::run(&sh, toolchain, no_debug_assertions, release, &packages) {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             },
         Commands::Integration =>
-            if let Err(e) = integration::run(&sh, &cli.packages) {
+            if let Err(e) = integration::run(&sh, &packages) {
                 eprintln!("Error running integration tests: {}", e);
                 process::exit(1);
             },
@@ -163,7 +172,7 @@ fn main() {
                 process::exit(1);
             },
         Commands::Prerelease =>
-            if let Err(e) = prerelease::run(&sh, &cli.packages) {
+            if let Err(e) = prerelease::run(&sh, &packages) {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },
