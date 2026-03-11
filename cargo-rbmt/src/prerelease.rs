@@ -43,7 +43,7 @@ impl PrereleaseConfig {
 }
 
 /// Run pre-release readiness checks for all packages.
-pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[Package], force: bool) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Running pre-release checks on {} packages", packages.len()));
 
     let mut skipped = Vec::new();
@@ -51,7 +51,7 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
     for (_package_name, package_dir) in packages {
         let config = PrereleaseConfig::load(Path::new(package_dir))?;
 
-        if !config.enabled {
+        if !config.enabled && !force {
             skipped.push(package_dir);
             quiet_println(&format!("Skipping package: {} (pre-release not enabled)", package_dir.display()));
             continue;
