@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use xshell::{cmd, Shell};
 
-use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{quiet_println, Package, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 
 /// Integration test configuration loaded from rbmt.toml.
@@ -54,11 +54,10 @@ impl IntegrationConfig {
 /// # Arguments
 ///
 /// * `packages` - Optional filter for specific package names.
-pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let package_info = get_packages(sh, packages)?;
-    quiet_println(&format!("Looking for integration tests in {} crate(s)", package_info.len()));
+pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    quiet_println(&format!("Looking for integration tests in {} crate(s)", packages.len()));
 
-    for (_package_name, package_dir) in &package_info {
+    for (_package_name, package_dir) in packages {
         let config = IntegrationConfig::load(Path::new(package_dir))?;
         let integration_dir = PathBuf::from(package_dir).join(config.package_name());
 

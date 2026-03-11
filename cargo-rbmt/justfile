@@ -8,9 +8,6 @@
 # Specific recipes (`lint`, `test`) call the generic `_rbmt` recipe with
 # appropriate defaults.
 
-# Nightly toolchain version (used for direct fmt calls).
-nightly := trim(read(justfile_directory() / "../nightly-version"))
-
 # List available recipes.
 _default:
     @just --list
@@ -23,13 +20,12 @@ _default:
 @toolchains: install
     RBMT_LOG_LEVEL=quiet cargo rbmt toolchains > /dev/null
 
-# Format files.
-@fmt:
-    cargo +{{nightly}} fmt --all
-
 # Run CI tasks using rbmt.
 @_rbmt task lock="existing": install toolchains
     RBMT_LOG_LEVEL=quiet cargo rbmt --lock-file {{lock}} {{task}}
+
+# Format files.
+@fmt: (_rbmt "fmt")
 
 # Lint with clippy.
 @lint: (_rbmt "lint")

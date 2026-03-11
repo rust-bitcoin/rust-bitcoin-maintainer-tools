@@ -4,7 +4,7 @@ use std::path::Path;
 
 use xshell::Shell;
 
-use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{get_packages, quiet_println, Package, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -40,7 +40,7 @@ impl LintConfig {
 }
 
 /// Run the lint task.
-pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
     quiet_println("Running lint task...");
 
@@ -80,16 +80,15 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// even when a package's own default features are disabled. Running clippy on each package
 /// individually ensures that each package truly compiles and passes lints with only its
 /// explicitly enabled features.
-fn lint_packages(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running package-specific lints...");
 
-    let package_info = get_packages(sh, packages)?;
-    let package_names: Vec<_> = package_info.iter().map(|(name, _)| name.as_str()).collect();
+    let package_names: Vec<_> = packages.iter().map(|(name, _)| name.as_str()).collect();
     quiet_println(&format!("Found crates: {}", package_names.join(", ")));
 
-    for (_package_name, package_dir) in package_info {
+    for (_package_name, package_dir) in packages {
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
-        let _old_dir = sh.push_dir(&package_dir);
+        let _old_dir = sh.push_dir(package_dir);
 
         // Run clippy without default features.
         quiet_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
@@ -116,17 +115,16 @@ fn lint_packages(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::err
 ///
 /// Running per-package allows each package to maintain its own whitelist of allowed duplicates
 /// via `rbmt.toml`, since some duplicates may be unavoidable for a given package but not others.
-fn check_duplicate_deps(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Checking for duplicate dependencies...");
 
-    let package_info = get_packages(sh, packages)?;
     let mut found_duplicates = false;
 
-    for (package_name, package_dir) in package_info {
-        let config = LintConfig::load(&package_dir)?;
+    for (package_name, package_dir) in packages {
+        let config = LintConfig::load(package_dir)?;
 
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
-        let _old_dir = sh.push_dir(&package_dir);
+        let _old_dir = sh.push_dir(package_dir);
 
         // Run cargo tree to find duplicates for this package, exclude dev dependencies
         // since they are not exposed to downstream consumers.
@@ -398,7 +396,7 @@ impl DuplicateTree {
 /// package.rust-version instead of clippy.toml msrv settings.
 fn check_clippy_toml_msrv(
     sh: &Shell,
-    packages: &[String],
+    packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
     const CLIPPY_CONFIG_FILES: &[&str] = &["clippy.toml", ".clippy.toml"];
 
@@ -416,8 +414,7 @@ fn check_clippy_toml_msrv(
     }
 
     // Check each package.
-    let package_info = get_packages(sh, packages)?;
-    for (_package_name, package_dir) in package_info {
+    for (_package_name, package_dir) in packages {
         for filename in CLIPPY_CONFIG_FILES {
             let path = package_dir.join(filename);
             if path.exists() {

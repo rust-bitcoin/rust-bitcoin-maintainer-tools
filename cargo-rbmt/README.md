@@ -6,6 +6,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 - [Environment Variables](#environment-variables)
 - [Configuration](#configuration)
+- [Format](#format)
 - [Lint](#lint)
 - [Test](#test)
   - [no_std](#no_std)
@@ -26,6 +27,16 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 ## Configuration
 
 Configuration for `rbmt` is stored in a per-package `rbmt.toml` file, a sibling to the package's manifest.
+
+## Format
+
+The `fmt` command formats all files in the workspace using `rustfmt` with the nightly toolchain, which is the convention in the rust-bitcoin ecosystem.
+
+```bash
+cargo rbmt fmt
+cargo rbmt fmt --check
+cargo rbmt fmt -p bitcoin
+```
 
 ## Lint
 

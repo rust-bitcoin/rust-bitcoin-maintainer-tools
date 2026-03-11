@@ -10,7 +10,7 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::{Cmd, Shell};
 
-use crate::environment::{get_packages, quiet_println, CONFIG_FILE_PATH};
+use crate::environment::{quiet_println, Package, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -148,10 +148,9 @@ pub fn run(
     toolchain: Toolchain,
     no_debug_assertions: bool,
     release: bool,
-    packages: &[String],
+    packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let package_info = get_packages(sh, packages)?;
-    quiet_println(&format!("Testing {} crates", package_info.len()));
+    quiet_println(&format!("Testing {} crates", packages.len()));
 
     // Configure RUSTFLAGS for debug assertions.
     let _env = sh.push_env(
@@ -159,7 +158,7 @@ pub fn run(
         if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
     );
 
-    for (_package_name, package_dir) in &package_info {
+    for (_package_name, package_dir) in packages {
         quiet_println(&format!("Testing crate: {}", package_dir.display()));
 
         let _dir = sh.push_dir(package_dir);
