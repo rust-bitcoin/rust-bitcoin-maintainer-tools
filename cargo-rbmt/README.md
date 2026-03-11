@@ -112,13 +112,18 @@ versions = ["29_0", "28_2", "27_2"]
 
 ## Prerelease
 
-The `prerelease` command performs readiness checks before releasing a package. By default, all packages are checked unless they explicitly opt-out.
+The `prerelease` command performs readiness checks before releasing a package. Checks are opt-in and only run for packages with `enabled = true` that also have a version bump in `Cargo.toml` since the baseline ref.
 
 ```toml
 [prerelease]
-# Set to true to skip pre-release checks for this package.
-# Use this for packages that are not yet ready for release.
-skip = true
+enabled = true
+# baseline = "master"  # default
+```
+
+Use `--force` to run checks regardless of whether a version bump is detected.
+
+```bash
+cargo rbmt prerelease --force
 ```
 
 ## Lock Files
