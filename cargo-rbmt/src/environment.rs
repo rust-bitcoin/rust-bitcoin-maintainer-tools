@@ -48,18 +48,6 @@ pub fn configure_log_level(sh: &Shell) {
     }
 }
 
-/// Change to the repository root directory.
-///
-/// # Panics
-///
-/// Panics if not in a git repository or git command fails.
-pub fn change_to_repo_root(sh: &Shell) {
-    let repo_dir = quiet_cmd!(sh, "git rev-parse --show-toplevel")
-        .read()
-        .expect("Failed to get repository root, ensure you're in a git repository");
-    sh.change_dir(&repo_dir);
-}
-
 /// Get list of package names and their directories in the workspace using cargo metadata.
 /// Returns tuples of (`package_name`, `directory_path`) to support various workspace layouts including nested crates.
 ///
@@ -154,6 +142,20 @@ pub fn get_packages(
     Ok(package_info)
 }
 
+/// Get the workspace root directory from metadata.
+///
+/// This is the directory containing the top-level `Cargo.toml` (the one with
+/// `[workspace]`). It is the authoritative location for workspace-level files
+/// such as `nightly-version` and `stable-version`, regardless of where the
+/// shell's current directory happens to be.
+pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let json: serde_json::Value = serde_json::from_str(&metadata)?;
+    let root =
+        json["workspace_root"].as_str().ok_or("Missing workspace_root in cargo metadata")?;
+    Ok(PathBuf::from(root))
+}
+
 /// Get the cargo target directory from metadata.
 ///
 /// This respects `CARGO_TARGET_DIR`, .cargo/config.toml, and other cargo
@@ -161,10 +163,8 @@ pub fn get_packages(
 pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
-
     let target_dir =
         json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
-
     Ok(target_dir.to_string())
 }
 

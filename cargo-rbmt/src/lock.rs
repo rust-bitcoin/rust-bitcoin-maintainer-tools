@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use clap::ValueEnum;
 use xshell::Shell;
 
-use crate::environment::quiet_println;
+use crate::environment::{get_workspace_root, quiet_println};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -27,8 +27,9 @@ struct LockFileGuard {
 
 impl LockFileGuard {
     fn new(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
-        let source = sh.current_dir().join(CARGO_LOCK);
-        let backup = sh.current_dir().join(CARGO_LOCK_BACKUP);
+        let workspace_root = get_workspace_root(sh)?;
+        let source = workspace_root.join(CARGO_LOCK);
+        let backup = workspace_root.join(CARGO_LOCK_BACKUP);
 
         // Backup the existing Cargo.lock file if it exists.
         if source.exists() {
@@ -92,10 +93,8 @@ impl LockFile {
     pub fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
             Self::Minimal | Self::Recent => {
-                fs::copy(
-                    sh.current_dir().join(self.filename()),
-                    sh.current_dir().join(CARGO_LOCK),
-                )?;
+                let workspace_root = get_workspace_root(sh)?;
+                fs::copy(workspace_root.join(self.filename()), workspace_root.join(CARGO_LOCK))?;
                 Ok(())
             }
             Self::Existing => {
@@ -119,8 +118,8 @@ impl LockFile {
 pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
-    let repo_dir = sh.current_dir();
-    quiet_println(&format!("Updating lock files in: {}", repo_dir.display()));
+    let workspace_root = get_workspace_root(sh)?;
+    quiet_println(&format!("Updating lock files in: {}", workspace_root.display()));
 
     // Create guard to back up and ensure restoration, even on error.
     let _guard = LockFileGuard::new(sh)?;
@@ -190,7 +189,7 @@ fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> 
 
 /// Remove Cargo.lock file if it exists.
 fn remove_lock_file(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    let lock_path = sh.current_dir().join(CARGO_LOCK);
+    let lock_path = get_workspace_root(sh)?.join(CARGO_LOCK);
     if lock_path.exists() {
         fs::remove_file(&lock_path)?;
     }
@@ -199,8 +198,7 @@ fn remove_lock_file(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
 /// Copy Cargo.lock to a specific lock file.
 fn copy_lock_file(sh: &Shell, target: LockFile) -> Result<(), Box<dyn std::error::Error>> {
-    let source = sh.current_dir().join(CARGO_LOCK);
-    let dest = sh.current_dir().join(target.filename());
-    fs::copy(&source, &dest)?;
+    let workspace_root = get_workspace_root(sh)?;
+    fs::copy(workspace_root.join(CARGO_LOCK), workspace_root.join(target.filename()))?;
     Ok(())
 }

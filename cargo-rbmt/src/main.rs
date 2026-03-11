@@ -14,7 +14,7 @@ mod toolchains;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use environment::{change_to_repo_root, configure_log_level, get_packages, Package};
+use environment::{configure_log_level, get_packages, Package};
 use lock::LockFile;
 use toolchain::Toolchain;
 use xshell::Shell;
@@ -105,7 +105,6 @@ fn main() {
 
     let sh = Shell::new().unwrap();
     configure_log_level(&sh);
-    change_to_repo_root(&sh);
 
     // Restore the specified lock file before running any command (except commands that don't
     // compile the workspace: Fmt, Lock, Integration, Toolchains).
