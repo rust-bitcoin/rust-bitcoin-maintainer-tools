@@ -2,6 +2,7 @@ mod api;
 mod bench;
 mod docs;
 mod environment;
+mod fmt;
 mod integration;
 mod lint;
 mod lock;
@@ -41,6 +42,12 @@ enum Commands {
         /// Git ref to use as baseline for semver comparison (tag, branch, or commit).
         #[arg(long)]
         baseline: Option<String>,
+    },
+    /// Format files using rustfmt with the nightly toolchain.
+    Fmt {
+        /// Check formatting without modifying files.
+        #[arg(long)]
+        check: bool,
     },
     /// Run the linter (clippy) for workspace and all crates.
     Lint,
@@ -96,9 +103,12 @@ fn main() {
     configure_log_level(&sh);
     change_to_repo_root(&sh);
 
-    // Restore the specified lock file before running any command (except Lock, Integration, Toolchains).
-    if !matches!(cli.command, Commands::Lock | Commands::Integration | Commands::Toolchains { .. })
-    {
+    // Restore the specified lock file before running any command (except commands that don't
+    // compile the workspace: Fmt, Lock, Integration, Toolchains).
+    if !matches!(
+        cli.command,
+        Commands::Fmt { .. } | Commands::Lock | Commands::Integration | Commands::Toolchains { .. }
+    ) {
         if let Err(e) = cli.lock_file.restore(&sh) {
             eprintln!("Error restoring lock file: {}", e);
             process::exit(1);
@@ -112,6 +122,11 @@ fn main() {
                 process::exit(1);
             }
         }
+        Commands::Fmt { check } =>
+            if let Err(e) = fmt::run(&sh, check, &cli.packages) {
+                eprintln!("Error running fmt task: {}", e);
+                process::exit(1);
+            },
         Commands::Lint =>
             if let Err(e) = lint::run(&sh, &cli.packages) {
                 eprintln!("Error running lint task: {}", e);
