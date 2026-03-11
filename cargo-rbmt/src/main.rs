@@ -53,7 +53,7 @@ enum Commands {
     /// Run tests with specified toolchain.
     Test {
         /// Toolchain to use: stable, nightly, or msrv.
-        #[arg(value_enum)]
+        #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
         toolchain: Toolchain,
         /// Disable debug assertions in compiled code.
         #[arg(long)]
