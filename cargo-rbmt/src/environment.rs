@@ -198,6 +198,14 @@ pub fn discover_features(
     Ok(features)
 }
 
+/// Get the current git commit ID.
+///
+/// Returns `None` if the working directory is not inside a git repository or
+/// if git is not available.
+pub fn git_commit_id(sh: &Shell) -> Option<String> {
+    sh.cmd("git").args(["rev-parse", "HEAD"]).quiet().read().ok().map(|s| s.trim().to_owned())
+}
+
 /// A minimal representation of a package manifest (`Cargo.toml`).
 ///
 /// Only fields not available via `cargo metadata` are included here. Prefer
