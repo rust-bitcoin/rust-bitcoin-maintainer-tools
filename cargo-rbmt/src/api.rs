@@ -154,7 +154,7 @@ fn get_package_apis(
     package_name: &str,
     package_dir: &PathBuf,
 ) -> Result<PackageApis, Box<dyn std::error::Error>> {
-    let workspace_root = sh.current_dir();
+    let workspace_root = environment::get_workspace_root(sh)?;
     let mut apis = HashMap::new();
 
     let mut feature_configs = vec![FeatureConfig::None, FeatureConfig::All];

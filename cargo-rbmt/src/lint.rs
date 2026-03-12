@@ -4,7 +4,7 @@ use std::path::Path;
 
 use xshell::Shell;
 
-use crate::environment::{get_packages, quiet_println, Package, CONFIG_FILE_PATH};
+use crate::environment::{get_packages, get_workspace_root, quiet_println, Package, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -405,7 +405,7 @@ fn check_clippy_toml_msrv(
     let mut clippy_files = Vec::new();
 
     // Check workspace root.
-    let workspace_root = sh.current_dir();
+    let workspace_root = get_workspace_root(sh)?;
     for filename in CLIPPY_CONFIG_FILES {
         let path = workspace_root.join(filename);
         if path.exists() {

@@ -2,6 +2,7 @@ use std::path::Path;
 
 use xshell::Shell;
 
+use crate::environment::get_workspace_root;
 use crate::quiet_cmd;
 
 /// Environment variable that rustup's shims read to route `rustc`, `cargo`, and
@@ -33,29 +34,20 @@ pub enum Toolchain {
 }
 
 impl Toolchain {
-    /// Read the pinned version for this toolchain.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the version file is missing or empty, or if the
-    /// workspace MSRV cannot be determined.
+    /// Read the pinned version for this toolchain from the workspace root.
     pub fn read_version(self, sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
         match self {
-            Self::Nightly => Self::read_version_file(sh, NIGHTLY_VERSION_FILE).ok_or_else(|| {
+            Self::Nightly => Self::read_version_file(sh, NIGHTLY_VERSION_FILE)?.ok_or_else(|| {
                 format!("{} file not found in repository root", NIGHTLY_VERSION_FILE).into()
             }),
-            Self::Stable => Self::read_version_file(sh, STABLE_VERSION_FILE).ok_or_else(|| {
+            Self::Stable => Self::read_version_file(sh, STABLE_VERSION_FILE)?.ok_or_else(|| {
                 format!("{} file not found in repository root", STABLE_VERSION_FILE).into()
             }),
             Self::Msrv => get_workspace_msrv(sh),
         }
     }
 
-    /// Write a pinned version string for this toolchain.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written, or if called on [`Toolchain::Msrv`].
+    /// Write a pinned version string for this toolchain to the workspace root.
     pub fn write_version(
         self,
         sh: &Shell,
@@ -68,29 +60,29 @@ impl Toolchain {
         }
     }
 
-    /// Read a version file from the shell's current directory, trimming whitespace.
-    fn read_version_file(sh: &Shell, filename: &str) -> Option<String> {
-        // Uses `sh.current_dir()` rather than a bare relative path because
-        // `sh.change_dir()` only updates xshell's internal working directory, not
-        // the process working directory used by `std::fs`.
-        let path = sh.current_dir().join(filename);
+    /// Read a version file from the workspace root.
+    fn read_version_file(
+        sh: &Shell,
+        filename: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let path = get_workspace_root(sh)?.join(filename);
         if path.exists() {
-            std::fs::read_to_string(path)
+            Ok(std::fs::read_to_string(path)
                 .ok()
                 .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
+                .filter(|s| !s.is_empty()))
         } else {
-            None
+            Ok(None)
         }
     }
 
-    /// Write a version string to a file in the shell's current directory, with a trailing newline.
+    /// Write a version string to a file in the workspace root.
     fn write_version_file(
         sh: &Shell,
         filename: &str,
         version: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        std::fs::write(sh.current_dir().join(filename), format!("{}\n", version))?;
+        std::fs::write(get_workspace_root(sh)?.join(filename), format!("{}\n", version))?;
         Ok(())
     }
 }

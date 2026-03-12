@@ -20,11 +20,17 @@ struct Config {
 }
 
 /// Pre-release-specific configuration.
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 #[serde(default)]
 struct PrereleaseConfig {
-    /// If true, opt-out of pre-release checks for this package.
-    skip: bool,
+    /// Whether to run pre-release checks for this package. Defaults to `false`.
+    enabled: bool,
+    /// Base git ref to compare against when detecting version bumps. Defaults to `"master"`.
+    baseline: String,
+}
+
+impl Default for PrereleaseConfig {
+    fn default() -> Self { Self { enabled: false, baseline: "master".to_string() } }
 }
 
 impl PrereleaseConfig {
@@ -33,8 +39,7 @@ impl PrereleaseConfig {
         let config_path = package_dir.join(CONFIG_FILE_PATH);
 
         if !config_path.exists() {
-            // Return default config (skip = false) if file doesn't exist.
-            return Ok(Self { skip: false });
+            return Ok(Self::default());
         }
 
         let contents = std::fs::read_to_string(&config_path)?;
@@ -44,38 +49,55 @@ impl PrereleaseConfig {
 }
 
 /// Run pre-release readiness checks for all packages.
-pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[Package], force: bool) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Running pre-release checks on {} packages", packages.len()));
 
-    let mut skipped = Vec::new();
-
-    for (_package_name, package_dir) in packages {
+    for (package_name, package_dir) in packages {
         let config = PrereleaseConfig::load(Path::new(package_dir))?;
 
-        if config.skip {
-            skipped.push(package_dir);
-            quiet_println(&format!("Skipping package: {} (marked as skip)", package_dir.display()));
+        if !config.enabled {
+            quiet_println(&format!("Skipping {package_name} (pre-release not enabled)"));
             continue;
         }
 
-        quiet_println(&format!("Checking package: {}", package_dir.display()));
+        if !force && !has_version_bump(sh, package_dir, &config.baseline)? {
+            quiet_println(&format!(
+                "Skipping {package_name} (no version bump detected since {})",
+                config.baseline
+            ));
+            continue;
+        }
+
+        quiet_println(&format!("Checking package: {package_name}"));
 
         let _dir = sh.push_dir(package_dir);
 
         // Run all pre-release checks. Return immediately on first failure.
         if let Err(e) = check_todos(sh) {
-            eprintln!("Pre-release check failed for {}: {}", package_dir.display(), e);
+            eprintln!("Pre-release check failed for {package_name}: {e}");
             return Err(e);
         }
 
         if let Err(e) = check_publish(sh) {
-            eprintln!("Pre-release check failed for {}: {}", package_dir.display(), e);
+            eprintln!("Pre-release check failed for {package_name}: {e}");
             return Err(e);
         }
     }
 
     quiet_println("All pre-release checks passed");
     Ok(())
+}
+
+/// Returns `true` if there is a version bump in the package's `Cargo.toml` since the baseline ref.
+fn has_version_bump(
+    sh: &Shell,
+    package_dir: &Path,
+    baseline: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let cargo_toml = package_dir.join("Cargo.toml");
+    let range = format!("{baseline}..");
+    let output = quiet_cmd!(sh, "git log --patch --reverse {range} -- {cargo_toml}").read()?;
+    Ok(output.lines().any(|line| line.starts_with("+version")))
 }
 
 // Things which should be patched up before release.

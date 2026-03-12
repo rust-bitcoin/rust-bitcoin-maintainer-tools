@@ -14,7 +14,7 @@ mod toolchains;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use environment::{change_to_repo_root, configure_log_level, get_packages, Package};
+use environment::{configure_log_level, get_packages, Package};
 use lock::LockFile;
 use toolchain::Toolchain;
 use xshell::Shell;
@@ -74,7 +74,11 @@ enum Commands {
     /// Update Cargo-minimal.lock and Cargo-recent.lock files.
     Lock,
     /// Run pre-release readiness checks.
-    Prerelease,
+    Prerelease {
+        /// Run checks even for packages that have pre-release checks disabled.
+        #[arg(long)]
+        force: bool,
+    },
     /// Install and manage nightly, stable, and MSRV toolchains.
     Toolchains {
         /// Update the `nightly-version` file.
@@ -101,7 +105,6 @@ fn main() {
 
     let sh = Shell::new().unwrap();
     configure_log_level(&sh);
-    change_to_repo_root(&sh);
 
     // Restore the specified lock file before running any command (except commands that don't
     // compile the workspace: Fmt, Lock, Integration, Toolchains).
@@ -171,8 +174,8 @@ fn main() {
                 eprintln!("Error updating lock files: {}", e);
                 process::exit(1);
             },
-        Commands::Prerelease =>
-            if let Err(e) = prerelease::run(&sh, &packages) {
+        Commands::Prerelease { force } =>
+            if let Err(e) = prerelease::run(&sh, &packages, force) {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },
