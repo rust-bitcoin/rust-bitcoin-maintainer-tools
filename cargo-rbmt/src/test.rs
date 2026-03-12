@@ -158,7 +158,8 @@ pub fn run(
         if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
     );
 
-    for (_package_name, package_dir) in packages {
+    for package in packages {
+        let (_, package_dir) = package;
         quiet_println(&format!("Testing crate: {}", package_dir.display()));
 
         let _dir = sh.push_dir(package_dir);
@@ -169,7 +170,7 @@ pub fn run(
         let release = release || config.release;
 
         do_test(sh, &config, release)?;
-        do_feature_matrix(sh, &config, release)?;
+        do_feature_matrix(sh, package, &config, release)?;
         do_no_std_check(sh, Path::new(package_dir))?;
     }
 
@@ -238,6 +239,7 @@ fn do_test(
 /// Run feature matrix tests.
 fn do_feature_matrix(
     sh: &Shell,
+    _package: &Package,
     config: &TestConfig,
     release: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {

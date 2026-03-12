@@ -151,8 +151,7 @@ pub fn get_packages(
 pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
-    let root =
-        json["workspace_root"].as_str().ok_or("Missing workspace_root in cargo metadata")?;
+    let root = json["workspace_root"].as_str().ok_or("Missing workspace_root in cargo metadata")?;
     Ok(PathBuf::from(root))
 }
 
@@ -166,6 +165,37 @@ pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> 
     let target_dir =
         json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
     Ok(target_dir.to_string())
+}
+
+/// Discover the features defined for a package.
+///
+/// Returns all keys from the package's `[features]` table, excluding `"default"` since
+/// it is not a feature that can be passed directly to `--features`. Optional dependencies
+/// are included automatically.
+pub fn discover_features(
+    sh: &Shell,
+    (_, package_dir): &Package,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
+    let json: serde_json::Value = serde_json::from_str(&metadata)?;
+
+    let packages =
+        json["packages"].as_array().ok_or("Missing 'packages' field in cargo metadata")?;
+
+    // Match by manifest path so this works regardless of the shell's cwd.
+    let manifest_path = package_dir.join("Cargo.toml");
+    let package = packages
+        .iter()
+        .find(|p| p["manifest_path"].as_str().is_some_and(|path| Path::new(path) == manifest_path))
+        .ok_or_else(|| format!("Package not found in cargo metadata: {}", package_dir.display()))?;
+
+    let mut features: Vec<String> = package["features"]
+        .as_object()
+        .map(|f| f.keys().filter(|k| *k != "default").cloned().collect())
+        .unwrap_or_default();
+
+    features.sort();
+    Ok(features)
 }
 
 /// A minimal representation of a package manifest (`Cargo.toml`).
