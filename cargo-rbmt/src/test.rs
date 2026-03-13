@@ -4,8 +4,6 @@
 //! and catch any issues involving `cfg(test)` somehow gating required code.
 
 use std::collections::hash_map::DefaultHasher;
-use std::ffi::OsStr;
-use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
@@ -17,37 +15,6 @@ use crate::environment::{
 };
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
-
-/// Conventinal feature flags used across rust-bitcoin crates.
-#[derive(Debug, Clone, Copy)]
-enum FeatureFlag {
-    /// Enable the standard library.
-    Std,
-    /// Legacy feature to disable standard library.
-    NoStd,
-}
-
-impl FeatureFlag {
-    /// Get the feature string for this flag.
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Std => "std",
-            Self::NoStd => "no-std",
-        }
-    }
-}
-
-impl fmt::Display for FeatureFlag {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.as_str()) }
-}
-
-impl AsRef<str> for FeatureFlag {
-    fn as_ref(&self) -> &str { self.as_str() }
-}
-
-impl AsRef<OsStr> for FeatureFlag {
-    fn as_ref(&self) -> &OsStr { OsStr::new(self.as_str()) }
-}
 
 /// Test configuration loaded from rbmt.toml.
 #[derive(Debug, Deserialize, Default)]
@@ -78,44 +45,13 @@ struct TestConfig {
     /// ```
     examples: Vec<String>,
 
-    /// List of individual features to test with the conventional `std` feature enabled.
-    /// Tests each feature with `std`, then all unique pairs with `std`.
-    ///
-    /// # Examples
-    ///
-    /// `["serde", "rand"]` tests `std+serde`, `std+rand`, `std+serde+rand`.
-    features_with_std: Vec<String>,
-
-    /// List of individual features to test in combination with each other, without any base feature.
-    /// Tests all unique pairs. Individual features are already covered by auto-discovery.
-    ///
-    /// # Examples
-    ///
-    /// `["serde", "rand"]` tests `serde+rand`.
-    features_without_std: Vec<String>,
-
-    /// List of individual features to test with the `no-std` feature enabled.
-    /// Only use if your crate has an explicit `no-std` feature (rust-miniscript pattern).
-    /// Tests each feature with `no-std`, then all unique pairs with `no-std`.
-    ///
-    /// # Examples
-    ///
-    /// `["serde", "rand"]` tests `no-std+serde`, `no-std+rand`, `no-std+serde+rand`.
-    features_with_no_std: Vec<String>,
-
     /// Features to exclude from automatic feature discovery.
     ///
-    /// By default, when none of `features_with_std`, `features_without_std`, or
-    /// `features_with_no_std` are set, a package's features are auto-discovered and
-    /// tested automatically. Use this list to skip features that should not be
-    /// tested in isolation, such as internal or alias features.
+    /// Use this list to skip features that should not be tested in isolation,
+    /// such as internal or alias features.
     exclude_features: Vec<String>,
 
     /// Exact feature combinations to always test.
-    ///
-    /// # Examples
-    ///
-    /// `[["serde", "rand"], ["rand"]]` tests exactly those two combinations.
     exact_features: Vec<Vec<String>>,
 
     /// Always run tests with `--release` for this package.
@@ -262,11 +198,8 @@ fn do_test(
 ///
 /// 1. All features (unconditional)
 /// 2. No features (unconditional)
-/// 3. Auto discovered features individually + sampled subsets per commit (unconditional)
+/// 3. Auto-discovered features individually + sampled subsets per commit (unconditional)
 /// 4. Exact feature sets (when configured)
-/// 5. `features_with_std` / `features_without_std` / `features_with_no_std`: exhaustive pairs (when configured)
-///
-/// The step #5 lists are syntatic sugar for exact feature sets.
 fn do_feature_matrix(
     sh: &Shell,
     package: &Package,
@@ -304,30 +237,14 @@ fn do_feature_matrix(
         test_features(sh, features, release)?;
     }
 
-    // Generate and test pair feature sets.
-    if !config.features_with_std.is_empty() {
-        exhaustive_pair_matrix(sh, Some(FeatureFlag::Std), &config.features_with_std, release)?;
-    }
-    if !config.features_without_std.is_empty() {
-        exhaustive_pair_matrix(sh, None, &config.features_without_std, release)?;
-    }
-    if !config.features_with_no_std.is_empty() {
-        test_features(sh, &[FeatureFlag::NoStd.as_str()], release)?;
-        exhaustive_pair_matrix(
-            sh,
-            Some(FeatureFlag::NoStd),
-            &config.features_with_no_std,
-            release,
-        )?;
-    }
-
     Ok(())
 }
 
 /// Test auto-discovered features with per-commit random sampling.
 ///
-/// Runs each feature individually (always), plus two random feature subsets. The
-/// subsets are selected based on the commit ID, so are deterministic for a commit.
+/// Runs each feature individually (always), plus `ceil(log2(n))` random feature subsets
+/// where `n` is the number of features. The subsets are selected based on the commit ID,
+/// so are deterministic for a given commit.
 ///
 /// *Warning!* When no commit ID is available (not in a git repo), only the individual
 /// feature runs are performed.
@@ -336,14 +253,23 @@ fn sampled_feature_matrix(
     features: &[String],
     release: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // ceil(log2(n)) scales the number of random subsets with the feature count.
+    fn num_subsets(n: usize) -> u32 {
+        if n <= 1 {
+            0
+        } else {
+            n.ilog2() + u32::from(!n.is_power_of_two())
+        }
+    }
+
     // Test each feature individually.
     for feature in features {
         test_features(sh, &[feature], release)?;
     }
 
-    // Test two random feature subsets.
+    // Test random feature subsets, scaling with feature count.
     if let Some(commit) = git_commit_id(sh) {
-        for subset_index in 0..2_u64 {
+        for subset_index in 0..num_subsets(features.len()) {
             let subset: Vec<&String> = features
                 .iter()
                 // Uses the low bit of a hash the [seed + feature name] to determine membership.
@@ -362,41 +288,6 @@ fn sampled_feature_matrix(
 
             test_features(sh, &subset, release)?;
         }
-    }
-
-    Ok(())
-}
-
-/// Test all unique pairs of features exhaustively.
-///
-/// An optional base feature (e.g. `std` or `no-std`) is included in every combination.
-/// Pair testing catches interaction bugs where two features conflict when combined even
-/// though each works individually.
-///
-/// # Parameters
-///
-/// * `base` - Optional base feature always included (e.g., `Some(FeatureFlag::Std)`).
-/// * `features` - Features to test in combination.
-fn exhaustive_pair_matrix(
-    sh: &Shell,
-    base: Option<FeatureFlag>,
-    features: &[String],
-    release: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // When a base flag is present, test each feature individually with it.
-    let individuals: Vec<Vec<&str>> = base
-        .map(|b| features.iter().map(move |f| vec![b.as_str(), f.as_str()]).collect())
-        .unwrap_or_default();
-    let pairs: Vec<Vec<&str>> = (0..features.len())
-        .flat_map(|i| (i + 1..features.len()).map(move |j| (i, j)))
-        .map(|(i, j)| match base {
-            Some(b) => vec![b.as_str(), features[i].as_str(), features[j].as_str()],
-            None => vec![features[i].as_str(), features[j].as_str()],
-        })
-        .collect();
-
-    for combo in individuals.into_iter().chain(pairs) {
-        test_features(sh, &combo, release)?;
     }
 
     Ok(())

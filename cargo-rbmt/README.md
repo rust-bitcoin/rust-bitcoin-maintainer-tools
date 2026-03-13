@@ -52,7 +52,7 @@ allowed_duplicates = [
 
 ## Test
 
-The `test` command runs feature matrix testing for your package. Every run unconditionally tests all features enabled, no features enabled, and each feature by itself. A package's features are auto-discovered. Each feature is tested individually, and two randomly-sampled feature subsets are tested per commit ID to try and catch interaction bugs without running massive matrices on every run.
+The `test` command runs feature matrix testing for your package. Every run unconditionally tests all features enabled, no features enabled, and each feature by itself. A package's features are auto-discovered. Randomly sampled feature subsets (number of sets grows with the number of package features) are tested per commit ID to try and catch interaction bugs without running massive matrices on every run.
 
 ```toml
 [test]
@@ -72,28 +72,13 @@ examples = [
 # Use for internal or alias features that should not be tested in isolation.
 exclude_features = ["_internal", "default-features"]
 
-# Exact feature combinations to always test.
+# Always test specific feature combinations.
 exact_features = [
-    ["serde", "rand"],
-    ["rand"],
+    ["serde", "rand"],        # Test serde and rand interaction.
+    ["serde", "std"],         # Assuming serde has a weak dependency on std, test interaction when enabled.
+    ["rand", "std"],          # Assuming rand has a weak dependency on std, test interaction when enabled.
+    ["serde", "rand", "std"], # Test both with weak dependency interaction.
 ]
-```
-
-The following options are syntax sugar over `exact_features`. They generate all individual and pair combinations from a feature list, optionally prepending a base feature. Use these for packages with a conventional `std` feature or the legacy `no-std` pattern, rather than enumerating every combination manually in `exact_features`.
-
-```toml
-# Features to test with the conventional `std` feature enabled.
-# Example: ["serde", "rand"] tests: std+serde, std+rand, std+serde+rand
-features_with_std = ["serde", "rand"]
-
-# Features to test without any base feature.
-# Example: ["serde", "rand", "arbitrary"] tests: serde+rand, serde+arbitrary, rand+arbitrary
-# (singles are covered by auto-discovery)
-features_without_std = ["serde", "rand", "arbitrary"]
-
-# Features to test with an explicit `no-std` feature (rust-miniscript pattern).
-# Example: ["serde", "rand"] tests: no-std+serde, no-std+rand, no-std+serde+rand
-features_with_no_std = ["serde", "rand"]
 ```
 
 ### no_std
