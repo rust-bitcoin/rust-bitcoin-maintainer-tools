@@ -3,9 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use xshell::{cmd, Shell};
+use xshell::Shell;
 
-use crate::environment::{quiet_println, Package, CONFIG_FILE_PATH};
+use crate::environment::{discover_features, quiet_println, Package, CONFIG_FILE_PATH};
 use crate::quiet_cmd;
 
 /// Integration test configuration loaded from rbmt.toml.
@@ -57,7 +57,7 @@ impl IntegrationConfig {
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Looking for integration tests in {} crate(s)", packages.len()));
 
-    for (_package_name, package_dir) in packages {
+    for (package_name, package_dir) in packages {
         let config = IntegrationConfig::load(Path::new(package_dir))?;
         let integration_dir = PathBuf::from(package_dir).join(config.package_name());
 
@@ -69,11 +69,12 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
             continue;
         }
 
-        quiet_println(&format!("Running integration tests for crate: {}", package_dir.display()));
+        quiet_println(&format!("Running integration tests for {}", package_name));
 
         let _dir = sh.push_dir(&integration_dir);
 
-        let available_versions = discover_version_features(sh, &integration_dir)?;
+        let integration_package = (config.package_name().to_owned(), integration_dir.clone());
+        let available_versions = discover_features(sh, &integration_package)?;
         if available_versions.is_empty() {
             quiet_println("  No version features found in Cargo.toml");
             continue;
@@ -108,33 +109,4 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
     }
 
     Ok(())
-}
-
-/// Discover all features from the integration package using cargo metadata.
-fn discover_version_features(
-    sh: &Shell,
-    integration_dir: &Path,
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let _dir = sh.push_dir(integration_dir);
-    let metadata = cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
-    let json: serde_json::Value = serde_json::from_str(&metadata)?;
-
-    let mut features = Vec::new();
-
-    // Find the package in the metadata and extract its features.
-    if let Some(packages) = json["packages"].as_array() {
-        // Should only be one package since we're in the integration test directory.
-        if let Some(package) = packages.first() {
-            if let Some(package_features) = package["features"].as_object() {
-                for feature_name in package_features.keys() {
-                    features.push(feature_name.clone());
-                }
-            }
-        }
-    }
-
-    // Sort for consistent output.
-    features.sort();
-
-    Ok(features)
 }

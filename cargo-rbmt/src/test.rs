@@ -3,47 +3,18 @@
 //! `cargo build` runs before `cargo test` throughout this module to try
 //! and catch any issues involving `cfg(test)` somehow gating required code.
 
-use std::ffi::OsStr;
-use std::fmt;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use serde::Deserialize;
 use xshell::{Cmd, Shell};
 
-use crate::environment::{quiet_println, Package, CONFIG_FILE_PATH};
+use crate::environment::{
+    discover_features, git_commit_id, quiet_println, Package, CONFIG_FILE_PATH,
+};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
-
-/// Conventinal feature flags used across rust-bitcoin crates.
-#[derive(Debug, Clone, Copy)]
-enum FeatureFlag {
-    /// Enable the standard library.
-    Std,
-    /// Legacy feature to disable standard library.
-    NoStd,
-}
-
-impl FeatureFlag {
-    /// Get the feature string for this flag.
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Std => "std",
-            Self::NoStd => "no-std",
-        }
-    }
-}
-
-impl fmt::Display for FeatureFlag {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.as_str()) }
-}
-
-impl AsRef<str> for FeatureFlag {
-    fn as_ref(&self) -> &str { self.as_str() }
-}
-
-impl AsRef<OsStr> for FeatureFlag {
-    fn as_ref(&self) -> &OsStr { OsStr::new(self.as_str()) }
-}
 
 /// Test configuration loaded from rbmt.toml.
 #[derive(Debug, Deserialize, Default)]
@@ -74,41 +45,14 @@ struct TestConfig {
     /// ```
     examples: Vec<String>,
 
-    /// List of individual features to test with the conventional `std` feature enabled.
-    /// Automatically tests feature combinations, alone with `std`, all pairs, and all together.
+    /// Features to exclude from automatic feature discovery.
     ///
-    /// # Examples
-    ///
-    /// `["serde", "rand"]` tests `std+serde`, `std+rand`, `std+serde+rand`.
-    features_with_std: Vec<String>,
+    /// Use this list to skip features that should not be tested in isolation,
+    /// such as internal or alias features.
+    exclude_features: Vec<String>,
 
-    /// List of individual features to test without the `std` feature.
-    /// Automatically tests features combinations, each feature alone,
-    /// all pairs, and all together.
-    ///
-    /// # Examples
-    ///
-    /// `["serde", "rand"]` tests `serde`, `rand`, `serde+rand`.
-    features_without_std: Vec<String>,
-
-    /// Exact feature combinations to test.
-    /// Use for crates that don't follow the conventional `std` feature pattern.
-    /// Each inner vector is a list of features to test together. There is
-    /// no automatic combinations of features tests.
-    ///
-    /// # Examples
-    ///
-    /// `[["serde", "rand"], ["rand"]]` tests exactly those two combinations.
+    /// Exact feature combinations to always test.
     exact_features: Vec<Vec<String>>,
-
-    /// List of individual features to test with the `no-std` feature enabled.
-    /// Only use if your crate has an explicit `no-std` feature (rust-miniscript pattern).
-    /// Automatically tests each feature alone with `no-std`, all pairs, and all together.
-    ///
-    /// # Examples
-    ///
-    /// `["serde", "rand"]` tests `no-std+serde`, `no-std+serde`, `no-std+serde+rand`.
-    features_with_no_std: Vec<String>,
 
     /// Always run tests with `--release` for this package.
     release: bool,
@@ -120,15 +64,7 @@ impl TestConfig {
         let config_path = crate_dir.join(CONFIG_FILE_PATH);
 
         if !config_path.exists() {
-            // Return empty config if file doesn't exist.
-            return Ok(Self {
-                examples: Vec::new(),
-                features_with_std: Vec::new(),
-                features_without_std: Vec::new(),
-                exact_features: Vec::new(),
-                features_with_no_std: Vec::new(),
-                release: false,
-            });
+            return Ok(Self::default());
         }
 
         let contents = std::fs::read_to_string(&config_path)?;
@@ -137,9 +73,34 @@ impl TestConfig {
     }
 }
 
+/// Build and test with the given features and optional `--release` flag.
+fn test_features(
+    sh: &Shell,
+    features: &[impl AsRef<str>],
+    release: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
+    quiet_println(&format!("Testing features: {}", features_str));
+    with_release(
+        quiet_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}"),
+        release,
+    )
+    .run()?;
+    with_release(
+        quiet_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}"),
+        release,
+    )
+    .run()?;
+    Ok(())
+}
+
 /// Conditionally append `--release` to a cargo command.
 fn with_release(cmd: Cmd<'_>, release: bool) -> Cmd<'_> {
-    if release { cmd.arg("--release") } else { cmd }
+    if release {
+        cmd.arg("--release")
+    } else {
+        cmd
+    }
 }
 
 /// Run build and test for all crates with the specified toolchain.
@@ -158,7 +119,8 @@ pub fn run(
         if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
     );
 
-    for (_package_name, package_dir) in packages {
+    for package in packages {
+        let (_, package_dir) = package;
         quiet_println(&format!("Testing crate: {}", package_dir.display()));
 
         let _dir = sh.push_dir(package_dir);
@@ -169,7 +131,7 @@ pub fn run(
         let release = release || config.release;
 
         do_test(sh, &config, release)?;
-        do_feature_matrix(sh, &config, release)?;
+        do_feature_matrix(sh, package, &config, release)?;
         do_no_std_check(sh, Path::new(package_dir))?;
     }
 
@@ -213,10 +175,7 @@ fn do_test(
                 } else {
                     // Format: "name:features" - run with specific features.
                     with_release(
-                        quiet_cmd!(
-                            sh,
-                            "cargo --locked run --example {name} --features={features}"
-                        ),
+                        quiet_cmd!(sh, "cargo --locked run --example {name} --features={features}"),
                         release,
                     )
                     .run()?;
@@ -236,164 +195,98 @@ fn do_test(
 }
 
 /// Run feature matrix tests.
+///
+/// 1. All features (unconditional)
+/// 2. No features (unconditional)
+/// 3. Auto-discovered features individually + sampled subsets per commit (unconditional)
+/// 4. Exact feature sets (when configured)
 fn do_feature_matrix(
     sh: &Shell,
+    package: &Package,
     config: &TestConfig,
     release: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running feature matrix tests");
 
-    // Handle exact features (for unusual crates).
-    if !config.exact_features.is_empty() {
-        for features in &config.exact_features {
-            let features_str = features.join(" ");
-            quiet_println(&format!("Testing exact features: {}", features_str));
-            with_release(
-                quiet_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}"),
-                release,
-            )
-            .run()?;
-            with_release(
-                quiet_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}"),
-                release,
-            )
-            .run()?;
-        }
-        return Ok(());
-    }
-
-    // Handle no-std pattern (rust-miniscript).
-    if config.features_with_no_std.is_empty() {
-        quiet_println("Testing no-default-features");
-        with_release(quiet_cmd!(sh, "cargo --locked build --no-default-features"), release)
-            .run()?;
-        with_release(quiet_cmd!(sh, "cargo --locked test --no-default-features"), release)
-            .run()?;
-    } else {
-        let no_std = FeatureFlag::NoStd;
-        quiet_println("Testing no-std");
-        with_release(
-            quiet_cmd!(sh, "cargo --locked build --no-default-features --features={no_std}"),
-            release,
-        )
-        .run()?;
-        with_release(
-            quiet_cmd!(sh, "cargo --locked test --no-default-features --features={no_std}"),
-            release,
-        )
-        .run()?;
-
-        loop_features(sh, Some(FeatureFlag::NoStd), &config.features_with_no_std, release)?;
-    }
-
     // Test all features.
-    quiet_println("Testing all-features");
+    quiet_println("Testing all features");
     with_release(quiet_cmd!(sh, "cargo --locked build --all-features"), release).run()?;
     with_release(quiet_cmd!(sh, "cargo --locked test --all-features"), release).run()?;
 
-    // Test features with std.
-    if !config.features_with_std.is_empty() {
-        loop_features(sh, Some(FeatureFlag::Std), &config.features_with_std, release)?;
+    // Test no features.
+    quiet_println("Testing no features");
+    with_release(quiet_cmd!(sh, "cargo --locked build --no-default-features"), release).run()?;
+    with_release(quiet_cmd!(sh, "cargo --locked test --no-default-features"), release).run()?;
+
+    // Test each feature in isolation, plus sampled subsets.
+    let features: Vec<String> = discover_features(sh, package)?
+        .into_iter()
+        .filter(|f| !config.exclude_features.contains(f))
+        .collect();
+    if !features.is_empty() {
+        quiet_println(&format!(
+            "Discovered {} feature(s) to test: {}",
+            features.len(),
+            features.join(", ")
+        ));
+        sampled_feature_matrix(sh, &features, release)?;
     }
 
-    // Test features without std.
-    if !config.features_without_std.is_empty() {
-        loop_features(sh, None, &config.features_without_std, release)?;
+    // Test exact feature sets.
+    for features in &config.exact_features {
+        test_features(sh, features, release)?;
     }
 
     Ok(())
 }
 
-/// Test each feature individually and all combinations of two features.
+/// Test auto-discovered features with per-commit random sampling.
 ///
-/// This implements three feature matrix testing strategies:
-/// 1. All features together (base feature + all test features).
-/// 2. Each feature individually (base feature + one test feature).
-/// 3. All unique pairs of test features (base feature + two test features).
+/// Runs each feature individually (always), plus `ceil(log2(n))` random feature subsets
+/// where `n` is the number of features. The subsets are selected based on the commit ID,
+/// so are deterministic for a given commit.
 ///
-/// The pair testing catches feature interaction bugs (where two features work
-/// independently, but conflict when combined) while keeping test time manageable.
-///
-/// # Parameters
-///
-/// * `base` - Optional base feature that is always included (e.g., `Some(FeatureFlag::Std)`).
-/// * `features` - Features to test in combination.
-fn loop_features<S: AsRef<str>>(
+/// *Warning!* When no commit ID is available (not in a git repo), only the individual
+/// feature runs are performed.
+fn sampled_feature_matrix(
     sh: &Shell,
-    base: Option<FeatureFlag>,
-    features: &[S],
+    features: &[String],
     release: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Helper to combine base flag and features into a feature flag string.
-    fn combine_features<S: AsRef<str>>(base: Option<FeatureFlag>, additional: &[S]) -> String {
-        match base {
-            Some(flag) => std::iter::once(flag.as_ref())
-                .chain(additional.iter().map(std::convert::AsRef::as_ref))
-                .collect::<Vec<_>>()
-                .join(" "),
-            None =>
-                additional.iter().map(std::convert::AsRef::as_ref).collect::<Vec<_>>().join(" "),
+    // ceil(log2(n)) scales the number of random subsets with the feature count.
+    fn num_subsets(n: usize) -> u32 {
+        if n <= 1 {
+            0
+        } else {
+            n.ilog2() + u32::from(!n.is_power_of_two())
         }
     }
 
-    // Test all features together.
-    let all_features = combine_features(base, features);
-    quiet_println(&format!("Testing features: {}", all_features));
-    with_release(
-        quiet_cmd!(sh, "cargo --locked build --no-default-features --features={all_features}"),
-        release,
-    )
-    .run()?;
-    with_release(
-        quiet_cmd!(sh, "cargo --locked test --no-default-features --features={all_features}"),
-        release,
-    )
-    .run()?;
+    // Test each feature individually.
+    for feature in features {
+        test_features(sh, &[feature], release)?;
+    }
 
-    // Test each feature individually and all pairs (only if more than one feature).
-    if features.len() > 1 {
-        for i in 0..features.len() {
-            let feature_combo = combine_features(base, &features[i..=i]);
-            quiet_println(&format!("Testing features: {}", feature_combo));
-            with_release(
-                quiet_cmd!(
-                    sh,
-                    "cargo --locked build --no-default-features --features={feature_combo}"
-                ),
-                release,
-            )
-            .run()?;
-            with_release(
-                quiet_cmd!(
-                    sh,
-                    "cargo --locked test --no-default-features --features={feature_combo}"
-                ),
-                release,
-            )
-            .run()?;
+    // Test random feature subsets, scaling with feature count.
+    if let Some(commit) = git_commit_id(sh) {
+        for subset_index in 0..num_subsets(features.len()) {
+            let subset: Vec<&String> = features
+                .iter()
+                // Uses the low bit of a hash the [seed + feature name] to determine membership.
+                .filter(|f| {
+                    let mut hasher = DefaultHasher::new();
+                    commit.hash(&mut hasher);
+                    subset_index.hash(&mut hasher);
+                    f.hash(&mut hasher);
+                    hasher.finish() & 1 == 1
+                })
+                .collect();
 
-            // Test all pairs with features[i].
-            for j in (i + 1)..features.len() {
-                let pair = [&features[i], &features[j]];
-                let feature_combo = combine_features(base, &pair);
-                quiet_println(&format!("Testing features: {}", feature_combo));
-                with_release(
-                    quiet_cmd!(
-                        sh,
-                        "cargo --locked build --no-default-features --features={feature_combo}"
-                    ),
-                    release,
-                )
-                .run()?;
-                with_release(
-                    quiet_cmd!(
-                        sh,
-                        "cargo --locked test --no-default-features --features={feature_combo}"
-                    ),
-                    release,
-                )
-                .run()?;
+            if subset.is_empty() {
+                continue;
             }
+
+            test_features(sh, &subset, release)?;
         }
     }
 
