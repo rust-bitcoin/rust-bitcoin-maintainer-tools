@@ -52,7 +52,7 @@ allowed_duplicates = [
 
 ## Test
 
-The `test` command can be configured to run feature matrix testing for your package.
+The `test` command runs feature matrix testing for your package. Every run unconditionally tests all features enabled, no features enabled, and each feature by itself. A package's features are auto-discovered. Randomly sampled feature subsets (number of sets grows with the number of package features) are tested per commit ID to try and catch interaction bugs without running massive matrices on every run.
 
 ```toml
 [test]
@@ -68,30 +68,17 @@ examples = [
     "bip32:serde rand",   # Specific features
 ]
 
-# Features to test with the conventional `std` feature enabled.
-# Tests each feature alone with std, all pairs, and all together.
-# Example: ["serde", "rand"] tests: std+serde, std+rand, std+serde+rand
-features_with_std = ["serde", "rand"]
+# Features to exclude from auto-discovery.
+# Use for internal or alias features that should not be tested in isolation.
+exclude_features = ["_internal", "default-features"]
 
-# Features to test without the `std` feature.
-# Tests each feature alone, all pairs, and all together.
-# Example: ["serde", "rand"] tests: serde, rand, serde+rand
-features_without_std = ["serde", "rand"]
-
-# Exact feature combinations to test.
-# Use for packages that don't follow conventional `std` patterns.
-# Each inner array is tested as-is with no automatic combinations.
-# Example: [["serde", "rand"], ["rand"]] tests exactly those two combinations
+# Always test specific feature combinations.
 exact_features = [
-    ["serde", "rand"],
-    ["rand"],
+    ["serde", "rand"],        # Test serde and rand interaction.
+    ["serde", "std"],         # Assuming serde has a weak dependency on std, test interaction when enabled.
+    ["rand", "std"],          # Assuming rand has a weak dependency on std, test interaction when enabled.
+    ["serde", "rand", "std"], # Test both with weak dependency interaction.
 ]
-
-# Features to test with an explicit `no-std` feature enabled.
-# Only use if your package has a `no-std` feature (rust-miniscript pattern).
-# Tests each feature with no-std, all pairs, and all together.
-# Example: ["serde", "rand"] tests: no-std+serde, no-std+rand, no-std+serde+rand
-features_with_no_std = ["serde", "rand"]
 ```
 
 ### no_std
