@@ -15,6 +15,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 - [Lock Files](#lock-files)
 - [API](#api)
 - [Toolchains](#toolchains)
+- [Tools](#tools)
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
@@ -181,6 +182,36 @@ cargo +$RBMT_MSRV rbmt test --toolchain msrv
 ```
 
 The `--update-nightly` and `--update-stable` flags each install the corresponding floating toolchain, query its resolved version from `rustc`, and write the result to the appropriate version file before proceeding with the normal install and export.
+
+## Tools
+
+The `tools` command installs external cargo tools whose versions are pinned in the root `Cargo.toml`. The preferred location is `[workspace.metadata.rbmt.tools]`:
+
+```toml
+[workspace.metadata.rbmt.tools]
+cargo-semver-checks = "0.46.0"
+cargo-public-api = "0.50.1"
+```
+
+For single-package repos with no explicit `[workspace]` table, `[package.metadata.rbmt.tools]` is supported as a fallback.
+
+```bash
+# Install all tools at their pinned versions.
+cargo rbmt tools
+
+# Install only a specific tool.
+cargo rbmt tools cargo-semver-checks
+
+# Install each tool at its latest version and update the pins in Cargo.toml.
+cargo rbmt tools --update
+
+# Update only a specific tool.
+cargo rbmt tools --update cargo-public-api
+```
+
+The `--update` flag installs each tool without a version constraint, then reads the resolved version back from `cargo install --list` and writes it into `Cargo.toml`. The resulting diff can be reviewed and committed as a deliberate version bump.
+
+> **Note:** Tools are installed via `cargo install`. Installing or updating a tool overwrites any previously installed version of that binary system-wide. If you rely on a specific version of a tool outside of this workflow, be aware that running `cargo rbmt tools` will replace it with the pinned version.
 
 ## Workspace Integration
 
