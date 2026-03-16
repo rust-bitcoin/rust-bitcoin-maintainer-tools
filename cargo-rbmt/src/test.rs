@@ -10,20 +10,11 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::{Cmd, Shell};
 
-use crate::environment::{
-    discover_features, git_commit_id, quiet_println, Package, CONFIG_FILE_PATH,
-};
+use crate::environment::{discover_features, git_commit_id, quiet_println, PackageManifest, Package};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
-/// Test configuration loaded from rbmt.toml.
-#[derive(Debug, Deserialize, Default)]
-#[serde(default)]
-struct Config {
-    test: TestConfig,
-}
-
-/// Test-specific configuration.
+/// Test-specific configuration, read from `[package.metadata.rbmt.test]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct TestConfig {
@@ -36,7 +27,8 @@ struct TestConfig {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```toml
+    /// [package.metadata.rbmt.test]
     /// examples = [
     ///     "bip32",
     ///     "bip32:-",
@@ -59,17 +51,20 @@ struct TestConfig {
 }
 
 impl TestConfig {
-    /// Load test configuration from a crate directory.
+    /// Load test configuration from `[package.metadata.rbmt.test]` in the package's `Cargo.toml`.
     fn load(crate_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = crate_dir.join(CONFIG_FILE_PATH);
-
-        if !config_path.exists() {
-            return Ok(Self::default());
+        #[derive(serde::Deserialize, Default)]
+        struct RbmtTable {
+            #[serde(default)]
+            test: TestConfig,
         }
 
-        let contents = std::fs::read_to_string(&config_path)?;
-        let config: Config = toml::from_str(&contents)?;
-        Ok(config.test)
+        let path = crate_dir.join("Cargo.toml");
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(&path)?;
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.test)
     }
 }
 

@@ -31,7 +31,7 @@ use std::collections::BTreeMap;
 
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, quiet_println};
+use crate::environment::{get_workspace_root, quiet_println, WorkspaceManifest};
 use crate::quiet_cmd;
 
 /// Where the tool pins were found in the root `Cargo.toml`.
@@ -61,33 +61,8 @@ impl Tools {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct CargoToml {
-    #[serde(default)]
-    workspace: WorkspaceSection,
-    #[serde(default)]
-    package: PackageSection,
-}
-
 #[derive(serde::Deserialize, Default)]
-struct WorkspaceSection {
-    #[serde(default)]
-    metadata: RbmtMetadataWrapper,
-}
-
-#[derive(serde::Deserialize, Default)]
-struct PackageSection {
-    #[serde(default)]
-    metadata: RbmtMetadataWrapper,
-}
-
-#[derive(serde::Deserialize, Default)]
-struct RbmtMetadataWrapper {
-    rbmt: Option<RbmtMetadata>,
-}
-
-#[derive(serde::Deserialize, Default)]
-struct RbmtMetadata {
+struct RbmtTable {
     tools: Option<BTreeMap<String, String>>,
 }
 
@@ -98,13 +73,13 @@ struct RbmtMetadata {
 fn read_tools(sh: &Shell) -> Result<Option<Tools>, Box<dyn std::error::Error>> {
     let root = get_workspace_root(sh)?;
     let contents = std::fs::read_to_string(root.join("Cargo.toml"))?;
-    let cargo_toml: CargoToml = toml::from_str(&contents)?;
+    let cargo_toml = toml::from_str::<WorkspaceManifest<RbmtTable>>(&contents)?;
 
-    if let Some(map) = cargo_toml.workspace.metadata.rbmt.and_then(|r| r.tools) {
+    if let Some(map) = cargo_toml.workspace.metadata.rbmt.tools {
         return Ok(Some(Tools { map, location: ToolsLocation::Workspace }));
     }
 
-    if let Some(map) = cargo_toml.package.metadata.rbmt.and_then(|r| r.tools) {
+    if let Some(map) = cargo_toml.package.metadata.rbmt.tools {
         return Ok(Some(Tools { map, location: ToolsLocation::Package }));
     }
 

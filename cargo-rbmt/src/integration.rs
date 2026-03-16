@@ -5,17 +5,10 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{discover_features, quiet_println, Package, CONFIG_FILE_PATH};
+use crate::environment::{discover_features, quiet_println, PackageManifest, Package};
 use crate::quiet_cmd;
 
-/// Integration test configuration loaded from rbmt.toml.
-#[derive(Debug, Deserialize, Default)]
-#[serde(default)]
-struct Config {
-    integration: IntegrationConfig,
-}
-
-/// Integration-specific configuration.
+/// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct IntegrationConfig {
@@ -32,17 +25,20 @@ struct IntegrationConfig {
 }
 
 impl IntegrationConfig {
-    /// Load integration configuration from a crate directory.
+    /// Load integration configuration from `[package.metadata.rbmt.integration]` in the package's `Cargo.toml`.
     fn load(crate_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = crate_dir.join(CONFIG_FILE_PATH);
-
-        if !config_path.exists() {
-            return Ok(Self::default());
+        #[derive(serde::Deserialize, Default)]
+        struct RbmtTable {
+            #[serde(default)]
+            integration: IntegrationConfig,
         }
 
-        let contents = std::fs::read_to_string(&config_path)?;
-        let config: Config = toml::from_str(&contents)?;
-        Ok(config.integration)
+        let path = crate_dir.join("Cargo.toml");
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(&path)?;
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.integration)
     }
 
     /// Get the package name (defaults to "bitcoind-tests").

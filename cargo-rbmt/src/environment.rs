@@ -8,9 +8,6 @@ use xshell::Shell;
 /// Any other value (or unset) defaults to verbose mode.
 const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
 
-/// Path to the RBMT configuration file relative to workspace/crate root.
-pub const CONFIG_FILE_PATH: &str = "rbmt.toml";
-
 /// A workspace package: its manifest name and directory path.
 pub type Package = (String, PathBuf);
 
@@ -238,4 +235,68 @@ impl Manifest {
 
         Ok(Self { exclude: cargo_toml.package.exclude })
     }
+}
+
+/// A minimal representation of a `Cargo.toml` for deserializing `[package.metadata.rbmt]`.
+///
+/// `T` is the type of the `[package.metadata.rbmt]` table. Each subcommand module defines its
+/// own `T` containing only the fields it needs.
+///
+/// ```ignore
+/// #[derive(serde::Deserialize, Default)]
+/// struct RbmtTable {
+///     #[serde(default)]
+///     lint: LintConfig,
+/// }
+///
+/// let path = package_dir.join("Cargo.toml");
+/// let contents = fs::read_to_string(&path)?;
+/// let config = toml::from_str::<PackageManifest<RbmtTable>>(&contents)?
+///     .package.metadata.rbmt.lint;
+/// ```
+#[derive(serde::Deserialize, Default)]
+pub(crate) struct PackageManifest<T: Default> {
+    #[serde(default)]
+    pub(crate) package: PackageTable<T>,
+}
+
+/// A minimal representation of a `Cargo.toml` for deserializing both
+/// `[workspace.metadata.rbmt]` and `[package.metadata.rbmt]` simultaneously.
+///
+/// Used when a module needs to prefer the workspace namespace and fall back to
+/// the package namespace, as with `[workspace.metadata.rbmt.tools]`.
+///
+/// ```ignore
+/// let contents = fs::read_to_string(&path)?;
+/// let toml = toml::from_str::<WorkspaceManifest<RbmtTable>>(&contents)?;
+/// let config = toml.workspace.metadata.rbmt.tools
+///     .or(toml.package.metadata.rbmt.tools);
+/// ```
+#[derive(serde::Deserialize, Default)]
+pub(crate) struct WorkspaceManifest<T: Default> {
+    #[serde(default)]
+    pub(crate) workspace: WorkspaceTable<T>,
+    #[serde(default)]
+    pub(crate) package: PackageTable<T>,
+}
+
+/// The `[workspace]` table of a `Cargo.toml`, generic over the `[workspace.metadata.rbmt]` type.
+#[derive(serde::Deserialize, Default)]
+pub(crate) struct WorkspaceTable<T: Default> {
+    #[serde(default)]
+    pub(crate) metadata: MetadataTable<T>,
+}
+
+/// The `[package]` table of a `Cargo.toml`, generic over the `[package.metadata.rbmt]` type.
+#[derive(serde::Deserialize, Default)]
+pub(crate) struct PackageTable<T: Default> {
+    #[serde(default)]
+    pub(crate) metadata: MetadataTable<T>,
+}
+
+/// The `[*.metadata]` table of a `Cargo.toml`, generic over the `[*.metadata.rbmt]` type.
+#[derive(serde::Deserialize, Default)]
+pub(crate) struct MetadataTable<T: Default> {
+    #[serde(default)]
+    pub(crate) rbmt: T,
 }

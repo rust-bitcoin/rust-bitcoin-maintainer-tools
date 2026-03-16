@@ -27,7 +27,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 ## Configuration
 
-Configuration for `rbmt` is stored in a per-package `rbmt.toml` file, a sibling to the package's manifest.
+Configuration for `rbmt` is stored in `[package.metadata.rbmt]` in each package's `Cargo.toml` manifest.
 
 ## Format
 
@@ -41,10 +41,10 @@ cargo rbmt fmt -p bitcoin
 
 ## Lint
 
-The `lint` command detects duplicate dependencies, but some may be unavoidable (e.g., during dependency updates where transitive dependencies haven't caught up). Configure the `[lint]` section to whitelist specific duplicates.
+The `lint` command detects duplicate dependencies, but some may be unavoidable (e.g., during dependency updates where transitive dependencies haven't caught up). Configure `[package.metadata.rbmt.lint]` to whitelist specific duplicates.
 
 ```toml
-[lint]
+[package.metadata.rbmt.lint]
 allowed_duplicates = [
     "syn",
     "bitcoin_hashes",
@@ -56,7 +56,7 @@ allowed_duplicates = [
 The `test` command runs feature matrix testing for your package. Every run unconditionally tests all features enabled, no features enabled, and each feature by itself. A package's features are auto-discovered. Randomly sampled feature subsets (number of sets grows with the number of package features) are tested per commit ID to try and catch interaction bugs without running massive matrices on every run.
 
 ```toml
-[test]
+[package.metadata.rbmt.test]
 # Examples to run with different feature configurations.
 #
 # Supported formats:
@@ -91,7 +91,7 @@ When a package declares `#![no_std]` in its library source, `cargo-rbmt test` au
 The `integration` command is designed to work with the [`corepc`](https://github.com/rust-bitcoin/corepc) integration testing framework, which provides Bitcoin Core binaries and testing infrastructure.
 
 ```toml
-[integration]
+[package.metadata.rbmt.integration]
 # Integration tests package name, defaults to "bitcoind-tests".
 package = "bitcoind-tests"
 # Versions to test. If omitted, tests all discovered versions from Cargo.toml.
@@ -103,7 +103,7 @@ versions = ["29_0", "28_2", "27_2"]
 The `prerelease` command performs readiness checks before releasing a package. Checks are opt-in and only run for packages with `enabled = true` that also have a version bump in `Cargo.toml` since the baseline ref.
 
 ```toml
-[prerelease]
+[package.metadata.rbmt.prerelease]
 enabled = true
 # baseline = "master"  # default
 ```
@@ -185,7 +185,7 @@ The `--update-nightly` and `--update-stable` flags each install the correspondin
 
 ## Tools
 
-The `tools` command installs external cargo tools whose versions are pinned in the root `Cargo.toml`. The preferred location is `[workspace.metadata.rbmt.tools]`:
+The `tools` command installs external cargo tools whose versions are pinned in the *root* `Cargo.toml` manifest. The preferred location is `[workspace.metadata.rbmt.tools]`.
 
 ```toml
 [workspace.metadata.rbmt.tools]
