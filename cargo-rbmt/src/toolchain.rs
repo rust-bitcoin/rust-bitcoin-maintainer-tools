@@ -2,8 +2,24 @@ use std::path::Path;
 
 use xshell::Shell;
 
-use crate::environment::get_workspace_root;
+use crate::environment::{get_workspace_root, WorkspaceManifest};
 use crate::quiet_cmd;
+
+/// The `[workspace.metadata.rbmt.toolchains]` table, holding pinned toolchain versions.
+#[derive(serde::Deserialize, Default)]
+struct ToolchainsConfig {
+    /// Pinned nightly toolchain version, e.g. `"nightly-2025-02-17"`.
+    nightly: Option<String>,
+    /// Pinned stable toolchain version, e.g. `"1.85.0"`.
+    stable: Option<String>,
+}
+
+/// Wrapper for deserializing `[workspace.metadata.rbmt.toolchains]` via `WorkspaceManifest`.
+#[derive(serde::Deserialize, Default)]
+struct ToolchainsTable {
+    #[serde(default)]
+    toolchains: ToolchainsConfig,
+}
 
 /// Environment variable that rustup's shims read to route `rustc`, `cargo`, and
 /// other toolchain commands to a specific installed toolchain.
@@ -15,12 +31,6 @@ use crate::quiet_cmd;
 /// effect and is the supported mechanism for propagating a toolchain choice into
 /// subprocesses without repeating the `+toolchain` flag on every inner call.
 const RUSTUP_TOOLCHAIN: &str = "RUSTUP_TOOLCHAIN";
-
-/// Version file that pins the nightly toolchain.
-const NIGHTLY_VERSION_FILE: &str = "nightly-version";
-
-/// Version file that pins the stable toolchain.
-const STABLE_VERSION_FILE: &str = "stable-version";
 
 /// Toolchain requirement for a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -34,55 +44,60 @@ pub enum Toolchain {
 }
 
 impl Toolchain {
-    /// Read the pinned version for this toolchain from the workspace root.
+    /// Read the pinned version for this toolchain from `[workspace.metadata.rbmt.toolchains]`
+    /// in the root manifest.
     pub fn read_version(self, sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
         match self {
-            Self::Nightly => Self::read_version_file(sh, NIGHTLY_VERSION_FILE)?.ok_or_else(|| {
-                format!("{} file not found in repository root", NIGHTLY_VERSION_FILE).into()
+            Self::Nightly => Self::read_cargo_toml_version(sh)?.nightly.ok_or_else(|| {
+                "nightly toolchain not set in [workspace.metadata.rbmt.toolchains]".into()
             }),
-            Self::Stable => Self::read_version_file(sh, STABLE_VERSION_FILE)?.ok_or_else(|| {
-                format!("{} file not found in repository root", STABLE_VERSION_FILE).into()
+            Self::Stable => Self::read_cargo_toml_version(sh)?.stable.ok_or_else(|| {
+                "stable toolchain not set in [workspace.metadata.rbmt.toolchains]".into()
             }),
             Self::Msrv => get_workspace_msrv(sh),
         }
     }
 
-    /// Write a pinned version string for this toolchain to the workspace root.
+    /// Write a pinned version string into `[workspace.metadata.rbmt.toolchains]` in the
+    /// root manifest.
     pub fn write_version(
         self,
         sh: &Shell,
         version: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        match self {
-            Self::Nightly => Self::write_version_file(sh, NIGHTLY_VERSION_FILE, version),
-            Self::Stable => Self::write_version_file(sh, STABLE_VERSION_FILE, version),
-            Self::Msrv => Err("MSRV is derived from Cargo.toml and cannot be written".into()),
-        }
+        let key = match self {
+            Self::Nightly => "nightly",
+            Self::Stable => "stable",
+            Self::Msrv =>
+                return Err("MSRV is derived from Cargo.toml and cannot be written".into()),
+        };
+        Self::write_cargo_toml_version(sh, key, version)
     }
 
-    /// Read a version file from the workspace root.
-    fn read_version_file(
-        sh: &Shell,
-        filename: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        let path = get_workspace_root(sh)?.join(filename);
-        if path.exists() {
-            Ok(std::fs::read_to_string(path)
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()))
-        } else {
-            Ok(None)
-        }
+    /// Read `[workspace.metadata.rbmt.toolchains]` from the root manifest.
+    fn read_cargo_toml_version(sh: &Shell) -> Result<ToolchainsConfig, Box<dyn std::error::Error>> {
+        let path = get_workspace_root(sh)?.join("Cargo.toml");
+        let contents = std::fs::read_to_string(&path)?;
+        Ok(toml::from_str::<WorkspaceManifest<ToolchainsTable>>(&contents)?
+            .workspace
+            .metadata
+            .rbmt
+            .toolchains)
     }
 
-    /// Write a version string to a file in the workspace root.
-    fn write_version_file(
+    /// Write a key/value pair into `[workspace.metadata.rbmt.toolchains]`.
+    fn write_cargo_toml_version(
         sh: &Shell,
-        filename: &str,
+        key: &str,
         version: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        std::fs::write(get_workspace_root(sh)?.join(filename), format!("{}\n", version))?;
+        let path = get_workspace_root(sh)?.join("Cargo.toml");
+        let contents = std::fs::read_to_string(&path)?;
+        let mut doc = contents.parse::<toml_edit::DocumentMut>()?;
+
+        doc["workspace"]["metadata"]["rbmt"]["toolchains"][key] = toml_edit::value(version);
+
+        std::fs::write(&path, doc.to_string())?;
         Ok(())
     }
 }
@@ -152,18 +167,15 @@ pub fn prepare_toolchain(
 /// Set `RUSTUP_TOOLCHAIN` on the [`Shell`] to the pinned toolchain version if
 /// rustup is available.
 ///
-/// Reads the toolchain from the appropriate version file (`nightly-version`,
-/// `stable-version`, or `Cargo.toml` `rust-version`) and sets it via
-/// `sh.set_var`, which only affects child processes spawned through this shell
-/// instance and does not mutate the process environment seen by
-/// `std::env::var`.
+/// Reads the pinned toolchain from `[workspace.metadata.rbmt.toolchains]` and sets it via
+/// `sh.set_var`, which only affects child processes spawned through this shell instance and
+/// does not mutate the process environment seen by `std::env::var`.
 ///
-/// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup
-/// already set `RUSTUP_TOOLCHAIN` in the process environment before this binary
-/// ran. We deliberately overwrite it with the pinned version because the version
-/// file is the authoritative source of truth for which toolchain each task
-/// requires. Falls back silently when rustup is not available (e.g. Nix) or
-/// when no version file is present.
+/// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup already set
+/// `RUSTUP_TOOLCHAIN` in the process environment before this binary ran. We deliberately
+/// overwrite it with the pinned version because `Cargo.toml` is the authoritative source of
+/// truth for which toolchain each task requires. Falls back silently when rustup is not
+/// available (e.g. Nix) or when no version is configured.
 fn maybe_set_rustup_toolchain(sh: &Shell, required: Toolchain) {
     // Only attempt if rustup is available.
     if quiet_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
