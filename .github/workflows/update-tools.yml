@@ -1,0 +1,20 @@
+name: Update Tools
+
+on:
+  # Manually triggerable only.
+  workflow_dispatch:
+
+# Permissions needed for GITHUB_TOKEN to create PR.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Update tools
+        uses: ./.github/actions/update-tools

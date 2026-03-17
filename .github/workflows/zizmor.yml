@@ -1,0 +1,23 @@
+name: Workflow Security Analysis
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+  schedule:
+    - cron: "0 0 * * 1" # Run every Monday at midnight
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git cargo-rbmt --locked
+      - run: cargo rbmt tools
+      - run: zizmor .
