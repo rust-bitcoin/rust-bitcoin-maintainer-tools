@@ -5,34 +5,9 @@ use std::path::{Path, PathBuf};
 use xshell::Shell;
 
 use crate::environment::{
-    get_target_dir, get_workspace_root, quiet_println, PackageManifest, Manifest, Package,
+    get_target_dir, get_workspace_root, quiet_println, Manifest, Package, PackageManifest,
 };
-use crate::{quiet_cmd, toolchain};
-
-/// RAII guard for temporarily switching git refs.
-struct GitSwitchGuard<'a> {
-    sh: &'a Shell,
-}
-
-impl<'a> GitSwitchGuard<'a> {
-    /// Create a new guard and switch to the specified ref.
-    fn new(sh: &'a Shell, git_ref: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        quiet_println(&format!("Switching to ref: {}", git_ref));
-        quiet_cmd!(sh, "git switch --detach {git_ref}").run()?;
-        Ok(Self { sh })
-    }
-}
-
-impl Drop for GitSwitchGuard<'_> {
-    fn drop(&mut self) {
-        quiet_println("Returning to previous ref...");
-        // Use expect here because if this fails, we're already in a bad state
-        // and there's not much we can do about it in Drop.
-        quiet_cmd!(self.sh, "git switch --detach -")
-            .run()
-            .expect("Failed to switch back to previous git ref");
-    }
-}
+use crate::{git, quiet_cmd, toolchain};
 
 /// Directory where API files are stored, relative to each package directory.
 const API_DIR: &str = "api";
@@ -317,7 +292,7 @@ fn check_semver(
 
     let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
     let mut baseline_apis = {
-        let _guard = GitSwitchGuard::new(sh, baseline)?;
+        let _guard = git::GitSwitchGuard::new(sh, baseline)?;
         get_package_apis(sh, package_name, package_dir)?
     };
 

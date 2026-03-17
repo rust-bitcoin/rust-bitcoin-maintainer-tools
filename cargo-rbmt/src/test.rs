@@ -11,9 +11,11 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::{Cmd, Shell};
 
-use crate::environment::{discover_features, git_commit_id, quiet_println, PackageManifest, Package};
-use crate::quiet_cmd;
+use crate::environment::{
+    discover_features, git_commit_id, quiet_println, Package, PackageManifest,
+};
 use crate::toolchain::{prepare_toolchain, Toolchain};
+use crate::{git, quiet_cmd};
 
 /// Summary of everything tested for a single package.
 #[derive(Debug, Default)]
@@ -69,17 +71,21 @@ impl fmt::Display for PackageSummary {
     }
 }
 
-/// Summary of an entire test run across all packages.
+/// Summary of an entire test run, grouped by commit.
 #[derive(Debug, Default)]
 struct TestSummary {
-    packages: Vec<PackageSummary>,
+    // Commit SHA paired with the package summaries tested at that commit.
+    commits: Vec<(String, Vec<PackageSummary>)>,
 }
 
 impl TestSummary {
     fn print(&self) {
         quiet_println("Test Summary");
-        for pkg in &self.packages {
-            quiet_println(&pkg.to_string());
+        for (sha, packages) in &self.commits {
+            quiet_println(&format!("Commit: {}", sha));
+            for pkg in packages {
+                quiet_println(&pkg.to_string());
+            }
         }
     }
 }
@@ -169,14 +175,57 @@ fn with_release(cmd: Cmd<'_>, release: bool) -> Cmd<'_> {
 }
 
 /// Run build and test for all crates with the specified toolchain.
+///
+/// If `baseline` is `Some(ref)`, checks out each commit between `baseline`
+/// and HEAD in turn, running the full test suite at each one. The checkout is
+/// restored via [`git::GitSwitchGuard`] even on failure. The run stops
+/// immediately if any commit fails.
 pub fn run(
     sh: &Shell,
     toolchain: Toolchain,
     no_debug_assertions: bool,
     release: bool,
+    baseline: Option<String>,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println(&format!("Testing {} crates", packages.len()));
+    let mut summary = TestSummary::default();
+
+    if let Some(baseline) = baseline {
+        let commits = git::list_commits(sh, &baseline)?;
+        if commits.is_empty() {
+            quiet_println(&format!("No commits found between '{}' and HEAD.", baseline));
+            return Ok(());
+        }
+        quiet_println(&format!(
+            "Testing {} commit(s) against baseline '{}'",
+            commits.len(),
+            baseline,
+        ));
+        for sha in &commits {
+            quiet_println(&format!("Testing commit {}...", &sha[..12]));
+            let _guard = git::GitSwitchGuard::new(sh, sha)?;
+            let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
+            summary.commits.push((sha.clone(), pkg_summaries));
+        }
+    } else {
+        let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
+        let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
+        summary.commits.push((sha, pkg_summaries));
+    }
+
+    summary.print();
+    Ok(())
+}
+
+/// Run the full test suite at the current commit and return the per-package summaries.
+fn test_commit(
+    sh: &Shell,
+    toolchain: Toolchain,
+    no_debug_assertions: bool,
+    release: bool,
+    packages: &[Package],
+) -> Result<Vec<PackageSummary>, Box<dyn std::error::Error>> {
+    quiet_println(&format!("Testing {} crate(s)", packages.len()));
 
     // Configure RUSTFLAGS for debug assertions.
     let _env = sh.push_env(
@@ -184,7 +233,7 @@ pub fn run(
         if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
     );
 
-    let mut summary = TestSummary::default();
+    let mut pkg_summaries = Vec::new();
 
     for package in packages {
         let (package_name, package_dir) = package;
@@ -203,11 +252,10 @@ pub fn run(
         do_feature_matrix(sh, package, &config, release, &mut pkg_summary)?;
         do_no_std_check(sh, Path::new(package_dir), &mut pkg_summary)?;
 
-        summary.packages.push(pkg_summary);
+        pkg_summaries.push(pkg_summary);
     }
 
-    summary.print();
-    Ok(())
+    Ok(pkg_summaries)
 }
 
 /// Run basic build, test, and examples.

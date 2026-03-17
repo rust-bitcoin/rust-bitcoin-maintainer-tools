@@ -3,6 +3,7 @@ mod bench;
 mod docs;
 mod environment;
 mod fmt;
+mod git;
 mod integration;
 mod lint;
 mod lock;
@@ -66,9 +67,12 @@ enum Commands {
         /// Disable debug assertions in compiled code.
         #[arg(long)]
         no_debug_assertions: bool,
-        /// Build and test in release mode
+        /// Build and test in release mode.
         #[arg(long)]
         release: bool,
+        /// Test every commit between the given baseline ref and HEAD to verify bisectability.
+        #[arg(long)]
+        baseline: Option<String>,
     },
     /// Run bitcoin core integration tests.
     Integration,
@@ -171,8 +175,10 @@ fn main() {
                 eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             },
-        Commands::Test { toolchain, no_debug_assertions, release } =>
-            if let Err(e) = test::run(&sh, toolchain, no_debug_assertions, release, &packages) {
+        Commands::Test { toolchain, no_debug_assertions, release, baseline } =>
+            if let Err(e) =
+                test::run(&sh, toolchain, no_debug_assertions, release, baseline, &packages)
+            {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             },
