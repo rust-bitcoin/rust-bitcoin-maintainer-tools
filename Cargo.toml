@@ -4,6 +4,10 @@ members = [
 ]
 resolver = "2"
 
+[workspace.metadata.rbmt.toolchains]
+nightly = "nightly-2026-02-10"
+stable = "1.93.0"
+
 [workspace.lints.clippy]
 # Exclude lints we don't think are valuable.
 needless_question_mark = "allow" # https://github.com/rust-bitcoin/rust-bitcoin/pull/2134
