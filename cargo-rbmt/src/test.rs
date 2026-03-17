@@ -4,6 +4,7 @@
 //! and catch any issues involving `cfg(test)` somehow gating required code.
 
 use std::collections::hash_map::DefaultHasher;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
@@ -13,6 +14,75 @@ use xshell::{Cmd, Shell};
 use crate::environment::{discover_features, git_commit_id, quiet_println, PackageManifest, Package};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
+
+/// Summary of everything tested for a single package.
+#[derive(Debug, Default)]
+struct PackageSummary {
+    /// Manifest name of the package.
+    name: String,
+    /// Examples that were run, in their as-configured form (e.g. `"bip32:-"`).
+    examples: Vec<String>,
+    /// Individual auto-discovered features tested in isolation.
+    individual_features: Vec<String>,
+    /// Random commit-seeded feature subsets that were tested.
+    sampled_subsets: Vec<Vec<String>>,
+    /// Exact feature sets from `exact_features` config that were tested.
+    exact_sets: Vec<Vec<String>>,
+    /// Whether the no-std cross-compilation check was run.
+    no_std_checked: bool,
+}
+
+impl fmt::Display for PackageSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Pretty print a list of features.
+        let fmt_list = |list: &[String]| -> String {
+            if list.is_empty() {
+                "(none)".to_string()
+            } else {
+                list.join(", ")
+            }
+        };
+        // Pretty print a list of feature sets.
+        let fmt_sets = |sets: &[Vec<String>]| -> String {
+            if sets.is_empty() {
+                return "(none)".to_string();
+            }
+            sets.iter().map(|s| format!("[{}]", fmt_list(s))).collect::<Vec<_>>().join(", ")
+        };
+
+        let rows: &[(&str, String)] = &[
+            ("Examples", fmt_list(&self.examples)),
+            ("Individual features", fmt_list(&self.individual_features)),
+            ("Sampled subsets", fmt_sets(&self.sampled_subsets)),
+            ("Exact sets", fmt_sets(&self.exact_sets)),
+            ("No-std check", if self.no_std_checked { "ran" } else { "skipped" }.to_string()),
+        ];
+
+        // Compute the column width from the longest label so values align.
+        let width = rows.iter().map(|(label, _)| label.len()).max().unwrap_or(0);
+        writeln!(f, "  Package: {}", self.name)?;
+        for (label, value) in rows {
+            writeln!(f, "    {label:<width$}: {value}")?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Summary of an entire test run across all packages.
+#[derive(Debug, Default)]
+struct TestSummary {
+    packages: Vec<PackageSummary>,
+}
+
+impl TestSummary {
+    fn print(&self) {
+        quiet_println("Test Summary");
+        for pkg in &self.packages {
+            quiet_println(&pkg.to_string());
+        }
+    }
+}
 
 /// Test-specific configuration, read from `[package.metadata.rbmt.test]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
@@ -114,9 +184,11 @@ pub fn run(
         if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
     );
 
+    let mut summary = TestSummary::default();
+
     for package in packages {
-        let (_, package_dir) = package;
-        quiet_println(&format!("Testing crate: {}", package_dir.display()));
+        let (package_name, package_dir) = package;
+        quiet_println(&format!("Testing package: {}", package_name));
 
         let _dir = sh.push_dir(package_dir);
         // prepare_toolchain is called per-package because MSRV is read from
@@ -125,11 +197,16 @@ pub fn run(
         let config = TestConfig::load(Path::new(package_dir))?;
         let release = release || config.release;
 
-        do_test(sh, &config, release)?;
-        do_feature_matrix(sh, package, &config, release)?;
-        do_no_std_check(sh, Path::new(package_dir))?;
+        let mut pkg_summary = PackageSummary { name: package_name.clone(), ..Default::default() };
+
+        do_test(sh, &config, release, &mut pkg_summary)?;
+        do_feature_matrix(sh, package, &config, release, &mut pkg_summary)?;
+        do_no_std_check(sh, Path::new(package_dir), &mut pkg_summary)?;
+
+        summary.packages.push(pkg_summary);
     }
 
+    summary.print();
     Ok(())
 }
 
@@ -138,6 +215,7 @@ fn do_test(
     sh: &Shell,
     config: &TestConfig,
     release: bool,
+    summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running basic tests");
 
@@ -184,6 +262,8 @@ fn do_test(
                 .into());
             }
         }
+
+        summary.examples.push(example.clone());
     }
 
     Ok(())
@@ -200,6 +280,7 @@ fn do_feature_matrix(
     package: &Package,
     config: &TestConfig,
     release: bool,
+    summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running feature matrix tests");
 
@@ -224,12 +305,13 @@ fn do_feature_matrix(
             features.len(),
             features.join(", ")
         ));
-        sampled_feature_matrix(sh, &features, release)?;
+        sampled_feature_matrix(sh, &features, release, summary)?;
     }
 
     // Test exact feature sets.
     for features in &config.exact_features {
         test_features(sh, features, release)?;
+        summary.exact_sets.push(features.clone());
     }
 
     Ok(())
@@ -247,6 +329,7 @@ fn sampled_feature_matrix(
     sh: &Shell,
     features: &[String],
     release: bool,
+    summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // ceil(log2(n)) scales the number of random subsets with the feature count.
     fn num_subsets(n: usize) -> u32 {
@@ -260,6 +343,7 @@ fn sampled_feature_matrix(
     // Test each feature individually.
     for feature in features {
         test_features(sh, &[feature], release)?;
+        summary.individual_features.push(feature.clone());
     }
 
     // Test random feature subsets, scaling with feature count.
@@ -282,6 +366,7 @@ fn sampled_feature_matrix(
             }
 
             test_features(sh, &subset, release)?;
+            summary.sampled_subsets.push(subset.into_iter().cloned().collect());
         }
     }
 
@@ -321,7 +406,11 @@ fn is_no_std_package(sh: &Shell, package_dir: &Path) -> Result<bool, Box<dyn std
 }
 
 /// Check no-std compatibility if the package declares `#![no_std]`.
-fn do_no_std_check(sh: &Shell, package_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn do_no_std_check(
+    sh: &Shell,
+    package_dir: &Path,
+    summary: &mut PackageSummary,
+) -> Result<(), Box<dyn std::error::Error>> {
     const NO_STD_TARGET: &str = "thumbv7m-none-eabi";
     if !is_no_std_package(sh, package_dir)? {
         return Ok(());
@@ -330,5 +419,6 @@ fn do_no_std_check(sh: &Shell, package_dir: &Path) -> Result<(), Box<dyn std::er
     quiet_println(&format!("Detected no-std package, building for target: {}", NO_STD_TARGET));
     quiet_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run()?;
     quiet_println("no-std build passed!");
+    summary.no_std_checked = true;
     Ok(())
 }

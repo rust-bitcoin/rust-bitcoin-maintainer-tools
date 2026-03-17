@@ -31,10 +31,7 @@ _default:
 @lint: (_rbmt "lint")
 
 # Run tests.
-@test: (_rbmt "test stable")
-
-# Run tests with MSRV.
-@msrv: (_rbmt "test msrv")
+@test: (_rbmt "test")
 
 # Update Cargo-minimal.lock and Cargo-recent.lock files.
 @lock: (_rbmt "lock")
