@@ -144,10 +144,13 @@ pub fn get_packages(
 
 /// Get the workspace root directory from metadata.
 ///
-/// This is the directory containing the top-level `Cargo.toml` (the one with
-/// `[workspace]`). It is the authoritative location for workspace-level files
-/// such as `nightly-version` and `stable-version`, regardless of where the
-/// shell's current directory happens to be.
+/// This is the directory containing the top-level `Cargo.toml`. It is the
+/// authoritative location for workspace-level files, regardless of where
+/// the shell's current directory happens to be.
+///
+/// For single-package repositories with no explicit `[workspace]` table, Cargo
+/// creates an implicit workspace and `workspace_root` resolves to the package
+/// directory itself.
 pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;

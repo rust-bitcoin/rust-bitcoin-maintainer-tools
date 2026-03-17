@@ -10,6 +10,7 @@ mod prerelease;
 mod test;
 mod toolchain;
 mod toolchains;
+mod tools;
 
 use std::process;
 
@@ -91,6 +92,14 @@ enum Commands {
         #[arg(long)]
         msrv: bool,
     },
+    /// Install tools pinned in [workspace.metadata.rbmt.tools].
+    Tools {
+        /// Install each tool at its latest version and update the pin in Cargo.toml.
+        #[arg(long)]
+        update: bool,
+        /// Only operate on these tools (default: all tools in the manifest).
+        tools: Vec<String>,
+    },
 }
 
 fn main() {
@@ -106,11 +115,14 @@ fn main() {
     let sh = Shell::new().unwrap();
     configure_log_level(&sh);
 
-    // Restore the specified lock file before running any command (except commands that don't
-    // compile the workspace: Fmt, Lock, Integration, Toolchains).
+    // Restore the specified lock file before running commands which require lock files.
     if !matches!(
         cli.command,
-        Commands::Fmt { .. } | Commands::Lock | Commands::Integration | Commands::Toolchains { .. }
+        Commands::Fmt { .. }
+            | Commands::Lock
+            | Commands::Integration
+            | Commands::Toolchains { .. }
+            | Commands::Tools { .. }
     ) {
         if let Err(e) = cli.lock_file.restore(&sh) {
             eprintln!("Error restoring lock file: {}", e);
@@ -182,6 +194,11 @@ fn main() {
         Commands::Toolchains { update_nightly, update_stable, msrv } =>
             if let Err(e) = toolchains::run(&sh, update_nightly, update_stable, msrv) {
                 eprintln!("Error setting up toolchains: {}", e);
+                process::exit(1);
+            },
+        Commands::Tools { update, tools } =>
+            if let Err(e) = tools::run(&sh, update, &tools) {
+                eprintln!("Error managing tools: {}", e);
                 process::exit(1);
             },
     }
