@@ -15,12 +15,13 @@ runs:
   using: "composite"
   steps:
     - name: Install a Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
+      uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1
 
     - name: Install cargo-rbmt
       shell: bash
+      env:
+        RBMT_VERSION: ${{ inputs.rbmt-version }}
       run: |
-        RBMT_VERSION="${{ inputs.rbmt-version }}"
         [ -z "$RBMT_VERSION" ] && [ -f rbmt-version ] && RBMT_VERSION=$(cat rbmt-version)
         [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
         cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev "$RBMT_VERSION" cargo-rbmt --locked

@@ -10,32 +10,32 @@ on:
     branches: [ master ]
   pull_request:
 
+permissions: {}
+
 jobs:
   dogfood-lints:
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
-      - uses: actions/checkout@v6
-
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - name: Dogfood with cargo-rbmt
         uses: ./.github/actions/setup-rbmt
         with:
           rbmt-version: ${{ github.sha }}
-
-      - name: Run lint on workspace
-        run: cargo rbmt --lock-file existing lint
-
-      - name: Build documentation (stable)
-        run: cargo rbmt --lock-file existing docs
-
-      - name: Build documentation (docs.rs / nightly)
-        run: cargo rbmt --lock-file existing docsrs
+      - run: cargo rbmt --lock-file existing lint
+      - run: cargo rbmt --lock-file existing docs
+      - run: cargo rbmt --lock-file existing docsrs
 
   dogfood-prerelease:
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0 # Context required for version bump detection.
+          persist-credentials: false
       - uses: ./.github/actions/setup-rbmt
         with:
           rbmt-version: ${{ github.sha }}
@@ -43,14 +43,16 @@ jobs:
 
   dogfood-tests:
     runs-on: ubuntu-latest
+    permissions: {}
     strategy:
       matrix:
         lock-file: [existing, recent, minimal]
         toolchain: [stable, msrv]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0 # Context required for bisectability tests.
+          persist-credentials: false
       - name: Dogfood with cargo-rbmt
         uses: ./.github/actions/setup-rbmt
         with:
