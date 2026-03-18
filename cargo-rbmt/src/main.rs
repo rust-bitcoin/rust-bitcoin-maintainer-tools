@@ -128,6 +128,7 @@ fn main() {
         Commands::Fmt { .. }
             | Commands::Lock
             | Commands::Integration
+            | Commands::Prerelease { .. }
             | Commands::Toolchains { .. }
             | Commands::Tools { .. }
     ) {

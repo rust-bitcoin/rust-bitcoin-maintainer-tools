@@ -13,15 +13,11 @@ use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct PrereleaseConfig {
     /// Whether to run pre-release checks for this package. Defaults to `false`.
     enabled: bool,
-}
-
-impl Default for PrereleaseConfig {
-    fn default() -> Self { Self { enabled: false } }
 }
 
 impl PrereleaseConfig {
@@ -154,8 +150,7 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// A package may work with local path dependencies, but fail when published
 /// because the version specifications don't match the published versions
-/// or don't resolve correctly. This function tests the package with minimal
-/// dependency versions attemting to catch compatibility issues.
+/// or don't resolve correctly.
 fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
     quiet_cmd!(sh, "cargo publish --dry-run").run()?;
@@ -163,6 +158,7 @@ fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
     let _dir = sh.push_dir(&package_dir);
     quiet_println(&format!("Testing publish package: {}", package_dir));
+    // Re-derive dependencies since it is what an end user will see.
     LockFile::Minimal.derive(sh)?;
     quiet_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
 
