@@ -7,19 +7,12 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_target_dir, quiet_println, Package, CONFIG_FILE_PATH};
+use crate::environment::{get_target_dir, quiet_println, PackageManifest, Package};
 use crate::lock::LockFile;
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
-/// Pre-release configuration loaded from rbmt.toml.
-#[derive(Debug, Deserialize, Default)]
-#[serde(default)]
-struct Config {
-    prerelease: PrereleaseConfig,
-}
-
-/// Pre-release-specific configuration.
+/// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 struct PrereleaseConfig {
@@ -34,17 +27,20 @@ impl Default for PrereleaseConfig {
 }
 
 impl PrereleaseConfig {
-    /// Load pre-release configuration from a package directory.
+    /// Load pre-release configuration from `[package.metadata.rbmt.prerelease]` in the package's `Cargo.toml`.
     fn load(package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = package_dir.join(CONFIG_FILE_PATH);
-
-        if !config_path.exists() {
-            return Ok(Self::default());
+        #[derive(serde::Deserialize, Default)]
+        struct RbmtTable {
+            #[serde(default)]
+            prerelease: PrereleaseConfig,
         }
 
-        let contents = std::fs::read_to_string(&config_path)?;
-        let config: Config = toml::from_str(&contents)?;
-        Ok(config.prerelease)
+        let path = package_dir.join("Cargo.toml");
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(&path)?;
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.prerelease)
     }
 }
 

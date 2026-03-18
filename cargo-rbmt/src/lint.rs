@@ -4,18 +4,11 @@ use std::path::Path;
 
 use xshell::Shell;
 
-use crate::environment::{get_packages, get_workspace_root, quiet_println, Package, CONFIG_FILE_PATH};
+use crate::environment::{get_packages, get_workspace_root, quiet_println, PackageManifest, Package};
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
-/// Lint configuration loaded from rbmt.toml.
-#[derive(Debug, serde::Deserialize, Default)]
-#[serde(default)]
-struct Config {
-    lint: LintConfig,
-}
-
-/// Lint-specific configuration.
+/// Lint-specific configuration, read from `[package.metadata.rbmt.lint]` in `Cargo.toml`.
 #[derive(Debug, serde::Deserialize, Default)]
 #[serde(default)]
 struct LintConfig {
@@ -24,18 +17,20 @@ struct LintConfig {
 }
 
 impl LintConfig {
-    /// Load lint configuration from a package directory.
+    /// Load lint configuration from `[package.metadata.rbmt.lint]` in the package's `Cargo.toml`.
     fn load(package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = package_dir.join(CONFIG_FILE_PATH);
-
-        if !config_path.exists() {
-            // Return empty config if file doesn't exist.
-            return Ok(Self { allowed_duplicates: Vec::new() });
+        #[derive(serde::Deserialize, Default)]
+        struct RbmtTable {
+            #[serde(default)]
+            lint: LintConfig,
         }
 
-        let contents = fs::read_to_string(&config_path)?;
-        let config: Config = toml::from_str(&contents)?;
-        Ok(config.lint)
+        let path = package_dir.join("Cargo.toml");
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(&path)?;
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.lint)
     }
 }
 

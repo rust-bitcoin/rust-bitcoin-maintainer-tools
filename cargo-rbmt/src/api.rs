@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 use xshell::Shell;
 
-use crate::{environment, quiet_cmd, toolchain};
+use crate::environment::{
+    get_target_dir, get_workspace_root, quiet_println, PackageManifest, Manifest, Package,
+};
+use crate::{quiet_cmd, toolchain};
 
 /// RAII guard for temporarily switching git refs.
 struct GitSwitchGuard<'a> {
@@ -14,7 +17,7 @@ struct GitSwitchGuard<'a> {
 impl<'a> GitSwitchGuard<'a> {
     /// Create a new guard and switch to the specified ref.
     fn new(sh: &'a Shell, git_ref: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        environment::quiet_println(&format!("Switching to ref: {}", git_ref));
+        quiet_println(&format!("Switching to ref: {}", git_ref));
         quiet_cmd!(sh, "git switch --detach {git_ref}").run()?;
         Ok(Self { sh })
     }
@@ -22,7 +25,7 @@ impl<'a> GitSwitchGuard<'a> {
 
 impl Drop for GitSwitchGuard<'_> {
     fn drop(&mut self) {
-        environment::quiet_println("Returning to previous ref...");
+        quiet_println("Returning to previous ref...");
         // Use expect here because if this fails, we're already in a bad state
         // and there's not much we can do about it in Drop.
         quiet_cmd!(self.sh, "git switch --detach -")
@@ -44,14 +47,7 @@ const RUSTDOCFLAGS_ALLOW_BROKEN_LINKS: &str = "-A rustdoc::broken_intra_doc_link
 /// A collection of public APIs for a single package across different feature configurations.
 type PackageApis = HashMap<FeatureConfig, public_api::PublicApi>;
 
-/// API configuration loaded from rbmt.toml.
-#[derive(Debug, serde::Deserialize, Default)]
-#[serde(default)]
-struct Config {
-    api: ApiConfig,
-}
-
-/// API-specific configuration.
+/// API-specific configuration, read from `[package.metadata.rbmt.api]` in `Cargo.toml`.
 #[derive(Debug, serde::Deserialize)]
 #[serde(default)]
 struct ApiConfig {
@@ -69,17 +65,20 @@ impl Default for ApiConfig {
 }
 
 impl ApiConfig {
-    /// Load API configuration from a package directory.
+    /// Load API configuration from `[package.metadata.rbmt.api]` in the package's `Cargo.toml`.
     fn load(package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = package_dir.join(environment::CONFIG_FILE_PATH);
-
-        if !config_path.exists() {
-            return Ok(Self::default());
+        #[derive(serde::Deserialize, Default)]
+        struct RbmtTable {
+            #[serde(default)]
+            api: ApiConfig,
         }
 
-        let contents = fs::read_to_string(&config_path)?;
-        let config: Config = toml::from_str(&contents)?;
-        Ok(config.api)
+        let path = package_dir.join("Cargo.toml");
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(&path)?;
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.api)
     }
 }
 
@@ -137,10 +136,10 @@ impl FeatureConfig {
 /// * `baseline` - Git ref for optional semver comparison.
 pub fn run(
     sh: &Shell,
-    packages: &[environment::Package],
+    packages: &[Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    environment::quiet_println("Running API check...");
+    quiet_println("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
     check_apis(sh, packages, baseline)?;
@@ -154,7 +153,7 @@ fn get_package_apis(
     package_name: &str,
     package_dir: &PathBuf,
 ) -> Result<PackageApis, Box<dyn std::error::Error>> {
-    let workspace_root = environment::get_workspace_root(sh)?;
+    let workspace_root = get_workspace_root(sh)?;
     let mut apis = HashMap::new();
 
     let mut feature_configs = vec![FeatureConfig::None, FeatureConfig::All];
@@ -181,7 +180,7 @@ fn get_package_apis(
 
         // Change back to workspace root and parse JSON.
         sh.change_dir(&workspace_root);
-        let target_dir = environment::get_target_dir(sh)?;
+        let target_dir = get_target_dir(sh)?;
         let json_path = Path::new(&target_dir)
             .join("doc")
             // Rustdoc replaces hyphens with underscores in the filename.
@@ -201,7 +200,7 @@ fn get_package_apis(
 /// validates that features are additive, and checks for git changes.
 fn check_apis(
     sh: &Shell,
-    package_info: &[crate::environment::Package],
+    package_info: &[Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut api_dirs: Vec<PathBuf> = Vec::new();
@@ -283,7 +282,7 @@ fn check_api_excluded(
     package_dir: &Path,
     package_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let manifest = environment::Manifest::read(package_dir)?;
+    let manifest = Manifest::read(package_dir)?;
 
     if !manifest.exclude.iter().any(|e| e.starts_with("api")) {
         return Err(format!(
@@ -314,7 +313,7 @@ fn check_semver(
     package_dir: &PathBuf,
     baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    environment::quiet_println(&format!("Running semver check against baseline: {}", baseline));
+    quiet_println(&format!("Running semver check against baseline: {}", baseline));
 
     let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
     let mut baseline_apis = {
