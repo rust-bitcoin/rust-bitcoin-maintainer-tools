@@ -176,31 +176,26 @@ fn with_release(cmd: Cmd<'_>, release: bool) -> Cmd<'_> {
 
 /// Run build and test for all crates with the specified toolchain.
 ///
-/// If `baseline` is `Some(ref)`, checks out each commit between `baseline`
-/// and HEAD in turn, running the full test suite at each one. The checkout is
-/// restored via [`git::GitSwitchGuard`] even on failure. The run stops
-/// immediately if any commit fails.
+/// If `baseline` is `Some`, checks out each commit between `baseline` and HEAD in turn,
+/// running the full test suite at each one. The checkout is restored via
+/// [`git::GitSwitchGuard`] even on failure, and the run stops immediately if any commit fails.
 pub fn run(
     sh: &Shell,
     toolchain: Toolchain,
     no_debug_assertions: bool,
     release: bool,
-    baseline: Option<String>,
+    baseline: Option<&str>,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut summary = TestSummary::default();
 
     if let Some(baseline) = baseline {
-        let commits = git::list_commits(sh, &baseline)?;
+        let commits = git::list_commits(sh, baseline)?;
         if commits.is_empty() {
             quiet_println(&format!("No commits found between '{}' and HEAD.", baseline));
             return Ok(());
         }
-        quiet_println(&format!(
-            "Testing {} commit(s) against baseline '{}'",
-            commits.len(),
-            baseline,
-        ));
+        quiet_println(&format!("Testing {} commit(s) against baseline '{}'", commits.len(), baseline));
         for sha in &commits {
             quiet_println(&format!("Testing commit {}...", &sha[..12]));
             let _guard = git::GitSwitchGuard::new(sh, sha)?;

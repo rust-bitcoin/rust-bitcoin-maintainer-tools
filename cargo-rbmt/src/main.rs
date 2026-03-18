@@ -83,13 +83,16 @@ enum Commands {
         /// Run checks even for packages that have pre-release checks disabled.
         #[arg(long)]
         force: bool,
+        /// Git ref to use as baseline for version bump detection (tag, branch, or commit).
+        #[arg(long, default_value = "master")]
+        baseline: String,
     },
     /// Install and manage nightly, stable, and MSRV toolchains.
     Toolchains {
-        /// Update the `nightly-version` file.
+        /// Update the nightly toolchain version.
         #[arg(long)]
         update_nightly: bool,
-        /// Update the `stable-version` file.
+        /// Update the stable toolchain version.
         #[arg(long)]
         update_stable: bool,
         /// Print the workspace MSRV and exit without installing any toolchains.
@@ -98,7 +101,7 @@ enum Commands {
     },
     /// Install tools pinned in [workspace.metadata.rbmt.tools].
     Tools {
-        /// Install each tool at its latest version and update the pin in Cargo.toml.
+        /// Install each tool at its latest version and update pins in the root manifest.
         #[arg(long)]
         update: bool,
         /// Only operate on these tools (default: all tools in the manifest).
@@ -176,9 +179,14 @@ fn main() {
                 process::exit(1);
             },
         Commands::Test { toolchain, no_debug_assertions, release, baseline } =>
-            if let Err(e) =
-                test::run(&sh, toolchain, no_debug_assertions, release, baseline, &packages)
-            {
+            if let Err(e) = test::run(
+                &sh,
+                toolchain,
+                no_debug_assertions,
+                release,
+                baseline.as_deref(),
+                &packages,
+            ) {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             },
@@ -192,8 +200,8 @@ fn main() {
                 eprintln!("Error updating lock files: {}", e);
                 process::exit(1);
             },
-        Commands::Prerelease { force } =>
-            if let Err(e) = prerelease::run(&sh, &packages, force) {
+        Commands::Prerelease { force, baseline } =>
+            if let Err(e) = prerelease::run(&sh, &packages, force, &baseline) {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },

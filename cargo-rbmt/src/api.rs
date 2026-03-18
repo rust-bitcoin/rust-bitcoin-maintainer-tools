@@ -30,13 +30,10 @@ struct ApiConfig {
     enabled: bool,
     /// Feature combinations to test (in addition to no-features and all-features).
     features: Vec<Vec<String>>,
-    /// Default git ref to use as baseline for semver comparison.
-    /// If not set, only feature additivity and git status checks are performed.
-    baseline: Option<String>,
 }
 
 impl Default for ApiConfig {
-    fn default() -> Self { Self { enabled: true, features: Vec::new(), baseline: None } }
+    fn default() -> Self { Self { enabled: true, features: Vec::new() } }
 }
 
 impl ApiConfig {
@@ -229,8 +226,7 @@ fn check_apis(
             return Err("Non-additive features detected".into());
         }
 
-        // CLI flag takes priority over config.
-        if let Some(baseline) = baseline.or(api_config.baseline.as_deref()) {
+        if let Some(baseline) = baseline {
             check_semver(sh, package_name, package_dir, baseline)?;
         }
     }

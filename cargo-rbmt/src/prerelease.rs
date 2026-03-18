@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_target_dir, quiet_println, PackageManifest, Package};
+use crate::environment::{get_target_dir, quiet_println, Package, PackageManifest};
 use crate::lock::LockFile;
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
@@ -18,12 +18,10 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 struct PrereleaseConfig {
     /// Whether to run pre-release checks for this package. Defaults to `false`.
     enabled: bool,
-    /// Base git ref to compare against when detecting version bumps. Defaults to `"master"`.
-    baseline: String,
 }
 
 impl Default for PrereleaseConfig {
-    fn default() -> Self { Self { enabled: false, baseline: "master".to_string() } }
+    fn default() -> Self { Self { enabled: false } }
 }
 
 impl PrereleaseConfig {
@@ -40,12 +38,21 @@ impl PrereleaseConfig {
             return Ok(Self::default());
         }
         let contents = std::fs::read_to_string(&path)?;
-        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.prerelease)
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?
+            .package
+            .metadata
+            .rbmt
+            .prerelease)
     }
 }
 
 /// Run pre-release readiness checks for all packages.
-pub fn run(sh: &Shell, packages: &[Package], force: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    sh: &Shell,
+    packages: &[Package],
+    force: bool,
+    baseline: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Running pre-release checks on {} packages", packages.len()));
 
     for (package_name, package_dir) in packages {
@@ -56,10 +63,10 @@ pub fn run(sh: &Shell, packages: &[Package], force: bool) -> Result<(), Box<dyn 
             continue;
         }
 
-        if !force && !has_version_bump(sh, package_dir, &config.baseline)? {
+        if !force && !has_version_bump(sh, package_dir, baseline)? {
             quiet_println(&format!(
                 "Skipping {package_name} (no version bump detected since {})",
-                config.baseline
+                baseline
             ));
             continue;
         }
