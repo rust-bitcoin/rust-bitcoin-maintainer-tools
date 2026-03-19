@@ -12,11 +12,11 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
 
     quiet_println(&format!("Running bench tests for {} crates", packages.len()));
 
-    for (_package_name, package_dir) in packages {
-        quiet_println(&format!("Running bench tests in: {}", package_dir.display()));
+    for package in packages {
+        quiet_println(&format!("Running bench tests in: {}", package.dir.display()));
 
         // Use pushd pattern to change and restore directory.
-        let _dir = sh.push_dir(package_dir);
+        let _dir = sh.push_dir(&package.dir);
 
         quiet_cmd!(sh, "cargo --locked bench").env("RUSTFLAGS", "--cfg=bench").run()?;
     }

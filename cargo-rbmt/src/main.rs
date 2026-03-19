@@ -29,7 +29,7 @@ struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = LockFile::Recent)]
     lock_file: LockFile,
 
-    /// Filter to specific package (can be specified multiple times).
+    /// Filter which packages are operated on in the workspace. Can be a package's manifest name or directory.
     #[arg(short = 'p', long = "package", global = true)]
     packages: Vec<String>,
 

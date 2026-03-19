@@ -195,7 +195,11 @@ pub fn run(
             quiet_println(&format!("No commits found between '{}' and HEAD.", baseline));
             return Ok(());
         }
-        quiet_println(&format!("Testing {} commit(s) against baseline '{}'", commits.len(), baseline));
+        quiet_println(&format!(
+            "Testing {} commit(s) against baseline '{}'",
+            commits.len(),
+            baseline
+        ));
         for sha in &commits {
             quiet_println(&format!("Testing commit {}...", &sha[..12]));
             let _guard = git::GitSwitchGuard::new(sh, sha)?;
@@ -231,21 +235,20 @@ fn test_commit(
     let mut pkg_summaries = Vec::new();
 
     for package in packages {
-        let (package_name, package_dir) = package;
-        quiet_println(&format!("Testing package: {}", package_name));
+        quiet_println(&format!("Testing package: {}", package.name));
 
-        let _dir = sh.push_dir(package_dir);
+        let _dir = sh.push_dir(&package.dir);
         // prepare_toolchain is called per-package because MSRV is read from
         // each package's Cargo.toml individually rather than the workspace root.
         prepare_toolchain(sh, toolchain)?;
-        let config = TestConfig::load(Path::new(package_dir))?;
+        let config = TestConfig::load(Path::new(&package.dir))?;
         let release = release || config.release;
 
-        let mut pkg_summary = PackageSummary { name: package_name.clone(), ..Default::default() };
+        let mut pkg_summary = PackageSummary { name: package.name.clone(), ..Default::default() };
 
         do_test(sh, &config, release, &mut pkg_summary)?;
         do_feature_matrix(sh, package, &config, release, &mut pkg_summary)?;
-        do_no_std_check(sh, Path::new(package_dir), &mut pkg_summary)?;
+        do_no_std_check(sh, &package.dir, &mut pkg_summary)?;
 
         pkg_summaries.push(pkg_summary);
     }

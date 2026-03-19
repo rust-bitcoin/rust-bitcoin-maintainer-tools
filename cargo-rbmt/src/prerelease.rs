@@ -51,34 +51,34 @@ pub fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Running pre-release checks on {} packages", packages.len()));
 
-    for (package_name, package_dir) in packages {
-        let config = PrereleaseConfig::load(Path::new(package_dir))?;
+    for package in packages {
+        let config = PrereleaseConfig::load(Path::new(&package.dir))?;
 
         if !config.enabled {
-            quiet_println(&format!("Skipping {package_name} (pre-release not enabled)"));
+            quiet_println(&format!("Skipping {} (pre-release not enabled)", package.name));
             continue;
         }
 
-        if !force && !has_version_bump(sh, package_dir, baseline)? {
+        if !force && !has_version_bump(sh, &package.dir, baseline)? {
             quiet_println(&format!(
-                "Skipping {package_name} (no version bump detected since {})",
-                baseline
+                "Skipping {} (no version bump detected since {})",
+                package.name, baseline
             ));
             continue;
         }
 
-        quiet_println(&format!("Checking package: {package_name}"));
+        quiet_println(&format!("Checking package: {}", package.name));
 
-        let _dir = sh.push_dir(package_dir);
+        let _dir = sh.push_dir(&package.dir);
 
         // Run all pre-release checks. Return immediately on first failure.
         if let Err(e) = check_todos(sh) {
-            eprintln!("Pre-release check failed for {package_name}: {e}");
+            eprintln!("Pre-release check failed for {}: {e}", package.name);
             return Err(e);
         }
 
         if let Err(e) = check_publish(sh) {
-            eprintln!("Pre-release check failed for {package_name}: {e}");
+            eprintln!("Pre-release check failed for {}: {e}", package.name);
             return Err(e);
         }
     }

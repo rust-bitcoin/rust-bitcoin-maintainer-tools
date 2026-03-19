@@ -8,8 +8,16 @@ use xshell::Shell;
 /// Any other value (or unset) defaults to verbose mode.
 const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
 
-/// A workspace package: its manifest name and directory path.
-pub type Package = (String, PathBuf);
+/// A workspace package: its manifest name, directory path, and unique identifier.
+#[derive(Clone, Debug)]
+pub struct Package {
+    /// The package name from the manifest.
+    pub name: String,
+    /// The directory path where the package is located.
+    pub dir: PathBuf,
+    /// The unique package identifier.
+    pub id: String,
+}
 
 /// Check if we're in quiet mode via environment variable.
 pub fn is_quiet_mode() -> bool { env::var(LOG_LEVEL_ENV_VAR).is_ok_and(|v| v == "quiet") }
@@ -67,13 +75,13 @@ pub fn get_packages(
         .ok_or("Missing 'packages' field in cargo metadata")?
         .iter()
         .filter_map(|package| {
-            let package_name = package["name"].as_str()?;
-            let manifest_path = package["manifest_path"].as_str()?;
-            // Extract directory path from the manifest path,
-            // e.g., "/path/to/repo/releases/Cargo.toml" -> "/path/to/repo/releases".
-            let dir_path = manifest_path.trim_end_matches("/Cargo.toml");
-
-            Some((package_name.to_owned(), PathBuf::from(dir_path)))
+            Some(Package {
+                name: package["name"].as_str()?.to_string(),
+                dir: PathBuf::from(
+                    package["manifest_path"].as_str()?.trim_end_matches("/Cargo.toml"),
+                ),
+                id: package["id"].as_str()?.to_string(),
+            })
         })
         .collect();
 
@@ -89,7 +97,7 @@ pub fn get_packages(
 
     for requested in packages {
         // Exact manifest name match.
-        if all_packages.iter().any(|(name, _)| name == requested) {
+        if all_packages.iter().any(|pkg| &pkg.name == requested) {
             resolved_names.push(requested.clone());
             continue;
         }
@@ -97,8 +105,8 @@ pub fn get_packages(
         // Fall back to directory basename match.
         let dir_matches: Vec<&Package> = all_packages
             .iter()
-            .filter(|(_, dir)| {
-                dir.file_name().and_then(|n| n.to_str()).is_some_and(|n| n == requested)
+            .filter(|pkg| {
+                pkg.dir.file_name().and_then(|n| n.to_str()).is_some_and(|n| n == requested)
             })
             .collect();
 
@@ -107,8 +115,7 @@ pub fn get_packages(
                 errors.push(format!("Package not found in workspace: '{}'", requested));
             }
             1 => {
-                let (name, _) = dir_matches[0];
-                resolved_names.push(name.clone());
+                resolved_names.push(dir_matches[0].name.clone());
             }
             _ => {
                 errors.push(format!(
@@ -123,8 +130,8 @@ pub fn get_packages(
         let mut error_msg = errors.join("\n\n");
 
         error_msg.push_str("\n\nAvailable packages (manifest name / directory):");
-        for (name, dir) in &all_packages {
-            error_msg.push_str(&format!("\n  - {} ({})", name, dir.display()));
+        for pkg in &all_packages {
+            error_msg.push_str(&format!("\n  - {} ({})", pkg.name, pkg.dir.display()));
         }
 
         return Err(error_msg.into());
@@ -133,7 +140,7 @@ pub fn get_packages(
     // Filter to only resolved packages.
     let package_info: Vec<Package> = all_packages
         .into_iter()
-        .filter(|(name, _)| resolved_names.iter().any(|r| r == name))
+        .filter(|pkg| resolved_names.iter().any(|r| r == &pkg.name))
         .collect();
 
     Ok(package_info)
@@ -174,7 +181,7 @@ pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> 
 /// are included automatically.
 pub fn discover_features(
     sh: &Shell,
-    (_, package_dir): &Package,
+    package: &Package,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
@@ -183,13 +190,13 @@ pub fn discover_features(
         json["packages"].as_array().ok_or("Missing 'packages' field in cargo metadata")?;
 
     // Match by manifest path so this works regardless of the shell's cwd.
-    let manifest_path = package_dir.join("Cargo.toml");
-    let package = packages
+    let manifest_path = package.dir.join("Cargo.toml");
+    let pkg = packages
         .iter()
         .find(|p| p["manifest_path"].as_str().is_some_and(|path| Path::new(path) == manifest_path))
-        .ok_or_else(|| format!("Package not found in cargo metadata: {}", package_dir.display()))?;
+        .ok_or_else(|| format!("Package not found in cargo metadata: {}", package.dir.display()))?;
 
-    let mut features: Vec<String> = package["features"]
+    let mut features: Vec<String> = pkg["features"]
         .as_object()
         .map(|f| f.keys().filter(|k| *k != "default").cloned().collect())
         .unwrap_or_default();

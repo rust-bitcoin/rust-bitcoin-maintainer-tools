@@ -177,18 +177,18 @@ fn check_apis(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut api_dirs: Vec<PathBuf> = Vec::new();
 
-    for (package_name, package_dir) in package_info {
-        let api_config = ApiConfig::load(package_dir)?;
+    for package in package_info {
+        let api_config = ApiConfig::load(&package.dir)?;
 
         if !api_config.enabled {
             continue;
         }
 
-        check_api_excluded(package_dir, package_name)?;
-        let mut apis = get_package_apis(sh, package_name, package_dir)?;
+        check_api_excluded(&package.dir, &package.name)?;
+        let mut apis = get_package_apis(sh, &package.name, &package.dir)?;
 
         // Write API files into the package's own api/ directory.
-        let package_api_dir = package_dir.join(API_DIR);
+        let package_api_dir = package.dir.join(API_DIR);
         fs::create_dir_all(&package_api_dir)?;
         api_dirs.push(package_api_dir.clone());
 
@@ -206,7 +206,7 @@ fn check_apis(
         let diff = public_api::diff::PublicApiDiff::between(no_features, all_features);
 
         if !diff.removed.is_empty() || !diff.changed.is_empty() {
-            eprintln!("Non-additive features detected in {}:", package_name);
+            eprintln!("Non-additive features detected in {}:", package.name);
 
             if !diff.removed.is_empty() {
                 eprintln!("  Items removed when enabling features:");
@@ -227,7 +227,7 @@ fn check_apis(
         }
 
         if let Some(baseline) = baseline {
-            check_semver(sh, package_name, package_dir, baseline)?;
+            check_semver(sh, &package.name, &package.dir, baseline)?;
         }
     }
 

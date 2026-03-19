@@ -21,8 +21,8 @@ pub fn run(sh: &Shell, check: bool, packages: &[Package]) -> Result<(), Box<dyn 
     if packages.is_empty() {
         cmd = cmd.arg("--all");
     } else {
-        for (name, _) in packages {
-            cmd = cmd.args(&["-p", name]);
+        for package in packages {
+            cmd = cmd.args(&["-p", &package.name]);
         }
     }
 
