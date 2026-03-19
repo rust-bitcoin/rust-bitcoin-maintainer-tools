@@ -1,11 +1,11 @@
 //! Integration test tasks for packages with bitcoind-tests or similar test packages.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{discover_features, quiet_println, PackageManifest, Package};
+use crate::environment::{discover_features, quiet_println, Package, PackageManifest};
 use crate::quiet_cmd;
 
 /// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
@@ -38,11 +38,22 @@ impl IntegrationConfig {
             return Ok(Self::default());
         }
         let contents = std::fs::read_to_string(&path)?;
-        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.integration)
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?
+            .package
+            .metadata
+            .rbmt
+            .integration)
     }
 
     /// Get the package name (defaults to "bitcoind-tests").
     fn package_name(&self) -> &str { self.package.as_deref().unwrap_or("bitcoind-tests") }
+}
+
+/// Get the package ID by running `cargo pkgid` in the given directory.
+fn get_package_id(sh: &Shell, dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    let _dir = sh.push_dir(dir);
+    let id = quiet_cmd!(sh, "cargo pkgid").read()?;
+    Ok(id.trim().to_string())
 }
 
 /// Run integration tests for all crates with integration test packages.
@@ -53,9 +64,9 @@ impl IntegrationConfig {
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Looking for integration tests in {} crate(s)", packages.len()));
 
-    for (package_name, package_dir) in packages {
-        let config = IntegrationConfig::load(Path::new(package_dir))?;
-        let integration_dir = PathBuf::from(package_dir).join(config.package_name());
+    for package in packages {
+        let config = IntegrationConfig::load(Path::new(&package.dir))?;
+        let integration_dir = package.dir.join(config.package_name());
 
         if !integration_dir.exists() {
             continue;
@@ -65,11 +76,15 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
             continue;
         }
 
-        quiet_println(&format!("Running integration tests for {}", package_name));
+        quiet_println(&format!("Running integration tests for {}", package.name));
 
         let _dir = sh.push_dir(&integration_dir);
 
-        let integration_package = (config.package_name().to_owned(), integration_dir.clone());
+        let integration_package = Package {
+            name: config.package_name().to_string(),
+            dir: integration_dir.clone(),
+            id: get_package_id(sh, &integration_dir)?,
+        };
         let available_versions = discover_features(sh, &integration_package)?;
         if available_versions.is_empty() {
             quiet_println("  No version features found in Cargo.toml");

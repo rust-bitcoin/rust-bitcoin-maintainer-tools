@@ -16,8 +16,8 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
     let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
     // Add package filters if specified.
-    for (name, _) in packages {
-        cmd = cmd.args(&["-p", name]);
+    for package in packages {
+        cmd = cmd.args(&["-p", &package.id]);
     }
 
     cmd.env("RUSTDOCFLAGS", "-D warnings").run()?;
@@ -35,8 +35,8 @@ pub fn run_docsrs(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::e
     let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
     // Add package filters if specified.
-    for (name, _) in packages {
-        cmd = cmd.args(&["-p", name]);
+    for package in packages {
+        cmd = cmd.args(&["-p", &package.id]);
     }
 
     cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links").run()?;

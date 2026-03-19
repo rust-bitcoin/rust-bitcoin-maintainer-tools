@@ -78,12 +78,12 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Running package-specific lints...");
 
-    let package_names: Vec<_> = packages.iter().map(|(name, _)| name.as_str()).collect();
+    let package_names: Vec<_> = packages.iter().map(|p| p.name.as_str()).collect();
     quiet_println(&format!("Found crates: {}", package_names.join(", ")));
 
-    for (_package_name, package_dir) in packages {
+    for package in packages {
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
-        let _old_dir = sh.push_dir(package_dir);
+        let _old_dir = sh.push_dir(&package.dir);
 
         // Run clippy without default features.
         quiet_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
@@ -115,11 +115,11 @@ fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn 
 
     let mut found_duplicates = false;
 
-    for (package_name, package_dir) in packages {
-        let config = LintConfig::load(package_dir)?;
+    for package in packages {
+        let config = LintConfig::load(&package.dir)?;
 
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
-        let _old_dir = sh.push_dir(package_dir);
+        let _old_dir = sh.push_dir(&package.dir);
 
         // Run cargo tree to find duplicates for this package, exclude dev dependencies
         // since they are not exposed to downstream consumers.
@@ -132,13 +132,13 @@ fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn 
 
         let tree = DuplicateTree::parse(
             &output,
-            &[package_name.as_str()].into(),
+            &[package.name.as_str()].into(),
             &config.allowed_duplicates,
         );
         if !tree.duplicates().is_empty() {
             found_duplicates = true;
             eprintln!("{}", output);
-            eprintln!("Error: Found duplicate dependencies in package '{}'!", package_name);
+            eprintln!("Error: Found duplicate dependencies in package '{}'!", package.name);
             for (name, versions) in tree.duplicates() {
                 for version in versions.keys() {
                     eprintln!("  {} {}", name, version);
@@ -183,7 +183,7 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
 
     quiet_println("Checking for cross-package duplicate dependencies...");
 
-    let package_names: HashSet<&str> = package_info.iter().map(|(name, _)| name.as_str()).collect();
+    let package_names: HashSet<&str> = package_info.iter().map(|pkg| pkg.name.as_str()).collect();
     let output = quiet_cmd!(
         sh,
         "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
@@ -409,9 +409,9 @@ fn check_clippy_toml_msrv(
     }
 
     // Check each package.
-    for (_package_name, package_dir) in packages {
+    for package in packages {
         for filename in CLIPPY_CONFIG_FILES {
-            let path = package_dir.join(filename);
+            let path = package.dir.join(filename);
             if path.exists() {
                 clippy_files.push(path);
             }
