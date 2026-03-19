@@ -1,33 +1,48 @@
-name: 'Update Nightly'
+name: 'Update Tools'
 description: |
-  Update nightly-version file at repo root with latest Rust nightly toolchain version,
-  and create a PR if the version changed.
+  Update tools pinned in [workspace.metadata.rbmt.tools] to their latest versions
+  and create a PR if any versions changed.
 
-  Usage example (complete workflow with daily cron schedule):
+  Usage example (complete workflow with weekly cron schedule):
 
   ```yaml
-  name: Update Nightly
+  name: Update Tools
 
   on:
     schedule:
-      - cron: '0 0 * * *'  # Daily at 00:00 UTC
+      - cron: '0 0 * * 6'  # Weekly on Saturday at 00:00 UTC
 
   permissions:
     contents: write
     pull-requests: write
 
   jobs:
-    update-nightly:
+    update-tools:
       runs-on: ubuntu-latest
       steps:
         - name: Checkout repository
           uses: actions/checkout@v4
 
-        - name: Update nightly version
-          uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/update-nightly@master
+        - name: Update tools
+          uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/update-tools@master
+  ```
+
+  To update only specific tools rather than all tools:
+
+  ```yaml
+        - name: Update zizmor
+          uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/update-tools@master
+          with:
+            tools: zizmor
   ```
 
 inputs:
+  tools:
+    description: |
+      Space-separated list of tool names to update. Defaults to all tools in
+      [workspace.metadata.rbmt.tools] if not provided.
+    required: false
+    default: ''
   token:
     description: |
       GitHub token for creating pull requests. Defaults to GITHUB_TOKEN if not provided.
@@ -49,18 +64,20 @@ runs:
       shell: bash
       run: cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git cargo-rbmt --locked
 
-    - name: Update nightly version file
+    - name: Update tools
       shell: bash
-      run: cargo rbmt toolchains --update-nightly
+      env:
+        RBMT_TOOLS: ${{ inputs.tools }}
+      run: cargo rbmt tools --update $RBMT_TOOLS
 
-    - name: Create pull request if version changed
+    - name: Create pull request if versions changed
       uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
       with:
         token: ${{ inputs.token || github.token }}
         author: RBMT Bot <bot@example.com>
         committer: RBMT Bot <bot@example.com>
-        title: "Update nightly toolchain"
-        commit-message: "Update nightly toolchain"
-        branch: automated/update-nightly
+        title: "Update tools"
+        commit-message: "Update tools"
+        branch: automated/update-tools
         body: |
-          Automated update to `nightly-version` by [update-nightly](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.
+          Automated update to `[workspace.metadata.rbmt.tools]` by [update-tools](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.

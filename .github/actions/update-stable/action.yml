@@ -43,7 +43,7 @@ runs:
   using: "composite"
   steps:
     - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
+      uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1
 
     - name: Install cargo-rbmt
       shell: bash
@@ -54,7 +54,7 @@ runs:
       run: cargo rbmt toolchains --update-stable
 
     - name: Create pull request if version changed
-      uses: peter-evans/create-pull-request@v7
+      uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
       with:
         token: ${{ inputs.token || github.token }}
         author: RBMT Bot <bot@example.com>
