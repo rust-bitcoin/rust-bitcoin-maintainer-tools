@@ -17,15 +17,6 @@
 //!
 //! For single-package repos with no explicit `[workspace]` table,
 //! `[package.metadata.rbmt.tools]` is used as a fallback.
-//!
-//! ## Why `[workspace.metadata]`?
-//!
-//! Cargo reserves `[package.metadata]` and `[workspace.metadata]` as
-//! explicitly supported extension points for third-party tooling. Cargo itself
-//! ignores any keys nested under these tables, so they will never clash with a
-//! future built-in Cargo field, and old Cargo versions silently skip them
-//! without error. `[workspace.metadata]` was stabilised in Cargo 1.46. The `rbmt`
-//! sub-key further namespaces the configuration to avoid collisions with other tools.
 
 use std::collections::BTreeMap;
 

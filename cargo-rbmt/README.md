@@ -27,7 +27,10 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 ## Configuration
 
-Configuration for `rbmt` is stored in `[package.metadata.rbmt]` in each package's `Cargo.toml` manifest.
+Configuration for `rbmt` is stored in `[package.metadata.rbmt]` in a package's `Cargo.toml` manifest. Some configuration lives under `[workspace.metadata.rbmt]` in the root manifest of a workspace, but can fallback to `[package.metadata.rbmt]` if there is only one package in the repository.
+
+> **NOTE:** Cargo reserves `[package.metadata]` and `[workspace.metadata]` as explicitly supported extension points for third-party tooling. Cargo itself ignores any keys nested under these tables, so they will never clash with a
+future built-in Cargo field. `[workspace.metadata]` was stabilized in Cargo 1.46 and `[package.metadata]` has been around much longer. The `rbmt` sub-key further namespaces the configuration to avoid collisions with other tools. If a repository only has one package and is not using any workspace features, use the `package` namespace because simply adding the `workspace.metadata` settings enables workspace features in cargo.
 
 ## Format
 

@@ -1,3 +1,18 @@
+//! Rust toolchain management.
+//!
+//! Toolchain versions are stored in the root `Cargo.toml` manifest. The preferred location is
+//! `[workspace.metadata.rbmt.toolchains]`, which works for multi-crate workspaces
+//! and single-package repos with an explicit `[workspace]` table.
+//!
+//! ```toml
+//! [workspace.metadata.rbmt.toolchains]
+//! nightly = "nightly-2026-02-21"
+//! stable = "1.94.0"
+//! ```
+//!
+//! For single-package repos with no explicit `[workspace]` table,
+//! `[package.metadata.rbmt.toolchains]` is used as a fallback.
+
 use std::path::Path;
 
 use xshell::Shell;
@@ -5,20 +20,50 @@ use xshell::Shell;
 use crate::environment::{get_workspace_root, WorkspaceManifest};
 use crate::quiet_cmd;
 
-/// The `[workspace.metadata.rbmt.toolchains]` table, holding pinned toolchain versions.
+/// Where the toolchain pins were found in the root `Cargo.toml`.
+///
+/// `[workspace.metadata.rbmt.toolchains]` is preferred and works for both
+/// multi-crate workspaces and single-package repos that have an explicit
+/// `[workspace]` table. `[package.metadata.rbmt.toolchains]` is the fallback for
+/// single-package repos with no explicit `[workspace]` table.
+#[derive(Debug)]
+enum ToolchainsLocation {
+    Workspace,
+    Package,
+}
+
+impl ToolchainsLocation {
+    /// Returns the TOML key path for error messages.
+    fn table_name(&self) -> &'static str {
+        match self {
+            Self::Workspace => "[workspace.metadata.rbmt.toolchains]",
+            Self::Package => "[package.metadata.rbmt.toolchains]",
+        }
+    }
+}
+
+/// The pinned toolchain versions and where they were found.
+struct ToolchainsConfigData {
+    nightly: Option<String>,
+    stable: Option<String>,
+    location: ToolchainsLocation,
+}
+
+/// Deserializes the `[*.metadata.rbmt]` table.
 #[derive(serde::Deserialize, Default)]
+struct RbmtTable {
+    #[serde(default)]
+    toolchains: Option<ToolchainsConfig>,
+}
+
+/// The `[workspace.metadata.rbmt.toolchains]` or `[package.metadata.rbmt.toolchains]` table,
+/// holding pinned toolchain versions.
+#[derive(serde::Deserialize)]
 struct ToolchainsConfig {
     /// Pinned nightly toolchain version, e.g. `"nightly-2025-02-17"`.
     nightly: Option<String>,
     /// Pinned stable toolchain version, e.g. `"1.85.0"`.
     stable: Option<String>,
-}
-
-/// Wrapper for deserializing `[workspace.metadata.rbmt.toolchains]` via `WorkspaceManifest`.
-#[derive(serde::Deserialize, Default)]
-struct ToolchainsTable {
-    #[serde(default)]
-    toolchains: ToolchainsConfig,
 }
 
 /// Environment variable that rustup's shims read to route `rustc`, `cargo`, and
@@ -44,61 +89,98 @@ pub enum Toolchain {
 }
 
 impl Toolchain {
-    /// Read the pinned version for this toolchain from `[workspace.metadata.rbmt.toolchains]`
-    /// in the root manifest.
+    /// Read the pinned version for this toolchain.
+    ///
+    /// Reads from either `[workspace.metadata.rbmt.toolchains]` or
+    /// `[package.metadata.rbmt.toolchains]` (with workspace taking precedence).
     pub fn read_version(self, sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+        let config = Self::read_toolchains_config(sh)?;
+
         match self {
-            Self::Nightly => Self::read_cargo_toml_version(sh)?.nightly.ok_or_else(|| {
-                "nightly toolchain not set in [workspace.metadata.rbmt.toolchains]".into()
+            Self::Nightly => config.nightly.ok_or_else(|| {
+                format!("No pinned nightly toolchain found in {}", config.location.table_name())
+                    .into()
             }),
-            Self::Stable => Self::read_cargo_toml_version(sh)?.stable.ok_or_else(|| {
-                "stable toolchain not set in [workspace.metadata.rbmt.toolchains]".into()
+            Self::Stable => config.stable.ok_or_else(|| {
+                format!("No pinned stable toolchain found in {}", config.location.table_name())
+                    .into()
             }),
             Self::Msrv => get_workspace_msrv(sh),
         }
     }
 
-    /// Write a pinned version string into `[workspace.metadata.rbmt.toolchains]` in the
-    /// root manifest.
+    /// Write an updated version to Cargo.toml.
+    ///
+    /// Writes to the same location where the toolchains were originally found
+    /// (either `[workspace.metadata.rbmt.toolchains]` or `[package.metadata.rbmt.toolchains]`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if trying to write MSRV which is derived from Cargo.toml, not editable.
     pub fn write_version(
         self,
         sh: &Shell,
         version: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let key = match self {
-            Self::Nightly => "nightly",
-            Self::Stable => "stable",
-            Self::Msrv =>
-                return Err("MSRV is derived from Cargo.toml and cannot be written".into()),
+        let root = get_workspace_root(sh)?;
+        let path = root.join("Cargo.toml");
+        let contents = std::fs::read_to_string(&path)?;
+        let mut doc: toml_edit::DocumentMut = contents.parse()?;
+
+        let table = match Self::read_toolchains_config(sh)?.location {
+            ToolchainsLocation::Workspace =>
+                &mut doc["workspace"]["metadata"]["rbmt"]["toolchains"],
+            ToolchainsLocation::Package => &mut doc["package"]["metadata"]["rbmt"]["toolchains"],
         };
-        Self::write_cargo_toml_version(sh, key, version)
-    }
 
-    /// Read `[workspace.metadata.rbmt.toolchains]` from the root manifest.
-    fn read_cargo_toml_version(sh: &Shell) -> Result<ToolchainsConfig, Box<dyn std::error::Error>> {
-        let path = get_workspace_root(sh)?.join("Cargo.toml");
-        let contents = std::fs::read_to_string(&path)?;
-        Ok(toml::from_str::<WorkspaceManifest<ToolchainsTable>>(&contents)?
-            .workspace
-            .metadata
-            .rbmt
-            .toolchains)
-    }
-
-    /// Write a key/value pair into `[workspace.metadata.rbmt.toolchains]`.
-    fn write_cargo_toml_version(
-        sh: &Shell,
-        key: &str,
-        version: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let path = get_workspace_root(sh)?.join("Cargo.toml");
-        let contents = std::fs::read_to_string(&path)?;
-        let mut doc = contents.parse::<toml_edit::DocumentMut>()?;
-
-        doc["workspace"]["metadata"]["rbmt"]["toolchains"][key] = toml_edit::value(version);
+        match self {
+            Self::Nightly => {
+                table["nightly"] = toml_edit::value(version);
+            }
+            Self::Stable => {
+                table["stable"] = toml_edit::value(version);
+            }
+            Self::Msrv =>
+                return Err(
+                    "Cannot update MSRV via write_version; it's derived from Cargo.toml".into()
+                ),
+        }
 
         std::fs::write(&path, doc.to_string())?;
         Ok(())
+    }
+
+    /// Read toolchain pins from the root `Cargo.toml`.
+    ///
+    /// Tries `[workspace.metadata.rbmt.toolchains]` first, then falls back to
+    /// `[package.metadata.rbmt.toolchains]`. Returns an error if neither is present.
+    fn read_toolchains_config(
+        sh: &Shell,
+    ) -> Result<ToolchainsConfigData, Box<dyn std::error::Error>> {
+        let root = get_workspace_root(sh)?;
+        let contents = std::fs::read_to_string(root.join("Cargo.toml"))?;
+        let cargo_toml = toml::from_str::<WorkspaceManifest<RbmtTable>>(&contents)?;
+
+        // Try workspace first.
+        if let Some(toolchains) = cargo_toml.workspace.metadata.rbmt.toolchains {
+            return Ok(ToolchainsConfigData {
+                nightly: toolchains.nightly,
+                stable: toolchains.stable,
+                location: ToolchainsLocation::Workspace,
+            });
+        }
+
+        // Fall back to package.
+        if let Some(toolchains) = cargo_toml.package.metadata.rbmt.toolchains {
+            return Ok(ToolchainsConfigData {
+                nightly: toolchains.nightly,
+                stable: toolchains.stable,
+                location: ToolchainsLocation::Package,
+            });
+        }
+
+        Err("No [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains] exists."
+            .into())
     }
 }
 
@@ -167,9 +249,10 @@ pub fn prepare_toolchain(
 /// Set `RUSTUP_TOOLCHAIN` on the [`Shell`] to the pinned toolchain version if
 /// rustup is available.
 ///
-/// Reads the pinned toolchain from `[workspace.metadata.rbmt.toolchains]` and sets it via
-/// `sh.set_var`, which only affects child processes spawned through this shell instance and
-/// does not mutate the process environment seen by `std::env::var`.
+/// Reads the pinned toolchain from `[workspace.metadata.rbmt.toolchains]` or
+/// `[package.metadata.rbmt.toolchains]` and sets it via `sh.set_var`, which only
+/// affects child processes spawned through this shell instance and does not mutate
+/// the process environment seen by `std::env::var`.
 ///
 /// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup already set
 /// `RUSTUP_TOOLCHAIN` in the process environment before this binary ran. We deliberately
