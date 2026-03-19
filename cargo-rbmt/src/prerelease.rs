@@ -7,23 +7,17 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_target_dir, quiet_println, PackageManifest, Package};
+use crate::environment::{get_target_dir, quiet_println, Package, PackageManifest};
 use crate::lock::LockFile;
 use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct PrereleaseConfig {
     /// Whether to run pre-release checks for this package. Defaults to `false`.
     enabled: bool,
-    /// Base git ref to compare against when detecting version bumps. Defaults to `"master"`.
-    baseline: String,
-}
-
-impl Default for PrereleaseConfig {
-    fn default() -> Self { Self { enabled: false, baseline: "master".to_string() } }
 }
 
 impl PrereleaseConfig {
@@ -40,12 +34,21 @@ impl PrereleaseConfig {
             return Ok(Self::default());
         }
         let contents = std::fs::read_to_string(&path)?;
-        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?.package.metadata.rbmt.prerelease)
+        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?
+            .package
+            .metadata
+            .rbmt
+            .prerelease)
     }
 }
 
 /// Run pre-release readiness checks for all packages.
-pub fn run(sh: &Shell, packages: &[Package], force: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    sh: &Shell,
+    packages: &[Package],
+    force: bool,
+    baseline: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Running pre-release checks on {} packages", packages.len()));
 
     for (package_name, package_dir) in packages {
@@ -56,10 +59,10 @@ pub fn run(sh: &Shell, packages: &[Package], force: bool) -> Result<(), Box<dyn 
             continue;
         }
 
-        if !force && !has_version_bump(sh, package_dir, &config.baseline)? {
+        if !force && !has_version_bump(sh, package_dir, baseline)? {
             quiet_println(&format!(
                 "Skipping {package_name} (no version bump detected since {})",
-                config.baseline
+                baseline
             ));
             continue;
         }
@@ -147,8 +150,7 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// A package may work with local path dependencies, but fail when published
 /// because the version specifications don't match the published versions
-/// or don't resolve correctly. This function tests the package with minimal
-/// dependency versions attemting to catch compatibility issues.
+/// or don't resolve correctly.
 fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
     quiet_cmd!(sh, "cargo publish --dry-run").run()?;
@@ -156,6 +158,7 @@ fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 
     let _dir = sh.push_dir(&package_dir);
     quiet_println(&format!("Testing publish package: {}", package_dir));
+    // Re-derive dependencies since it is what an end user will see.
     LockFile::Minimal.derive(sh)?;
     quiet_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
 

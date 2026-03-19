@@ -1,5 +1,10 @@
 name: CI
 
+# Several jobs use `github.event.pull_request.base.sha || github.event.before` as a baseline ref.
+# On PRs, `base.sha` is the merge base, which is equivalent to master. On pushes to master,
+# `event.before` is the commit just before the push using `master` instead would compare HEAD
+# against itself since master now includes the pushed commits, making the check useless.
+
 on:
   push:
     branches: [ master ]
@@ -25,7 +30,18 @@ jobs:
       - name: Build documentation (docs.rs / nightly)
         run: cargo rbmt --lock-file existing docsrs
 
-  dogfood-test-matrix:
+  dogfood-prerelease:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Context required for version bump detection.
+      - uses: ./.github/actions/setup-rbmt
+        with:
+          rbmt-version: ${{ github.sha }}
+      - run: cargo rbmt prerelease --baseline ${{ github.event.pull_request.base.sha || github.event.before }}
+
+  dogfood-tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -33,11 +49,11 @@ jobs:
         toolchain: [stable, msrv]
     steps:
       - uses: actions/checkout@v6
-
+        with:
+          fetch-depth: 0 # Context required for bisectability tests.
       - name: Dogfood with cargo-rbmt
         uses: ./.github/actions/setup-rbmt
         with:
           rbmt-version: ${{ github.sha }}
-
       - name: Run tests (${{ matrix.toolchain }}, ${{ matrix.lock-file }} lock)
-        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test --toolchain ${{ matrix.toolchain }}
+        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test --toolchain ${{ matrix.toolchain }} --baseline ${{ github.event.pull_request.base.sha || github.event.before }}
