@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - uses: Swatinem/rust-cache@f51f967e158417aafa338a1e46ab22095f07aa01 # v2.9.1
       - name: Dogfood with cargo-rbmt
         uses: ./.github/actions/setup-rbmt
         with:
@@ -36,6 +37,7 @@ jobs:
         with:
           fetch-depth: 0 # Context required for version bump detection.
           persist-credentials: false
+      - uses: Swatinem/rust-cache@f51f967e158417aafa338a1e46ab22095f07aa01 # v2.9.1
       - uses: ./.github/actions/setup-rbmt
         with:
           rbmt-version: ${{ github.sha }}
@@ -53,6 +55,7 @@ jobs:
         with:
           fetch-depth: 0 # Context required for bisectability tests.
           persist-credentials: false
+      - uses: Swatinem/rust-cache@f51f967e158417aafa338a1e46ab22095f07aa01 # v2.9.1
       - name: Dogfood with cargo-rbmt
         uses: ./.github/actions/setup-rbmt
         with:

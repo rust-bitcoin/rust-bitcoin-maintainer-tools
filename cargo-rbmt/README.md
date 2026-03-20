@@ -19,7 +19,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
-- [GitHub Action](#github-action)
+- [CI Actions](#ci-actions)
 
 ## Environment Variables
 
@@ -253,16 +253,16 @@ cargo run --bin cargo-rbmt -- lint
 
 It might be worth wrapping in an [xtask](https://github.com/matklad/cargo-xtask) package for a clean interface.
 
-## GitHub Action
+## CI Actions
 
-A composite action is provided to make it easy to use `cargo-rbmt` in Github Actions CI.
+A composite action is provided to make it easy to use `cargo-rbmt` in Github/Forgejo Actions CI. For faster CI runs, consider adding cargo build caching to your workflow with something like `Swatinem/rust-cache`.
 
 ```yaml
 steps:
   - uses: actions/checkout@v6
+  - uses: Swatinem/rust-cache@v2
   - uses: rust-bitcoin/rust-bitcoin-maintainer-tools/.github/actions/setup-rbmt@master
-    id: setup
-  - run: cargo +${{ steps.setup.outputs.stable }} rbmt test
+  - run: cargo rbmt test
 ```
 
 See the [action](../.github/actions/setup-rbmt/action.yml) for more details.

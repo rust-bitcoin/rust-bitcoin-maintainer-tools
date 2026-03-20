@@ -1,11 +1,6 @@
 name: 'Setup rbmt'
 description: |
   Install environment dependencies for cargo-rbmt testing including cargo-rbmt itself.
-
-  * Nightly is pulled from the nightly-version file, defaults to "nightly".
-  * Stable is pulled from the stable-version file, defaults to "stable".
-  * MSRV is parsed from the rust-version field in the package manifest(s).
-
 inputs:
   rbmt-version:
     description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root, or falls back to master.'
@@ -14,9 +9,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install a Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1
-
     - name: Install cargo-rbmt
       shell: bash
       env:
