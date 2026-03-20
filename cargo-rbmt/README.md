@@ -29,8 +29,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 Configuration for `rbmt` is stored in `[package.metadata.rbmt]` in a package's `Cargo.toml` manifest. Some configuration lives under `[workspace.metadata.rbmt]` in the root manifest of a workspace, but can fallback to `[package.metadata.rbmt]` if there is only one package in the repository.
 
-> **NOTE:** Cargo reserves `[package.metadata]` and `[workspace.metadata]` as explicitly supported extension points for third-party tooling. Cargo itself ignores any keys nested under these tables, so they will never clash with a
-future built-in Cargo field. `[workspace.metadata]` was stabilized in Cargo 1.46 and `[package.metadata]` has been around much longer. The `rbmt` sub-key further namespaces the configuration to avoid collisions with other tools. If a repository only has one package and is not using any workspace features, use the `package` namespace because simply adding the `workspace.metadata` settings enables workspace features in cargo.
+> **NOTE:** Cargo reserves `[package.metadata]` and `[workspace.metadata]` as explicitly supported extension points for third-party tooling. Cargo itself ignores any keys nested under these tables, so they will never clash with a future built-in Cargo field. `[workspace.metadata]` was stabilized in Cargo 1.46 and `[package.metadata]` has been around much longer. The `rbmt` sub-key further namespaces the configuration to avoid collisions with other tools. If a repository only has one package and is not using any workspace features, use the `package` namespace because simply adding the `workspace.metadata` settings enables workspace features in cargo.
 
 ## Format
 
@@ -172,9 +171,17 @@ Compares the current API against a baseline git reference (tag, branch, or commi
 
 ## Toolchains
 
-The `toolchains` command installs the three required toolchains for `cargo-rbmt` commands, `nightly`, `stable`, and `MSRV`. Toolchain versions are read from the repository. `nightly` and `stable` are set in `nightly-version` and `stable-version` files respectively. `MSRV` is read from package manifests. Workspaces must declare a single consistent MSRV across all packages. Workspaces with conflicting `rust-version` fields are not supported.
+The `toolchains` command installs the three required toolchains for `cargo-rbmt` commands, `nightly`, `stable`, and `MSRV`. `nightly` and `stable` Toolchain versions are read from the root manifest `Cargo.toml` of a repository. The `MSRV` is read from all the package manifests in a workspace. Workspaces must declare a single consistent MSRV across all packages. Workspaces with conflicting `rust-version` fields are not supported.
 
-This command requires `rustup` on the system, which is not the case for all other `cargo-rbmt` commands.
+> **NOTE:** This command requires `rustup` on the system, which is not the case for all other `cargo-rbmt` commands.
+
+Workspace enabled repositories should set the versions under the `workspace.metadata.rbmt.toolchains` namespace in the root `Cargo.toml`. If a repository is a single package without a workspace, use the `package.metadata.rbmt.toolchains` namespace instead.
+
+```toml
+[workspace.metadata.rbmt.toolchains]
+nightly = "nightly-2026-03-13"
+stable = "1.93.1"
+```
 
 The command prints `export` statements to stdout and all other output to stderr, so it can be used with `eval` to set toolchain version environment variables in the calling shell.
 
