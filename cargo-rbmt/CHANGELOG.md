@@ -1,5 +1,20 @@
 # Changelog
 
-## [0.1.0] -
+## [Unreleased]
 
-* Initial release of `rust-bitcoin-maintainer-tools` (executable: `rbmt`) matching functionality of shell scripts.
+## [0.1.0] - 2026-03-20
+
+Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer workflows. This matches the functionality of the legacy ci shell scripts and codifies a few common job patterns.
+
+* **Lock File Management** // `lock` manages cargo lock files for minimal, existing, and recent dependency versions.
+* **Toolchain Management** // `toolchains` can install and manage Rust toolchains (stable, nightly, MSRV) with automatic pinning. The correct toolchain is automatically selected per-command when necessary.
+* **General Linting** // `fmt`, `lint`, `docs` and friends handle general linting.
+* **Find Duplicate Dependencies** // `lint` detects duplicate dependencies in a package and across a workspace.
+* **Matrix Tests** // Test across toolchains (stable, nightly, MSRV), dependencies (minimal, recent), and feature sets of a package. Can also ensure bisectability hammering all commits in a branch.
+* **API Checks** // `api` can help expose accidental changes to the exposed API of a package.
+* **Prerelease Help** // Run readiness checks before a crate is released with `prerelease`.
+* **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
+* **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
+
+[Unreleased]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...HEAD
+[0.1.0]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/releases/tag/cargo-rbmt-0.1.0
