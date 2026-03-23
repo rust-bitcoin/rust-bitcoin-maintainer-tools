@@ -50,16 +50,13 @@ inputs:
       Using the default GITHUB_TOKEN is simple, but less secure because it requires the
       "Allow GitHub Actions to create and approve pull requests" to be enabled on a repository.
       A Personal Access Token (PAT) with `repo` privileges can be set as a repository
-      secret instead and passed in explicitly here (e.g. ${{ secrets.RBMT_TOKEN }}).
+      secret instead and passed in explicitly here (e.g. secrets.RBMT_TOKEN).
     required: false
     default: ''
 
 runs:
   using: "composite"
   steps:
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1
-
     - name: Install cargo-rbmt
       shell: bash
       run: cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git cargo-rbmt --locked
