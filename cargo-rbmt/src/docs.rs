@@ -10,7 +10,7 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 ///
 /// This verifies that `cargo doc` works correctly for users with stable Rust.
 /// Uses basic rustdoc warnings to catch common documentation issues.
-pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, packages: &[Package], open: bool) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Stable)?;
 
     let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
@@ -18,6 +18,10 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
     // Add package filters if specified.
     for package in packages {
         cmd = cmd.args(&["-p", &package.id]);
+    }
+
+    if open {
+        cmd = cmd.arg("--open");
     }
 
     cmd.env("RUSTDOCFLAGS", "-D warnings").run()?;
@@ -29,7 +33,11 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
 ///
 /// This emulates the docs.rs build environment by using the nightly toolchain
 /// with `--cfg docsrs` enabled. This catches docs.rs-specific issues.
-pub fn run_docsrs(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_docsrs(
+    sh: &Shell,
+    packages: &[Package],
+    open: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
@@ -37,6 +45,10 @@ pub fn run_docsrs(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::e
     // Add package filters if specified.
     for package in packages {
         cmd = cmd.args(&["-p", &package.id]);
+    }
+
+    if open {
+        cmd = cmd.arg("--open");
     }
 
     cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links").run()?;

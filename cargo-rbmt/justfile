@@ -20,6 +20,9 @@ _default:
 @rbmt *args: toolchains
   RBMT_LOG_LEVEL=quiet cargo rbmt {{args}}
 
+# Build and open docs.
+@docs: (rbmt "docsrs --open")
+
 # Format files.
 @fmt: (rbmt "fmt")
 
