@@ -54,9 +54,17 @@ enum Commands {
     /// Run the linter (clippy) for workspace and all crates.
     Lint,
     /// Build documentation with stable toolchain.
-    Docs,
+    Docs {
+        /// Open documentation in browser after building.
+        #[arg(long)]
+        open: bool,
+    },
     /// Build documentation with nightly toolchain for docs.rs.
-    Docsrs,
+    Docsrs {
+        /// Open documentation in browser after building.
+        #[arg(long)]
+        open: bool,
+    },
     /// Run benchmark tests for all crates.
     Bench,
     /// Run tests with specified toolchain.
@@ -164,13 +172,13 @@ fn main() {
                 eprintln!("Error running lint task: {}", e);
                 process::exit(1);
             },
-        Commands::Docs =>
-            if let Err(e) = docs::run(&sh, &packages) {
+        Commands::Docs { open } =>
+            if let Err(e) = docs::run(&sh, &packages, open) {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
             },
-        Commands::Docsrs =>
-            if let Err(e) = docs::run_docsrs(&sh, &packages) {
+        Commands::Docsrs { open } =>
+            if let Err(e) = docs::run_docsrs(&sh, &packages, open) {
                 eprintln!("Error building docs.rs docs: {}", e);
                 process::exit(1);
             },

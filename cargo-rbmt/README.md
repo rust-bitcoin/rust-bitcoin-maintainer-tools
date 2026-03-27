@@ -151,7 +151,9 @@ When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` b
 
 ## API
 
-The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface. **Requires running with a nightly toolchain after nightly-2025-08-02** due to docsrs dependencies.
+The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface.
+
+> **NOTE:** `api` has an implicit dependency on the version of the nightly toolchain since it relies on an unstable docsrs interface. Currently, it requires [*nightly-2025-08-02* or later](https://github.com/cargo-public-api/cargo-public-api/blob/main/README.md#compatibility-matrix).
 
 ```bash
 cargo rbmt api
