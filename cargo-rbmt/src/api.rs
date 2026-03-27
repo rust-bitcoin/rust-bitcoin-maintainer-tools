@@ -23,17 +23,13 @@ const RUSTDOCFLAGS_ALLOW_BROKEN_LINKS: &str = "-A rustdoc::broken_intra_doc_link
 type PackageApis = HashMap<FeatureConfig, public_api::PublicApi>;
 
 /// API-specific configuration, read from `[package.metadata.rbmt.api]` in `Cargo.toml`.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Default, serde::Deserialize)]
 #[serde(default)]
 struct ApiConfig {
-    /// Whether to run API checks for this package. Defaults to `true`.
+    /// Whether to run API checks for this package. Defaults to `false`.
     enabled: bool,
     /// Feature combinations to test (in addition to no-features and all-features).
     features: Vec<Vec<String>>,
-}
-
-impl Default for ApiConfig {
-    fn default() -> Self { Self { enabled: true, features: Vec::new() } }
 }
 
 impl ApiConfig {
