@@ -1,6 +1,6 @@
 use xshell::Shell;
 
-use crate::environment::{is_quiet_mode, quiet_println};
+use crate::environment::quiet_println;
 use crate::quiet_cmd;
 use crate::toolchain::{get_workspace_msrv, Toolchain};
 
@@ -25,7 +25,12 @@ const ENV_MSRV: &str = "RBMT_MSRV";
 ///
 /// When `msrv` is true, print the workspace MSRV to stdout and exit without
 /// installing any toolchains.
-pub fn run(sh: &Shell, update_nightly: bool, update_stable: bool, msrv: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    sh: &Shell,
+    update_nightly: bool,
+    update_stable: bool,
+    msrv: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     if msrv {
         let msrv = get_workspace_msrv(sh)?;
         println!("{}", msrv);
@@ -94,21 +99,15 @@ fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
 
 /// Install a single toolchain with the fixed components and target.
 fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = quiet_cmd!(
+    quiet_cmd!(
         sh,
         "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
-    );
-    // Rustup writes its `info:` lines directly to stderr, bypassing any stdout
-    // capture. Suppress them in quiet mode.
-    if is_quiet_mode() {
-        cmd = cmd.ignore_stderr();
-    }
+    )
     // Always suppress stdout so that only the `export` statements printed by
     // [`run`] reach stdout. This matters because the caller does
     // `eval "$(cargo rbmt toolchains)"`, and any stray rustup stdout would be
     // passed to `eval`.
-    cmd.ignore_stdout().run()?;
+    .ignore_stdout()
+    .run()?;
     Ok(())
 }
-
-

@@ -261,7 +261,7 @@ pub fn prepare_toolchain(
 /// available (e.g. Nix) or when no version is configured.
 fn maybe_set_rustup_toolchain(sh: &Shell, required: Toolchain) {
     // Only attempt if rustup is available.
-    if quiet_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
+    if quiet_cmd!(sh, "rustup --version").read().is_err() {
         return;
     }
 

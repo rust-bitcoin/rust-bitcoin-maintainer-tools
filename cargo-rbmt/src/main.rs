@@ -16,7 +16,7 @@ mod tools;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use environment::{configure_log_level, get_packages, Package};
+use environment::{get_packages, Package};
 use lock::LockFile;
 use toolchain::Toolchain;
 use xshell::Shell;
@@ -128,7 +128,6 @@ fn main() {
     let cli = Cli::parse_from(args);
 
     let sh = Shell::new().unwrap();
-    configure_log_level(&sh);
 
     // Restore the specified lock file before running commands which require lock files.
     if !matches!(
