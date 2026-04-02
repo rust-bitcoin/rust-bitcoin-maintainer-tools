@@ -142,8 +142,8 @@ fn check_duplicate_deps(
         );
         if !tree.duplicates().is_empty() {
             found_duplicates = true;
-            eprintln!("{}", output);
-            eprintln!("Error: Found duplicate dependencies in package '{}'!", package.name);
+            println!("{}", output);
+            println!("Error: Found duplicate dependencies in package '{}'!", package.name);
             for (name, versions) in tree.duplicates() {
                 for version in versions.keys() {
                     eprintln!("  {} {}", name, version);
@@ -200,15 +200,15 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
     let cross_package_dupes = tree.cross_package_duplicates();
     // Currently logging a warning instead of hard failure until we gain confidence in the check.
     if !cross_package_dupes.is_empty() {
-        eprintln!("Warning: found duplicate dependencies spanning multiple workspace members.");
-        eprintln!("         These may cause duplicates in consumers that depend on multiple packages from this workspace.");
+        println!("Warning: found duplicate dependencies spanning multiple workspace members.");
+        println!("         These may cause duplicates in consumers that depend on multiple packages from this workspace.");
         for (crate_name, versions) in &cross_package_dupes {
             for (version, members) in *versions {
                 let members: Vec<&str> = members.iter().map(String::as_str).collect();
-                eprintln!("  {} {}: {}", crate_name, version, members.join(", "));
+                println!("  {} {}: {}", crate_name, version, members.join(", "));
             }
         }
-        eprintln!("Consider aligning dependency versions across workspace members.");
+        println!("Consider aligning dependency versions across workspace members.");
     }
 
     rbmt_eprintln("No cross-package duplicate dependencies found");
@@ -435,11 +435,11 @@ fn check_clippy_toml_msrv(
     }
 
     if !problematic_files.is_empty() {
-        eprintln!(
+        println!(
             "\nError: Found MSRV in clippy.toml, use Cargo.toml package.rust-version instead:"
         );
         for file in &problematic_files {
-            eprintln!("  {}", file);
+            println!("  {}", file);
         }
         return Err("MSRV should be specified in Cargo.toml, not clippy.toml".into());
     }
