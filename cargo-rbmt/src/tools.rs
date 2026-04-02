@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, quiet_println, WorkspaceManifest};
+use crate::environment::{get_workspace_root, rbmt_eprintln, WorkspaceManifest};
 use crate::rbmt_cmd;
 
 /// Where the tool pins were found in the root `Cargo.toml`.
@@ -126,14 +126,14 @@ fn installed_version(
 
 /// Install a single tool at a pinned version using `cargo install`.
 fn install_tool(sh: &Shell, name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println(&format!("Installing {}@{}", name, version));
+    rbmt_eprintln(&format!("Installing {}@{}", name, version));
     rbmt_cmd!(sh, "cargo install {name} --version {version} --locked").run()?;
     Ok(())
 }
 
 /// Install a single tool at the latest version and return the resolved version.
 fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    quiet_println(&format!("Installing {} (latest)", name));
+    rbmt_eprintln(&format!("Installing {} (latest)", name));
     rbmt_cmd!(sh, "cargo install {name}").run()?;
 
     installed_version(sh, name)?
@@ -169,9 +169,9 @@ pub fn run(sh: &Shell, update: bool, filter: &[String]) -> Result<(), Box<dyn st
         if update {
             let latest = install_tool_latest(sh, name)?;
             if &latest == pinned_version {
-                quiet_println(&format!("{} is already at latest ({})", name, pinned_version));
+                rbmt_eprintln(&format!("{} is already at latest ({})", name, pinned_version));
             } else {
-                quiet_println(&format!("Updated {} {} -> {}", name, pinned_version, latest));
+                rbmt_eprintln(&format!("Updated {} {} -> {}", name, pinned_version, latest));
                 write_tool_version(sh, name, &latest, &tools.location)?;
             }
         } else {

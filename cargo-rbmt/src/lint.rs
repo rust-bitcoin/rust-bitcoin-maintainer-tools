@@ -5,7 +5,7 @@ use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{
-    get_packages, get_workspace_root, quiet_println, Package, PackageManifest,
+    get_packages, get_workspace_root, rbmt_eprintln, Package, PackageManifest,
 };
 use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
@@ -39,7 +39,7 @@ impl LintConfig {
 /// Run the lint task.
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
-    quiet_println("Running lint task...");
+    rbmt_eprintln("Running lint task...");
 
     lint_workspace(sh)?;
     lint_packages(sh, packages)?;
@@ -47,13 +47,13 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
     check_cross_package_duplicate_deps(sh)?;
     check_clippy_toml_msrv(sh, packages)?;
 
-    quiet_println("Lint task completed successfully");
+    rbmt_eprintln("Lint task completed successfully");
     Ok(())
 }
 
 /// Lint the workspace with clippy.
 fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Linting workspace...");
+    rbmt_eprintln("Linting workspace...");
 
     // Run clippy on workspace with all features.
     rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
@@ -78,10 +78,10 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// individually ensures that each package truly compiles and passes lints with only its
 /// explicitly enabled features.
 fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Running package-specific lints...");
+    rbmt_eprintln("Running package-specific lints...");
 
     let package_names: Vec<_> = packages.iter().map(|p| p.name.as_str()).collect();
-    quiet_println(&format!("Found crates: {}", package_names.join(", ")));
+    rbmt_eprintln(&format!("Found crates: {}", package_names.join(", ")));
 
     for package in packages {
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
@@ -116,7 +116,7 @@ fn check_duplicate_deps(
     sh: &Shell,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Checking for duplicate dependencies...");
+    rbmt_eprintln("Checking for duplicate dependencies...");
 
     let mut found_duplicates = false;
 
@@ -156,7 +156,7 @@ fn check_duplicate_deps(
         return Err("Dependency tree contains duplicates".into());
     }
 
-    quiet_println("No duplicate dependencies found");
+    rbmt_eprintln("No duplicate dependencies found");
     Ok(())
 }
 
@@ -186,7 +186,7 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
         return Ok(());
     }
 
-    quiet_println("Checking for cross-package duplicate dependencies...");
+    rbmt_eprintln("Checking for cross-package duplicate dependencies...");
 
     let package_names: HashSet<&str> = package_info.iter().map(|pkg| pkg.name.as_str()).collect();
     let output = rbmt_cmd!(
@@ -211,7 +211,7 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
         eprintln!("Consider aligning dependency versions across workspace members.");
     }
 
-    quiet_println("No cross-package duplicate dependencies found");
+    rbmt_eprintln("No cross-package duplicate dependencies found");
     Ok(())
 }
 
@@ -400,7 +400,7 @@ fn check_clippy_toml_msrv(
 ) -> Result<(), Box<dyn std::error::Error>> {
     const CLIPPY_CONFIG_FILES: &[&str] = &["clippy.toml", ".clippy.toml"];
 
-    quiet_println("Checking for deprecated clippy.toml MSRV settings...");
+    rbmt_eprintln("Checking for deprecated clippy.toml MSRV settings...");
 
     let mut clippy_files = Vec::new();
 
@@ -444,7 +444,7 @@ fn check_clippy_toml_msrv(
         return Err("MSRV should be specified in Cargo.toml, not clippy.toml".into());
     }
 
-    quiet_println("No deprecated clippy.toml MSRV settings found");
+    rbmt_eprintln("No deprecated clippy.toml MSRV settings found");
     Ok(())
 }
 

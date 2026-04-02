@@ -2,7 +2,7 @@
 
 use xshell::Shell;
 
-use crate::environment::{quiet_println, Package};
+use crate::environment::{rbmt_eprintln, Package};
 use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -10,10 +10,10 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
-    quiet_println(&format!("Running bench tests for {} crates", packages.len()));
+    rbmt_eprintln(&format!("Running bench tests for {} crates", packages.len()));
 
     for package in packages {
-        quiet_println(&format!("Running bench tests in: {}", package.dir.display()));
+        rbmt_eprintln(&format!("Running bench tests in: {}", package.dir.display()));
 
         // Use pushd pattern to change and restore directory.
         let _dir = sh.push_dir(&package.dir);

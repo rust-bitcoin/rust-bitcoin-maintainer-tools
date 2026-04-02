@@ -4,7 +4,7 @@ use std::fs;
 
 use xshell::Shell;
 
-use crate::environment::{quiet_println, Package};
+use crate::environment::{rbmt_eprintln, Package};
 use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -17,9 +17,9 @@ pub fn run(
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     if check {
-        quiet_println("Checking formatting...");
+        rbmt_eprintln("Checking formatting...");
     } else {
-        quiet_println("Formatting files...");
+        rbmt_eprintln("Formatting files...");
     }
 
     let mut cmd = rbmt_cmd!(sh, "cargo fmt");
@@ -39,10 +39,10 @@ pub fn run(
     cmd.run()?;
 
     if check {
-        quiet_println("Formatting check passed");
+        rbmt_eprintln("Formatting check passed");
     } else {
         remove_trailing_whitespace(sh, packages)?;
-        quiet_println("Formatting complete");
+        rbmt_eprintln("Formatting complete");
     }
 
     Ok(())
@@ -70,7 +70,7 @@ fn remove_trailing_whitespace(
     };
 
     if files.trim().is_empty() {
-        quiet_println("No rust files found to clean whitespace from");
+        rbmt_eprintln("No rust files found to clean whitespace from");
         return Ok(());
     }
 

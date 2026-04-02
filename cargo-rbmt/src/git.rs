@@ -2,7 +2,7 @@
 
 use xshell::Shell;
 
-use crate::environment::quiet_println;
+use crate::environment::rbmt_eprintln;
 use crate::rbmt_cmd;
 
 /// RAII guard for temporarily switching git refs.
@@ -16,7 +16,7 @@ pub struct GitSwitchGuard<'a> {
 impl<'a> GitSwitchGuard<'a> {
     /// Create a new guard and switch to the specified ref.
     pub fn new(sh: &'a Shell, git_ref: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        quiet_println(&format!("Switching to ref: {}", git_ref));
+        rbmt_eprintln(&format!("Switching to ref: {}", git_ref));
         rbmt_cmd!(sh, "git switch --detach {git_ref}").run()?;
         Ok(Self { sh })
     }
@@ -24,7 +24,7 @@ impl<'a> GitSwitchGuard<'a> {
 
 impl Drop for GitSwitchGuard<'_> {
     fn drop(&mut self) {
-        quiet_println("Returning to previous ref...");
+        rbmt_eprintln("Returning to previous ref...");
         // Use expect here because if this fails, we're already in a bad state
         // and there's not much we can do about it in Drop.
         rbmt_cmd!(self.sh, "git switch --detach -")

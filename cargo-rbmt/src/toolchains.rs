@@ -1,6 +1,6 @@
 use xshell::Shell;
 
-use crate::environment::quiet_println;
+use crate::environment::rbmt_eprintln;
 use crate::rbmt_cmd;
 use crate::toolchain::{get_workspace_msrv, Toolchain};
 
@@ -40,28 +40,28 @@ pub fn run(
         install_toolchain(sh, "nightly")?;
         let version = resolve_nightly_version(sh)?;
         Toolchain::Nightly.write_version(sh, &version)?;
-        eprintln!("Updated nightly-version: {}", version);
+        rbmt_eprintln(&format!("Updated nightly-version: {}", version));
     }
 
     if update_stable {
         install_toolchain(sh, "stable")?;
         let version = resolve_stable_version(sh)?;
         Toolchain::Stable.write_version(sh, &version)?;
-        eprintln!("Updated stable-version: {}", version);
+        rbmt_eprintln(&format!("Updated stable-version: {}", version));
     }
 
     let nightly = Toolchain::Nightly.read_version(sh)?;
     let stable = Toolchain::Stable.read_version(sh)?;
     let msrv = get_workspace_msrv(sh)?;
 
-    quiet_println(&format!(
-        "Installing toolchains: nightly={}, stable={}, msrv={}",
-        nightly, stable, msrv
-    ));
-
     install_toolchain(sh, &nightly)?;
     install_toolchain(sh, &stable)?;
     install_toolchain(sh, &msrv)?;
+
+    rbmt_eprintln(&format!(
+        "Installed toolchains: nightly={}, stable={}, msrv={}",
+        nightly, stable, msrv
+    ));
 
     // Print export statements to stdout.
     println!("export {}={}", ENV_NIGHTLY, nightly);
@@ -99,6 +99,8 @@ fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
 
 /// Install a single toolchain with the fixed components and target.
 fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln(&format!("Installing toolchain {}", toolchain));
+
     rbmt_cmd!(
         sh,
         "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"

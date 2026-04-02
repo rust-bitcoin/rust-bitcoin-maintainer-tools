@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use clap::ValueEnum;
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, quiet_println};
+use crate::environment::{get_workspace_root, rbmt_eprintln};
 use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -119,7 +119,7 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     let workspace_root = get_workspace_root(sh)?;
-    quiet_println(&format!("Updating lock files in: {}", workspace_root.display()));
+    rbmt_eprintln(&format!("Updating lock files in: {}", workspace_root.display()));
 
     // Create guard to back up and ensure restoration, even on error.
     let _guard = LockFileGuard::new(sh)?;
@@ -127,7 +127,7 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     LockFile::Minimal.derive(sh)?;
     LockFile::Recent.derive(sh)?;
 
-    quiet_println("Lock files updated successfully");
+    rbmt_eprintln("Lock files updated successfully");
     Ok(())
 }
 
@@ -149,14 +149,14 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
 
     // Check that all explicit direct dependency versions are not lying,
     // as in, they are not being bumped up by transitive dependency constraints.
-    quiet_println("Checking direct minimal versions...");
+    rbmt_eprintln("Checking direct minimal versions...");
     remove_lock_file(sh)?;
     rbmt_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run()?;
 
     // Now that our own direct dependency versions can be trusted, check
     // against the lowest versions of the dependency tree which still
     // satisfy constraints.
-    quiet_println("Generating minimal versions lockfile...");
+    rbmt_eprintln("Generating minimal versions lockfile...");
     remove_lock_file(sh)?;
     rbmt_cmd!(sh, "cargo check --all-features -Z minimal-versions").run()?;
 
@@ -173,7 +173,7 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
 /// at their current versions if they still satisfy constraints, only update when
 /// necessary (e.g., when adding new dependencies or constraints change).
 fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Generating recent versions lockfile...");
+    rbmt_eprintln("Generating recent versions lockfile...");
 
     // Try to restore existing Cargo-recent.lock for conservative updates.
     // If it doesn't exist cargo check will create a fresh one.

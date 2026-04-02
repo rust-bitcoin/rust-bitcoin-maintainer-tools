@@ -55,8 +55,8 @@ macro_rules! rbmt_cmd {
     }};
 }
 
-/// Print progress feedback based on output mode.
-pub fn quiet_println(msg: &str) {
+/// Wrap stderr messages to respect rbmt output mode.
+pub fn rbmt_eprintln(msg: &str) {
     match OutputMode::from_env() {
         OutputMode::Verbose => eprintln!("{}", msg),
         OutputMode::Progress => {

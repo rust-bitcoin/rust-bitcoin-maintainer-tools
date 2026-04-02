@@ -21,6 +21,8 @@ use lock::LockFile;
 use toolchain::Toolchain;
 use xshell::Shell;
 
+use crate::environment::OutputMode;
+
 #[derive(Parser)]
 #[command(name = "cargo-rbmt")]
 #[command(about = "Rust Bitcoin Maintainer Tools", long_about = None)]
@@ -223,5 +225,10 @@ fn main() {
                 eprintln!("Error managing tools: {}", e);
                 process::exit(1);
             },
+    }
+
+    // Ensure final newline in stderr output.
+    if matches!(OutputMode::from_env(), OutputMode::Progress) {
+        eprintln!();
     }
 }
