@@ -80,11 +80,11 @@ struct TestSummary {
 
 impl TestSummary {
     fn print(&self) {
-        rbmt_eprintln("Test Summary");
+        println!("Test Summary");
         for (sha, packages) in &self.commits {
-            rbmt_eprintln(&format!("Commit: {}", sha));
+            println!("Commit: {}", sha);
             for pkg in packages {
-                rbmt_eprintln(&pkg.to_string());
+                println!("{}", pkg);
             }
         }
     }
@@ -212,6 +212,7 @@ pub fn run(
         summary.commits.push((sha, pkg_summaries));
     }
 
+    rbmt_eprintln("Tests complete.");
     summary.print();
     Ok(())
 }
@@ -464,7 +465,6 @@ fn do_no_std_check(
 
     rbmt_eprintln(&format!("Detected no-std package, building for target: {}", NO_STD_TARGET));
     rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run()?;
-    rbmt_eprintln("no-std build passed!");
     summary.no_std_checked = true;
     Ok(())
 }
