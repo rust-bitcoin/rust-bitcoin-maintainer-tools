@@ -202,20 +202,20 @@ fn check_apis(
         let diff = public_api::diff::PublicApiDiff::between(no_features, all_features);
 
         if !diff.removed.is_empty() || !diff.changed.is_empty() {
-            eprintln!("Non-additive features detected in {}:", package.name);
+            println!("Non-additive features detected in {}:", package.name);
 
             if !diff.removed.is_empty() {
-                eprintln!("  Items removed when enabling features:");
+                println!("  Items removed when enabling features:");
                 for item in &diff.removed {
-                    eprintln!("    - {}", item);
+                    println!("    - {}", item);
                 }
             }
 
             if !diff.changed.is_empty() {
-                eprintln!("  Items changed when enabling features:");
+                println!("  Items changed when enabling features:");
                 for item in &diff.changed {
-                    eprintln!("    - old: {}", item.old);
-                    eprintln!("      new: {}", item.new);
+                    println!("    - old: {}", item.old);
+                    println!("      new: {}", item.new);
                 }
             }
 
@@ -232,8 +232,6 @@ fn check_apis(
         if !status_output.trim().is_empty() {
             // Show the diff for context.
             rbmt_cmd!(sh, "git diff --color=always {api_dir}").run()?;
-
-            eprintln!();
             return Err(format!(
                 "You have introduced changes to the public API, commit the changes to {} currently in your working directory",
                 api_dir.display()
@@ -297,31 +295,31 @@ fn check_semver(
 
     let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
 
-    eprintln!("Semver check vs {}:", baseline);
+    println!("Semver check vs {}:", baseline);
 
     if !diff.removed.is_empty() {
-        eprintln!("  Removed (possibly breaking):");
+        println!("  Removed (possibly breaking):");
         for item in &diff.removed {
-            eprintln!("    - {}", item);
+            println!("    - {}", item);
         }
     }
 
     if !diff.changed.is_empty() {
-        eprintln!("  Changed (possibly breaking):");
+        println!("  Changed (possibly breaking):");
         for item in &diff.changed {
-            eprintln!("    old: {}", item.old);
-            eprintln!("    new: {}", item.new);
+            println!("    old: {}", item.old);
+            println!("    new: {}", item.new);
         }
     }
 
     if !diff.added.is_empty() {
-        eprintln!("  Added:");
+        println!("  Added:");
         for item in &diff.added {
-            eprintln!("    + {}", item);
+            println!("    + {}", item);
         }
     }
 
-    eprintln!(
+    println!(
         "  Summary: {} removed, {} changed, {} added",
         diff.removed.len(),
         diff.changed.len(),
