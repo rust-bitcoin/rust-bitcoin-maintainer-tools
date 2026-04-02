@@ -3,7 +3,7 @@
 use xshell::Shell;
 
 use crate::environment::{quiet_println, Package};
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Run benchmark tests for all crates in the workspace.
@@ -18,7 +18,7 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
         // Use pushd pattern to change and restore directory.
         let _dir = sh.push_dir(&package.dir);
 
-        quiet_cmd!(sh, "cargo --locked bench").env("RUSTFLAGS", "--cfg=bench").run()?;
+        rbmt_cmd!(sh, "cargo --locked bench").env("RUSTFLAGS", "--cfg=bench").run()?;
     }
 
     Ok(())

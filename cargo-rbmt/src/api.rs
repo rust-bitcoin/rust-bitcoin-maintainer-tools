@@ -7,7 +7,7 @@ use xshell::Shell;
 use crate::environment::{
     get_target_dir, get_workspace_root, quiet_println, Manifest, Package, PackageManifest,
 };
-use crate::{git, quiet_cmd, toolchain};
+use crate::{git, rbmt_cmd, toolchain};
 
 /// Directory where API files are stored, relative to each package directory.
 const API_DIR: &str = "api";
@@ -139,7 +139,7 @@ fn get_package_apis(
 
         // Generate rustdoc JSON.
         // Use --lib to avoid ambiguity errors in packages with multiple targets (e.g. lib + bin).
-        let mut cmd = quiet_cmd!(sh, "cargo rustdoc --lib");
+        let mut cmd = rbmt_cmd!(sh, "cargo rustdoc --lib");
         for arg in config.cargo_args() {
             cmd = cmd.arg(arg);
         }
@@ -228,10 +228,10 @@ fn check_apis(
     }
 
     for api_dir in &api_dirs {
-        let status_output = quiet_cmd!(sh, "git status --porcelain {api_dir}").read()?;
+        let status_output = rbmt_cmd!(sh, "git status --porcelain {api_dir}").read()?;
         if !status_output.trim().is_empty() {
             // Show the diff for context.
-            quiet_cmd!(sh, "git diff --color=always {api_dir}").run()?;
+            rbmt_cmd!(sh, "git diff --color=always {api_dir}").run()?;
 
             eprintln!();
             return Err(format!(

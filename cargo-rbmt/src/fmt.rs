@@ -5,7 +5,7 @@ use std::fs;
 use xshell::Shell;
 
 use crate::environment::{quiet_println, Package};
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Format (or check the formatting of) all packages in the workspace.
@@ -22,7 +22,7 @@ pub fn run(
         quiet_println("Formatting files...");
     }
 
-    let mut cmd = quiet_cmd!(sh, "cargo fmt");
+    let mut cmd = rbmt_cmd!(sh, "cargo fmt");
 
     if packages.is_empty() {
         cmd = cmd.arg("--all");
@@ -55,13 +55,13 @@ fn remove_trailing_whitespace(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Collect rust files from either all tracked files or just specified packages.
     let files = if packages.is_empty() {
-        quiet_cmd!(sh, "git ls-files --cached '*.rs'").read()?
+        rbmt_cmd!(sh, "git ls-files --cached '*.rs'").read()?
     } else {
         // Get files from each specified package directory.
         let mut all_files = Vec::new();
         for package in packages {
             let pkg_dir = package.dir.to_string_lossy();
-            let mut cmd = quiet_cmd!(sh, "git ls-files --cached");
+            let mut cmd = rbmt_cmd!(sh, "git ls-files --cached");
             cmd = cmd.arg(format!("{}/**/*.rs", pkg_dir));
             let files_output = cmd.read()?;
             all_files.push(files_output);

@@ -15,7 +15,7 @@ use crate::environment::{
     discover_features, git_commit_id, quiet_println, Package, PackageManifest,
 };
 use crate::toolchain::{prepare_toolchain, Toolchain};
-use crate::{git, quiet_cmd};
+use crate::{git, rbmt_cmd};
 
 /// Summary of everything tested for a single package.
 #[derive(Debug, Default)]
@@ -153,12 +153,12 @@ fn test_features(
     let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
     quiet_println(&format!("Testing features: {}", features_str));
     with_release(
-        quiet_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}"),
+        rbmt_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}"),
         release,
     )
     .run()?;
     with_release(
-        quiet_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}"),
+        rbmt_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}"),
         release,
     )
     .run()?;
@@ -266,8 +266,8 @@ fn do_test(
     quiet_println("Running basic tests");
 
     // Basic build and test.
-    with_release(quiet_cmd!(sh, "cargo --locked build"), release).run()?;
-    with_release(quiet_cmd!(sh, "cargo --locked test"), release).run()?;
+    with_release(rbmt_cmd!(sh, "cargo --locked build"), release).run()?;
+    with_release(rbmt_cmd!(sh, "cargo --locked test"), release).run()?;
 
     // Run examples.
     for example in &config.examples {
@@ -277,7 +277,7 @@ fn do_test(
             1 => {
                 // Format: "name" - run with default features.
                 let name = parts[0];
-                with_release(quiet_cmd!(sh, "cargo --locked run --example {name}"), release)
+                with_release(rbmt_cmd!(sh, "cargo --locked run --example {name}"), release)
                     .run()?;
             }
             2 => {
@@ -287,14 +287,14 @@ fn do_test(
                 if features == "-" {
                     // Format: "name:-" - run with no-default-features.
                     with_release(
-                        quiet_cmd!(sh, "cargo --locked run --no-default-features --example {name}"),
+                        rbmt_cmd!(sh, "cargo --locked run --no-default-features --example {name}"),
                         release,
                     )
                     .run()?;
                 } else {
                     // Format: "name:features" - run with specific features.
                     with_release(
-                        quiet_cmd!(sh, "cargo --locked run --example {name} --features={features}"),
+                        rbmt_cmd!(sh, "cargo --locked run --example {name} --features={features}"),
                         release,
                     )
                     .run()?;
@@ -332,13 +332,13 @@ fn do_feature_matrix(
 
     // Test all features.
     quiet_println("Testing all features");
-    with_release(quiet_cmd!(sh, "cargo --locked build --all-features"), release).run()?;
-    with_release(quiet_cmd!(sh, "cargo --locked test --all-features"), release).run()?;
+    with_release(rbmt_cmd!(sh, "cargo --locked build --all-features"), release).run()?;
+    with_release(rbmt_cmd!(sh, "cargo --locked test --all-features"), release).run()?;
 
     // Test no features.
     quiet_println("Testing no features");
-    with_release(quiet_cmd!(sh, "cargo --locked build --no-default-features"), release).run()?;
-    with_release(quiet_cmd!(sh, "cargo --locked test --no-default-features"), release).run()?;
+    with_release(rbmt_cmd!(sh, "cargo --locked build --no-default-features"), release).run()?;
+    with_release(rbmt_cmd!(sh, "cargo --locked test --no-default-features"), release).run()?;
 
     // Test each feature in isolation, plus sampled subsets.
     let features: Vec<String> = discover_features(sh, package)?
@@ -422,7 +422,7 @@ fn sampled_feature_matrix(
 /// Detect if a package is attempting to be no-std.
 fn is_no_std_package(sh: &Shell, package_dir: &Path) -> Result<bool, Box<dyn std::error::Error>> {
     // Use cargo metadata to find the library target's source path.
-    let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
     // Find the package matching our directory.
@@ -463,7 +463,7 @@ fn do_no_std_check(
     }
 
     quiet_println(&format!("Detected no-std package, building for target: {}", NO_STD_TARGET));
-    quiet_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run()?;
+    rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run()?;
     quiet_println("no-std build passed!");
     summary.no_std_checked = true;
     Ok(())
