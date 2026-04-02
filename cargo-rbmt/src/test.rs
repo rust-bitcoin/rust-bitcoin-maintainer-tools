@@ -12,10 +12,51 @@ use serde::Deserialize;
 use xshell::{Cmd, Shell};
 
 use crate::environment::{
-    discover_features, git_commit_id, rbmt_eprintln, Package, PackageManifest,
+    discover_features, git_commit_id, rbmt_eprintln, OutputMode, Package, PackageManifest,
 };
 use crate::toolchain::{prepare_toolchain, Toolchain};
 use crate::{git, rbmt_cmd};
+
+/// Extension trait for test commands with conditional output and release support.
+trait TestCmdExt {
+    /// Run command and show output only in Verbose mode, but always show on failure.
+    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    /// Conditionally append `--release` flag and run.
+    fn set_release(self, release: bool) -> Self;
+}
+
+impl TestCmdExt for Cmd<'_> {
+    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Unconditionally grab stdout and ignore the exit status
+        // since we handle piping it out below based on if a build
+        // or test command fails.
+        self.set_ignore_stdout(false);
+        self.set_ignore_status(true);
+
+        // Run command and capture output.
+        let output = self.output()?;
+
+        // Pipe out stdout in verbose mode or on failure.
+        if matches!(OutputMode::from_env(), OutputMode::Verbose) || !output.status.success() {
+            print!("{}", String::from_utf8(output.stdout)?);
+        }
+
+        // Err on command failure.
+        if !output.status.success() {
+            return Err(format!("Command failed: {}", output.status).into());
+        }
+
+        Ok(())
+    }
+
+    fn set_release(self, release: bool) -> Self {
+        if release {
+            self.arg("--release")
+        } else {
+            self
+        }
+    }
+}
 
 /// Summary of everything tested for a single package.
 #[derive(Debug, Default)]
@@ -152,26 +193,13 @@ fn test_features(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
     rbmt_eprintln(&format!("Testing features: {}", features_str));
-    with_release(
-        rbmt_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}"),
-        release,
-    )
-    .run()?;
-    with_release(
-        rbmt_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}"),
-        release,
-    )
-    .run()?;
+    rbmt_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}")
+        .set_release(release)
+        .run_verbose()?;
+    rbmt_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}")
+        .set_release(release)
+        .run_verbose()?;
     Ok(())
-}
-
-/// Conditionally append `--release` to a cargo command.
-fn with_release(cmd: Cmd<'_>, release: bool) -> Cmd<'_> {
-    if release {
-        cmd.arg("--release")
-    } else {
-        cmd
-    }
 }
 
 /// Run build and test for all crates with the specified toolchain.
@@ -267,8 +295,8 @@ fn do_test(
     rbmt_eprintln("Running basic tests");
 
     // Basic build and test.
-    with_release(rbmt_cmd!(sh, "cargo --locked build"), release).run()?;
-    with_release(rbmt_cmd!(sh, "cargo --locked test"), release).run()?;
+    rbmt_cmd!(sh, "cargo --locked build").set_release(release).run_verbose()?;
+    rbmt_cmd!(sh, "cargo --locked test").set_release(release).run_verbose()?;
 
     // Run examples.
     for example in &config.examples {
@@ -278,8 +306,9 @@ fn do_test(
             1 => {
                 // Format: "name" - run with default features.
                 let name = parts[0];
-                with_release(rbmt_cmd!(sh, "cargo --locked run --example {name}"), release)
-                    .run()?;
+                rbmt_cmd!(sh, "cargo --locked run --example {name}")
+                    .set_release(release)
+                    .run_verbose()?;
             }
             2 => {
                 let name = parts[0];
@@ -287,18 +316,14 @@ fn do_test(
 
                 if features == "-" {
                     // Format: "name:-" - run with no-default-features.
-                    with_release(
-                        rbmt_cmd!(sh, "cargo --locked run --no-default-features --example {name}"),
-                        release,
-                    )
-                    .run()?;
+                    rbmt_cmd!(sh, "cargo --locked run --no-default-features --example {name}")
+                        .set_release(release)
+                        .run_verbose()?;
                 } else {
                     // Format: "name:features" - run with specific features.
-                    with_release(
-                        rbmt_cmd!(sh, "cargo --locked run --example {name} --features={features}"),
-                        release,
-                    )
-                    .run()?;
+                    rbmt_cmd!(sh, "cargo --locked run --example {name} --features={features}")
+                        .set_release(release)
+                        .run_verbose()?;
                 }
             }
             _ => {
@@ -333,13 +358,17 @@ fn do_feature_matrix(
 
     // Test all features.
     rbmt_eprintln("Testing all features");
-    with_release(rbmt_cmd!(sh, "cargo --locked build --all-features"), release).run()?;
-    with_release(rbmt_cmd!(sh, "cargo --locked test --all-features"), release).run()?;
+    rbmt_cmd!(sh, "cargo --locked build --all-features").set_release(release).run_verbose()?;
+    rbmt_cmd!(sh, "cargo --locked test --all-features").set_release(release).run_verbose()?;
 
     // Test no features.
     rbmt_eprintln("Testing no features");
-    with_release(rbmt_cmd!(sh, "cargo --locked build --no-default-features"), release).run()?;
-    with_release(rbmt_cmd!(sh, "cargo --locked test --no-default-features"), release).run()?;
+    rbmt_cmd!(sh, "cargo --locked build --no-default-features")
+        .set_release(release)
+        .run_verbose()?;
+    rbmt_cmd!(sh, "cargo --locked test --no-default-features")
+        .set_release(release)
+        .run_verbose()?;
 
     // Test each feature in isolation, plus sampled subsets.
     let features: Vec<String> = discover_features(sh, package)?
@@ -464,7 +493,7 @@ fn do_no_std_check(
     }
 
     rbmt_eprintln(&format!("Detected no-std package, building for target: {}", NO_STD_TARGET));
-    rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run()?;
+    rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run_verbose()?;
     summary.no_std_checked = true;
     Ok(())
 }
