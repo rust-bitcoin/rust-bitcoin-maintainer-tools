@@ -2,7 +2,7 @@
 
 use xshell::Shell;
 
-use crate::environment::Package;
+use crate::environment::{rbmt_eprintln, Package};
 use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -12,6 +12,7 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 /// Uses basic rustdoc warnings to catch common documentation issues.
 pub fn run(sh: &Shell, packages: &[Package], open: bool) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Stable)?;
+    rbmt_eprintln("Building docs...");
 
     let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
@@ -26,6 +27,7 @@ pub fn run(sh: &Shell, packages: &[Package], open: bool) -> Result<(), Box<dyn s
 
     cmd.env("RUSTDOCFLAGS", "-D warnings").run()?;
 
+    rbmt_eprintln("Docs built successfully.");
     Ok(())
 }
 
@@ -39,6 +41,7 @@ pub fn run_docsrs(
     open: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
+    rbmt_eprintln("Building docs...");
 
     let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
@@ -53,5 +56,6 @@ pub fn run_docsrs(
 
     cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links").run()?;
 
+    rbmt_eprintln("Docs built successfully.");
     Ok(())
 }
