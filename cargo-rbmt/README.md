@@ -188,14 +188,10 @@ nightly = "nightly-2026-03-13"
 stable = "1.93.1"
 ```
 
-The command prints `export` statements to stdout and all other output to stderr, so it can be used with `eval` to set toolchain version environment variables in the calling shell.
+The current versions can be queried with the `--msrv`, `--stable`, or `--nightly` flags.
 
 ```bash
-eval "$(cargo rbmt toolchains)"
-
-cargo +$RBMT_NIGHTLY rbmt lint
-cargo +$RBMT_STABLE rbmt test
-cargo +$RBMT_MSRV rbmt test --toolchain msrv
+cargo +$(cargo rbmt toolchains --nightly) test --features one-off
 ```
 
 The `--update-nightly` and `--update-stable` flags each install the corresponding floating toolchain, query its resolved version from `rustc`, and write the result to the appropriate version file before proceeding with the normal install and export.

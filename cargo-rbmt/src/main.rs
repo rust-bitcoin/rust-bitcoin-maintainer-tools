@@ -108,6 +108,12 @@ enum Commands {
         /// Print the workspace MSRV and exit without installing any toolchains.
         #[arg(long)]
         msrv: bool,
+        /// Print the nightly toolchain version and exit without installing any toolchains.
+        #[arg(long)]
+        nightly: bool,
+        /// Print the stable toolchain version and exit without installing any toolchains.
+        #[arg(long)]
+        stable: bool,
     },
     /// Install tools pinned in [workspace.metadata.rbmt.tools].
     Tools {
@@ -215,8 +221,8 @@ fn main() {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },
-        Commands::Toolchains { update_nightly, update_stable, msrv } =>
-            if let Err(e) = toolchains::run(&sh, update_nightly, update_stable, msrv) {
+        Commands::Toolchains { update_nightly, update_stable, msrv, nightly, stable } =>
+            if let Err(e) = toolchains::run(&sh, update_nightly, update_stable, msrv, nightly, stable) {
                 eprintln!("Error setting up toolchains: {}", e);
                 process::exit(1);
             },
