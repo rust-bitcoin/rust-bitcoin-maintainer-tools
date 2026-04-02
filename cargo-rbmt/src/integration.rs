@@ -6,7 +6,7 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{discover_features, quiet_println, Package, PackageManifest};
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 
 /// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
@@ -52,7 +52,7 @@ impl IntegrationConfig {
 /// Get the package ID by running `cargo pkgid` in the given directory.
 fn get_package_id(sh: &Shell, dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let _dir = sh.push_dir(dir);
-    let id = quiet_cmd!(sh, "cargo pkgid").read()?;
+    let id = rbmt_cmd!(sh, "cargo pkgid").read()?;
     Ok(id.trim().to_string())
 }
 
@@ -115,7 +115,7 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
         // Run tests for each version.
         for version in &versions_to_test {
             quiet_println(&format!("  Testing with version: {}", version));
-            quiet_cmd!(sh, "cargo --locked test --features={version}").run()?;
+            rbmt_cmd!(sh, "cargo --locked test --features={version}").run()?;
         }
     }
 

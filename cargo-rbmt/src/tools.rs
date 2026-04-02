@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use xshell::Shell;
 
 use crate::environment::{get_workspace_root, quiet_println, WorkspaceManifest};
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 
 /// Where the tool pins were found in the root `Cargo.toml`.
 ///
@@ -111,7 +111,7 @@ fn installed_version(
     sh: &Shell,
     crate_name: &str,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    let output = quiet_cmd!(sh, "cargo install --list").read()?;
+    let output = rbmt_cmd!(sh, "cargo install --list").read()?;
 
     let prefix = format!("{} v", crate_name);
     let version = output
@@ -127,14 +127,14 @@ fn installed_version(
 /// Install a single tool at a pinned version using `cargo install`.
 fn install_tool(sh: &Shell, name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println(&format!("Installing {}@{}", name, version));
-    quiet_cmd!(sh, "cargo install {name} --version {version} --locked").run()?;
+    rbmt_cmd!(sh, "cargo install {name} --version {version} --locked").run()?;
     Ok(())
 }
 
 /// Install a single tool at the latest version and return the resolved version.
 fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::error::Error>> {
     quiet_println(&format!("Installing {} (latest)", name));
-    quiet_cmd!(sh, "cargo install {name}").run()?;
+    rbmt_cmd!(sh, "cargo install {name}").run()?;
 
     installed_version(sh, name)?
         .ok_or_else(|| format!("{} not found in `cargo install --list` after install", name).into())

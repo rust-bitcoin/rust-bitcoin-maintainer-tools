@@ -41,7 +41,7 @@ pub struct Package {
 
 /// Wrap commands to respect rbmt output mode.
 #[macro_export]
-macro_rules! quiet_cmd {
+macro_rules! rbmt_cmd {
     ($sh:expr, $($arg:tt)*) => {{
         let mut cmd = xshell::cmd!($sh, $($arg)*);
         match $crate::environment::OutputMode::from_env() {
@@ -88,7 +88,7 @@ pub fn get_packages(
     sh: &Shell,
     packages: &[String],
 ) -> Result<Vec<Package>, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
     let all_packages: Vec<Package> = json["packages"]
@@ -177,7 +177,7 @@ pub fn get_packages(
 /// creates an implicit workspace and `workspace_root` resolves to the package
 /// directory itself.
 pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
     let root = json["workspace_root"].as_str().ok_or("Missing workspace_root in cargo metadata")?;
     Ok(PathBuf::from(root))
@@ -188,7 +188,7 @@ pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Err
 /// This respects `CARGO_TARGET_DIR`, .cargo/config.toml, and other cargo
 /// target directory configuration.
 pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
     let target_dir =
         json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
@@ -204,7 +204,7 @@ pub fn discover_features(
     sh: &Shell,
     package: &Package,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
     let packages =

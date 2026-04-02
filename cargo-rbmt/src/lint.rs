@@ -4,8 +4,10 @@ use std::path::Path;
 
 use xshell::Shell;
 
-use crate::environment::{get_packages, get_workspace_root, quiet_println, PackageManifest, Package};
-use crate::quiet_cmd;
+use crate::environment::{
+    get_packages, get_workspace_root, quiet_println, Package, PackageManifest,
+};
+use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Lint-specific configuration, read from `[package.metadata.rbmt.lint]` in `Cargo.toml`.
@@ -54,12 +56,12 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Linting workspace...");
 
     // Run clippy on workspace with all features.
-    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
+    rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
         .args(&["--", "-D", "warnings"])
         .run()?;
 
     // Run clippy on workspace without features.
-    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
+    rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
         .args(&["--", "-D", "warnings"])
         .run()?;
 
@@ -86,7 +88,7 @@ fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::er
         let _old_dir = sh.push_dir(&package.dir);
 
         // Run clippy without default features.
-        quiet_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
+        rbmt_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
             .args(&["--", "-D", "warnings"])
             .run()?;
     }
@@ -110,7 +112,10 @@ fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::er
 ///
 /// Running per-package allows each package to maintain its own whitelist of allowed duplicates
 /// via `rbmt.toml`, since some duplicates may be unavoidable for a given package but not others.
-fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+fn check_duplicate_deps(
+    sh: &Shell,
+    packages: &[Package],
+) -> Result<(), Box<dyn std::error::Error>> {
     quiet_println("Checking for duplicate dependencies...");
 
     let mut found_duplicates = false;
@@ -123,7 +128,7 @@ fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn 
 
         // Run cargo tree to find duplicates for this package, exclude dev dependencies
         // since they are not exposed to downstream consumers.
-        let output = quiet_cmd!(
+        let output = rbmt_cmd!(
             sh,
             "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
         )
@@ -184,7 +189,7 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
     quiet_println("Checking for cross-package duplicate dependencies...");
 
     let package_names: HashSet<&str> = package_info.iter().map(|pkg| pkg.name.as_str()).collect();
-    let output = quiet_cmd!(
+    let output = rbmt_cmd!(
         sh,
         "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
     )

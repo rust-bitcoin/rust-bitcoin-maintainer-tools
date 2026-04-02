@@ -3,7 +3,7 @@
 use xshell::Shell;
 
 use crate::environment::Package;
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Build documentation for end users with the stable toolchain.
@@ -13,7 +13,7 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 pub fn run(sh: &Shell, packages: &[Package], open: bool) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Stable)?;
 
-    let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
+    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
     // Add package filters if specified.
     for package in packages {
@@ -40,7 +40,7 @@ pub fn run_docsrs(
 ) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
-    let mut cmd = quiet_cmd!(sh, "cargo --locked doc --all-features --no-deps");
+    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps");
 
     // Add package filters if specified.
     for package in packages {

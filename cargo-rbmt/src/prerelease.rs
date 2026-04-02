@@ -9,7 +9,7 @@ use xshell::Shell;
 
 use crate::environment::{get_target_dir, quiet_println, Package, PackageManifest};
 use crate::lock::LockFile;
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
@@ -95,7 +95,7 @@ fn has_version_bump(
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let cargo_toml = package_dir.join("Cargo.toml");
     let range = format!("{baseline}..");
-    let output = quiet_cmd!(sh, "git log --patch --reverse {range} -- {cargo_toml}").read()?;
+    let output = rbmt_cmd!(sh, "git log --patch --reverse {range} -- {cargo_toml}").read()?;
     Ok(output.lines().any(|line| line.starts_with("+version")))
 }
 
@@ -153,14 +153,14 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// or don't resolve correctly.
 fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
-    quiet_cmd!(sh, "cargo publish --dry-run").run()?;
+    rbmt_cmd!(sh, "cargo publish --dry-run").run()?;
     let package_dir = get_publish_dir(sh)?;
 
     let _dir = sh.push_dir(&package_dir);
     quiet_println(&format!("Testing publish package: {}", package_dir));
     // Re-derive dependencies since it is what an end user will see.
     LockFile::Minimal.derive(sh)?;
-    quiet_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
+    rbmt_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
 
     quiet_println("Publish tests passed");
     Ok(())
@@ -171,7 +171,7 @@ fn get_publish_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
     let target_dir = get_target_dir(sh)?;
 
     // Find the package that matches the current directory.
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
     let current_dir = sh.current_dir();
     let current_manifest = current_dir.join("Cargo.toml");

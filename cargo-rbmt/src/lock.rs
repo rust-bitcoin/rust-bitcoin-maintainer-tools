@@ -11,7 +11,7 @@ use clap::ValueEnum;
 use xshell::Shell;
 
 use crate::environment::{get_workspace_root, quiet_println};
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// The standard Cargo lockfile name.
@@ -151,14 +151,14 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
     // as in, they are not being bumped up by transitive dependency constraints.
     quiet_println("Checking direct minimal versions...");
     remove_lock_file(sh)?;
-    quiet_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run()?;
 
     // Now that our own direct dependency versions can be trusted, check
     // against the lowest versions of the dependency tree which still
     // satisfy constraints.
     quiet_println("Generating minimal versions lockfile...");
     remove_lock_file(sh)?;
-    quiet_cmd!(sh, "cargo check --all-features -Z minimal-versions").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features -Z minimal-versions").run()?;
 
     // Save a copy to Cargo-minimal.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Minimal)?;
@@ -179,7 +179,7 @@ fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> 
     // If it doesn't exist cargo check will create a fresh one.
     remove_lock_file(sh)?;
     let _ = LockFile::Recent.restore(sh);
-    quiet_cmd!(sh, "cargo check --all-features").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features").run()?;
 
     // Save a copy to Cargo-recent.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Recent)?;

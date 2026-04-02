@@ -1,7 +1,7 @@
 use xshell::Shell;
 
 use crate::environment::quiet_println;
-use crate::quiet_cmd;
+use crate::rbmt_cmd;
 use crate::toolchain::{get_workspace_msrv, Toolchain};
 
 /// Fixed components installed on every toolchain.
@@ -73,7 +73,7 @@ pub fn run(
 
 /// Query the resolved nightly version string (e.g. `"nightly-2025-02-17"`) from rustc.
 fn resolve_nightly_version(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-    let output = quiet_cmd!(sh, "rustc +nightly --verbose --version").read()?;
+    let output = rbmt_cmd!(sh, "rustc +nightly --verbose --version").read()?;
 
     // Output contains a line: "commit-date: 2025-02-17"
     let date = output
@@ -86,7 +86,7 @@ fn resolve_nightly_version(sh: &Shell) -> Result<String, Box<dyn std::error::Err
 
 /// Query the resolved stable version string (e.g. `"1.85.0"`) from rustc.
 fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-    let output = quiet_cmd!(sh, "rustc +stable --version").read()?;
+    let output = rbmt_cmd!(sh, "rustc +stable --version").read()?;
 
     // Output: "rustc 1.85.0 (4d91de4e4 2025-02-17)"
     let version = output
@@ -99,7 +99,7 @@ fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
 
 /// Install a single toolchain with the fixed components and target.
 fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_cmd!(
+    rbmt_cmd!(
         sh,
         "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
     )
