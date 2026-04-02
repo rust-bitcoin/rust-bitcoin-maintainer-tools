@@ -23,7 +23,10 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 ## Environment Variables
 
-* `RBMT_LOG_LEVEL=quiet` - Suppress verbose output and reduce cargo noise.
+* `RBMT_LOG_LEVEL`
+  * `verbose`: [DEFAULT] Print out underlying cargo commands and all their output, good for CI.
+  * `quiet`: Suppress both cargo and rbmt stderr to reduce all noise.
+  * `progress`: Show rbmt stderr on a single line with a visual indicator, for interactive use.
 
 ## Configuration
 
