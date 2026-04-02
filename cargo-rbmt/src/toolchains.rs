@@ -10,32 +10,42 @@ const COMPONENTS: &str = "rust-src,clippy,rustfmt";
 /// Fixed target installed on every toolchain (for no-std cross-compilation testing).
 const TARGET: &str = "thumbv7m-none-eabi";
 
-/// Env var names exported after setup.
-const ENV_NIGHTLY: &str = "RBMT_NIGHTLY";
-const ENV_STABLE: &str = "RBMT_STABLE";
-const ENV_MSRV: &str = "RBMT_MSRV";
-
-/// Install all three toolchains (nightly, stable, MSRV) and export env vars.
+/// Install all three toolchains (nightly, stable, MSRV) and optionally print versions.
 ///
 /// When `update_nightly` is true, the floating `nightly` toolchain is first
 /// installed, its resolved version queried from rustc, and the result written
-/// to `nightly-version` before the normal install and export path runs.
+/// to `nightly-version` before the normal install path runs. When `update_stable` is
+/// true, the same is done for `stable-version`.
 ///
-/// When `update_stable` is true, the same is done for `stable-version`.
-///
-/// When `msrv` is true, print the workspace MSRV to stdout and exit without
-/// installing any toolchains.
+/// When `msrv`, `nightly`, or `stable` is true, print the correspoinding version
+/// to stdout and exit without installing any toolchains.
+#[allow(clippy::fn_params_excessive_bools)]
 pub fn run(
     sh: &Shell,
     update_nightly: bool,
     update_stable: bool,
     msrv: bool,
+    nightly: bool,
+    stable: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if msrv {
         let msrv = get_workspace_msrv(sh)?;
         println!("{}", msrv);
         return Ok(());
     }
+
+    if nightly {
+        let nightly_version = Toolchain::Nightly.read_version(sh)?;
+        println!("{}", nightly_version);
+        return Ok(());
+    }
+
+    if stable {
+        let stable_version = Toolchain::Stable.read_version(sh)?;
+        println!("{}", stable_version);
+        return Ok(());
+    }
+
     if update_nightly {
         install_toolchain(sh, "nightly")?;
         let version = resolve_nightly_version(sh)?;
@@ -50,23 +60,18 @@ pub fn run(
         rbmt_eprintln(&format!("Updated stable-version: {}", version));
     }
 
-    let nightly = Toolchain::Nightly.read_version(sh)?;
-    let stable = Toolchain::Stable.read_version(sh)?;
+    let nightly_version = Toolchain::Nightly.read_version(sh)?;
+    let stable_version = Toolchain::Stable.read_version(sh)?;
     let msrv = get_workspace_msrv(sh)?;
 
-    install_toolchain(sh, &nightly)?;
-    install_toolchain(sh, &stable)?;
+    install_toolchain(sh, &nightly_version)?;
+    install_toolchain(sh, &stable_version)?;
     install_toolchain(sh, &msrv)?;
 
     rbmt_eprintln(&format!(
         "Installed toolchains: nightly={}, stable={}, msrv={}",
-        nightly, stable, msrv
+        nightly_version, stable_version, msrv
     ));
-
-    // Print export statements to stdout.
-    println!("export {}={}", ENV_NIGHTLY, nightly);
-    println!("export {}={}", ENV_STABLE, stable);
-    println!("export {}={}", ENV_MSRV, msrv);
 
     Ok(())
 }
