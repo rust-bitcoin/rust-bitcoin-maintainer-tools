@@ -149,9 +149,10 @@ fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::er
 /// When `filter` is non-empty, only the named tools are operated on. Unknown
 /// tool names in the filter are treated as an error.
 pub fn run(sh: &Shell, update: bool, filter: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln("Installing tools...");
     let Some(mut tools) = read_tools(sh)? else {
-        eprintln!(
-            "No tools found in [workspace.metadata.rbmt.tools] or [package.metadata.rbmt.tools]."
+        rbmt_eprintln(
+            "No tools found in [workspace.metadata.rbmt.tools] or [package.metadata.rbmt.tools].",
         );
         return Ok(());
     };
