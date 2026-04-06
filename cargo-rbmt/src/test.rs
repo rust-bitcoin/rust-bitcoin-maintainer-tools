@@ -11,11 +11,11 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::{Cmd, Shell};
 
-use crate::environment::{
-    discover_features, git_commit_id, rbmt_eprintln, OutputMode, Package, PackageManifest,
-};
+use crate::{environment::{
+    discover_features, git_commit_id, OutputMode, Package, PackageManifest,
+}};
 use crate::toolchain::{prepare_toolchain, Toolchain};
-use crate::{git, rbmt_cmd};
+use crate::git;
 
 /// Extension trait for test commands with conditional output and release support.
 trait TestCmdExt {
@@ -193,7 +193,7 @@ fn test_features(
     release: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
-    rbmt_eprintln(&format!("Testing features: {}", features_str));
+    rbmt_eprintln!("Testing features: {}", features_str);
     rbmt_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}")
         .set_release(release)
         .run_verbose()?;
@@ -221,16 +221,16 @@ pub fn run(
     if let Some(baseline) = baseline {
         let commits = git::list_commits(sh, baseline)?;
         if commits.is_empty() {
-            rbmt_eprintln(&format!("No commits found between '{}' and HEAD.", baseline));
+            rbmt_eprintln!("No commits found between '{}' and HEAD.", baseline);
             return Ok(());
         }
-        rbmt_eprintln(&format!(
+        rbmt_eprintln!(
             "Testing {} commit(s) against baseline '{}'",
             commits.len(),
             baseline
-        ));
+        );
         for sha in &commits {
-            rbmt_eprintln(&format!("Testing commit {}...", &sha[..12]));
+            rbmt_eprintln!("Testing commit {}...", &sha[..12]);
             let _guard = git::GitSwitchGuard::new(sh, sha)?;
             let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
             summary.commits.push((sha.clone(), pkg_summaries));
@@ -241,7 +241,7 @@ pub fn run(
         summary.commits.push((sha, pkg_summaries));
     }
 
-    rbmt_eprintln("Tests complete.");
+    rbmt_eprintln!("Tests complete.");
     summary.print();
     Ok(())
 }
@@ -254,7 +254,7 @@ fn test_commit(
     release: bool,
     packages: &[Package],
 ) -> Result<Vec<PackageSummary>, Box<dyn std::error::Error>> {
-    rbmt_eprintln(&format!("Testing {} crate(s)", packages.len()));
+    rbmt_eprintln!("Testing {} crate(s)", packages.len());
 
     // Configure RUSTFLAGS for debug assertions.
     let _env = sh.push_env(
@@ -265,7 +265,7 @@ fn test_commit(
     let mut pkg_summaries = Vec::new();
 
     for package in packages {
-        rbmt_eprintln(&format!("Testing package: {}", package.name));
+        rbmt_eprintln!("Testing package: {}", package.name);
 
         let _dir = sh.push_dir(&package.dir);
         // prepare_toolchain is called per-package because MSRV is read from
@@ -293,7 +293,7 @@ fn do_test(
     release: bool,
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln("Running basic tests");
+    rbmt_eprintln!("Running basic tests");
 
     // Basic build and test.
     rbmt_cmd!(sh, "cargo --locked build").set_release(release).run_verbose()?;
@@ -355,15 +355,15 @@ fn do_feature_matrix(
     release: bool,
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln("Running feature matrix tests");
+    rbmt_eprintln!("Running feature matrix tests");
 
     // Test all features.
-    rbmt_eprintln("Testing all features");
+    rbmt_eprintln!("Testing all features");
     rbmt_cmd!(sh, "cargo --locked build --all-features").set_release(release).run_verbose()?;
     rbmt_cmd!(sh, "cargo --locked test --all-features").set_release(release).run_verbose()?;
 
     // Test no features.
-    rbmt_eprintln("Testing no features");
+    rbmt_eprintln!("Testing no features");
     rbmt_cmd!(sh, "cargo --locked build --no-default-features")
         .set_release(release)
         .run_verbose()?;
@@ -377,11 +377,11 @@ fn do_feature_matrix(
         .filter(|f| !config.exclude_features.contains(f))
         .collect();
     if !features.is_empty() {
-        rbmt_eprintln(&format!(
+        rbmt_eprintln!(
             "Discovered {} feature(s) to test: {}",
             features.len(),
             features.join(", ")
-        ));
+        );
         sampled_feature_matrix(sh, &features, release, summary)?;
     }
 
@@ -493,7 +493,7 @@ fn do_no_std_check(
         return Ok(());
     }
 
-    rbmt_eprintln(&format!("Detected no-std package, building for target: {}", NO_STD_TARGET));
+    rbmt_eprintln!("Detected no-std package, building for target: {}", NO_STD_TARGET);
     rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run_verbose()?;
     summary.no_std_checked = true;
     Ok(())

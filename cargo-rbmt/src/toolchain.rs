@@ -18,7 +18,6 @@ use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{get_workspace_root, WorkspaceManifest};
-use crate::rbmt_cmd;
 
 /// Where the toolchain pins were found in the root `Cargo.toml`.
 ///

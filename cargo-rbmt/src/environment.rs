@@ -55,23 +55,33 @@ macro_rules! rbmt_cmd {
     }};
 }
 
-/// Wrap stderr messages to respect rbmt output mode.
-pub fn rbmt_eprintln(msg: &str) {
-    match OutputMode::from_env() {
-        OutputMode::Verbose => eprintln!("{}", msg),
-        OutputMode::Progress => {
-            // Show a symbol based on message hash.
-            const SYMBOL: &[&str] = &["b", "B", "$", "#"];
-            let hash = msg
-                .as_bytes()
-                .iter()
-                .fold(0usize, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize));
-            let symbol = SYMBOL[hash % SYMBOL.len()];
-            // Use carriage return to overwrite the same line, and ANSI escape to clear to EOL.
-            eprint!("\r[{}] {}\x1b[K", symbol, msg);
+/// Progress message output symbols (flair).
+pub const PROGRESS_SYMBOLS: &[&str] = &["b", "B", "$", "#"];
+
+/// Progress output macro that respects [`OutputMode`] settings.
+///
+/// Wraps eprintln! so that the underlying macro's vararg handling is exposed.
+#[macro_export]
+macro_rules! rbmt_eprintln {
+    ($($arg:tt)*) => {{
+        match $crate::environment::OutputMode::from_env() {
+            $crate::environment::OutputMode::Verbose => {
+                eprintln!($($arg)*);
+            }
+            $crate::environment::OutputMode::Progress => {
+                let msg = format!($($arg)*);
+                // Show a symbol based on message hash.
+                let hash = msg
+                    .as_bytes()
+                    .iter()
+                    .fold(0usize, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize));
+                let symbol = $crate::environment::PROGRESS_SYMBOLS[hash % $crate::environment::PROGRESS_SYMBOLS.len()];
+                // Use carriage return to overwrite the same line, and ANSI escape to clear to EOL.
+                eprint!("\r[{}] {}\x1b[K", symbol, msg);
+            }
+            $crate::environment::OutputMode::Quiet => {}
         }
-        OutputMode::Quiet => {}
-    }
+    }};
 }
 
 /// Get list of package names and their directories in the workspace using cargo metadata.

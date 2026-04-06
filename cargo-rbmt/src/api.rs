@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 
 use xshell::Shell;
 
-use crate::environment::{
-    get_target_dir, get_workspace_root, rbmt_eprintln, Manifest, Package, PackageManifest,
-};
-use crate::{git, rbmt_cmd, toolchain};
+use crate::{environment::{
+    get_target_dir, get_workspace_root, Manifest, Package, PackageManifest,
+}};
+use crate::{git, toolchain};
 
 /// Directory where API files are stored, relative to each package directory.
 const API_DIR: &str = "api";
@@ -107,7 +107,7 @@ pub fn run(
     packages: &[Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln("Running API check...");
+    rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
     check_apis(sh, packages, baseline)?;
@@ -278,7 +278,7 @@ fn check_semver(
     package_dir: &PathBuf,
     baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln(&format!("Running semver check against baseline: {}", baseline));
+    rbmt_eprintln!("Running semver check against baseline: {}", baseline);
 
     let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
     let mut baseline_apis = {
