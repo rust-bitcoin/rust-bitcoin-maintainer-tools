@@ -1,7 +1,10 @@
+// Allow all other modules to use environment macros.
+#[macro_use]
+mod environment;
+
 mod api;
 mod bench;
 mod docs;
-mod environment;
 mod fmt;
 mod git;
 mod integration;
@@ -20,8 +23,6 @@ use environment::{get_packages, Package};
 use lock::LockFile;
 use toolchain::Toolchain;
 use xshell::Shell;
-
-use crate::environment::OutputMode;
 
 #[derive(Parser)]
 #[command(name = "cargo-rbmt")]

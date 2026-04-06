@@ -7,9 +7,8 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_target_dir, rbmt_eprintln, Package, PackageManifest};
+use crate::{environment::{get_target_dir, Package, PackageManifest}};
 use crate::lock::LockFile;
-use crate::rbmt_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
@@ -49,25 +48,25 @@ pub fn run(
     force: bool,
     baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln(&format!("Running pre-release checks on {} packages", packages.len()));
+    rbmt_eprintln!("Running pre-release checks on {} packages", packages.len());
 
     for package in packages {
         let config = PrereleaseConfig::load(Path::new(&package.dir))?;
 
         if !config.enabled {
-            rbmt_eprintln(&format!("Skipping {} (pre-release not enabled)", package.name));
+            rbmt_eprintln!("Skipping {} (pre-release not enabled)", package.name);
             continue;
         }
 
         if !force && !has_version_bump(sh, &package.dir, baseline)? {
-            rbmt_eprintln(&format!(
+            rbmt_eprintln!(
                 "Skipping {} (no version bump detected since {})",
                 package.name, baseline
-            ));
+            );
             continue;
         }
 
-        rbmt_eprintln(&format!("Checking package: {}", package.name));
+        rbmt_eprintln!("Checking package: {}", package.name);
 
         let _dir = sh.push_dir(&package.dir);
 
@@ -83,7 +82,7 @@ pub fn run(
         }
     }
 
-    rbmt_eprintln("All pre-release checks passed");
+    rbmt_eprintln!("All pre-release checks passed");
     Ok(())
 }
 
@@ -106,7 +105,7 @@ const NONOS: &[&str] = &["doc_auto_cfg"];
 
 /// Grep source code for TODO, FIXME, TBD, and `doc_auto_cfg`.
 fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln("Greping source for todos and nonos...");
+    rbmt_eprintln!("Greping source for todos and nonos...");
 
     // Recursively walk the src/ directory.
     let mut issues = Vec::new();
@@ -142,7 +141,7 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!("Found {} pre-release issues", issues.len()).into());
     }
 
-    rbmt_eprintln("No pre-release issues found");
+    rbmt_eprintln!("No pre-release issues found");
     Ok(())
 }
 
@@ -157,12 +156,12 @@ fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let package_dir = get_publish_dir(sh)?;
 
     let _dir = sh.push_dir(&package_dir);
-    rbmt_eprintln(&format!("Testing publish package: {}", package_dir));
+    rbmt_eprintln!("Testing publish package: {}", package_dir);
     // Re-derive dependencies since it is what an end user will see.
     LockFile::Minimal.derive(sh)?;
     rbmt_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
 
-    rbmt_eprintln("Publish tests passed");
+    rbmt_eprintln!("Publish tests passed");
     Ok(())
 }
 
