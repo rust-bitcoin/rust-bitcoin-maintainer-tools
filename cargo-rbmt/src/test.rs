@@ -120,12 +120,13 @@ struct TestSummary {
 }
 
 impl TestSummary {
+    /// Print summary to stdout.
     fn print(&self) {
         println!("Test Summary");
         for (sha, packages) in &self.commits {
             println!("Commit: {}", sha);
             for pkg in packages {
-                println!("{}", pkg);
+                print!("{}", pkg);
             }
         }
     }

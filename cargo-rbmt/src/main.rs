@@ -232,9 +232,4 @@ fn main() {
                 process::exit(1);
             },
     }
-
-    // Ensure final newline in stderr output.
-    if matches!(OutputMode::from_env(), OutputMode::Progress) {
-        eprintln!();
-    }
 }
