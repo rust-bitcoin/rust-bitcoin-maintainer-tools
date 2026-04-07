@@ -193,7 +193,6 @@ fn test_features(
     release: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
-    rbmt_eprintln!("Testing features: {}", features_str);
     rbmt_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}")
         .set_release(release)
         .run_verbose()?;
@@ -284,16 +283,16 @@ fn test_commit(
     Ok(pkg_summaries)
 }
 
-/// Run basic build, test, and examples.
+/// Run defual build and test along with examples.
 fn do_test(
     sh: &Shell,
     config: &TestConfig,
     release: bool,
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Running basic tests");
+    rbmt_eprintln!("Running default tests on {}", summary.name);
 
-    // Basic build and test.
+    // Defualt build and test.
     rbmt_cmd!(sh, "cargo --locked build").set_release(release).run_verbose()?;
     rbmt_cmd!(sh, "cargo --locked test").set_release(release).run_verbose()?;
 
@@ -305,6 +304,11 @@ fn do_test(
             1 => {
                 // Format: "name" - run with default features.
                 let name = parts[0];
+                rbmt_eprintln!(
+                    "Running example {} with default features in {}",
+                    name,
+                    summary.name
+                );
                 rbmt_cmd!(sh, "cargo --locked run --example {name}")
                     .set_release(release)
                     .run_verbose()?;
@@ -315,11 +319,22 @@ fn do_test(
 
                 if features == "-" {
                     // Format: "name:-" - run with no-default-features.
+                    rbmt_eprintln!(
+                        "Running example {} with no default features in {}",
+                        name,
+                        summary.name
+                    );
                     rbmt_cmd!(sh, "cargo --locked run --no-default-features --example {name}")
                         .set_release(release)
                         .run_verbose()?;
                 } else {
                     // Format: "name:features" - run with specific features.
+                    rbmt_eprintln!(
+                        "Running example {} with features {} in {}",
+                        name,
+                        features,
+                        summary.name
+                    );
                     rbmt_cmd!(sh, "cargo --locked run --example {name} --features={features}")
                         .set_release(release)
                         .run_verbose()?;
@@ -353,15 +368,15 @@ fn do_feature_matrix(
     release: bool,
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Running feature matrix tests");
+    rbmt_eprintln!("Running feature matrix tests in {}", package.name);
 
     // Test all features.
-    rbmt_eprintln!("Testing all features");
+    rbmt_eprintln!("Testing all features in {}", package.name);
     rbmt_cmd!(sh, "cargo --locked build --all-features").set_release(release).run_verbose()?;
     rbmt_cmd!(sh, "cargo --locked test --all-features").set_release(release).run_verbose()?;
 
     // Test no features.
-    rbmt_eprintln!("Testing no features");
+    rbmt_eprintln!("Testing no features in {}", package.name);
     rbmt_cmd!(sh, "cargo --locked build --no-default-features")
         .set_release(release)
         .run_verbose()?;
@@ -375,12 +390,18 @@ fn do_feature_matrix(
         .filter(|f| !config.exclude_features.contains(f))
         .collect();
     if !features.is_empty() {
-        rbmt_eprintln!("Discovered {} feature(s) to test: {}", features.len(), features.join(", "));
+        rbmt_eprintln!(
+            "Discovered {} feature(s) in {} to test: {:?}",
+            features.len(),
+            package.name,
+            features
+        );
         sampled_feature_matrix(sh, &features, release, summary)?;
     }
 
     // Test exact feature sets.
     for features in &config.exact_features {
+        rbmt_eprintln!("Testing exact feature set in {}: {:?}", package.name, features);
         test_features(sh, features, release)?;
         summary.exact_sets.push(features.clone());
     }
@@ -413,6 +434,7 @@ fn sampled_feature_matrix(
 
     // Test each feature individually.
     for feature in features {
+        rbmt_eprintln!("Testing individual feature in {}: {}", summary.name, feature);
         test_features(sh, &[feature], release)?;
         summary.individual_features.push(feature.clone());
     }
@@ -436,6 +458,7 @@ fn sampled_feature_matrix(
                 continue;
             }
 
+            rbmt_eprintln!("Testing sampled feature set in {}: {:?}", summary.name, subset);
             test_features(sh, &subset, release)?;
             summary.sampled_subsets.push(subset.into_iter().cloned().collect());
         }
@@ -484,10 +507,15 @@ fn do_no_std_check(
 ) -> Result<(), Box<dyn std::error::Error>> {
     const NO_STD_TARGET: &str = "thumbv7m-none-eabi";
     if !is_no_std_package(sh, package_dir)? {
+        rbmt_eprintln!("{} does not appear to be no-std, skipping test", summary.name);
         return Ok(());
     }
 
-    rbmt_eprintln!("Detected no-std package, building for target: {}", NO_STD_TARGET);
+    rbmt_eprintln!(
+        "Detected {} as a no-std package, building for target: {}",
+        summary.name,
+        NO_STD_TARGET
+    );
     rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run_verbose()?;
     summary.no_std_checked = true;
     Ok(())
