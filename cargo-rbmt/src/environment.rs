@@ -28,6 +28,38 @@ impl OutputMode {
     }
 }
 
+/// Guard that clears the progress line on stderr when dropped if in Progress mode.
+pub struct ProgressGuard {
+    disabled: bool,
+}
+
+impl ProgressGuard {
+    /// Create a new guard that will clear the progress line on drop if in Progress mode.
+    pub fn new() -> Self { Self { disabled: false } }
+
+    /// Disable the guard, clearing the progress line.
+    ///
+    /// Useful when handling newlines externally, like when printing a summary on stdout.
+    pub fn disable(&mut self) {
+        self.disabled = true;
+        if OutputMode::from_env() == OutputMode::Progress {
+            eprintln!();
+        }
+    }
+}
+
+impl Default for ProgressGuard {
+    fn default() -> Self { Self::new() }
+}
+
+impl Drop for ProgressGuard {
+    fn drop(&mut self) {
+        if !self.disabled && OutputMode::from_env() == OutputMode::Progress {
+            eprintln!();
+        }
+    }
+}
+
 /// A workspace package: its manifest name, directory path, and unique identifier.
 #[derive(Clone, Debug)]
 pub struct Package {

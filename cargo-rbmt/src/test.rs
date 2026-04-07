@@ -11,11 +11,11 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::{Cmd, Shell};
 
-use crate::{environment::{
-    discover_features, git_commit_id, OutputMode, Package, PackageManifest,
-}};
-use crate::toolchain::{prepare_toolchain, Toolchain};
+use crate::environment::{
+    discover_features, git_commit_id, OutputMode, Package, PackageManifest, ProgressGuard,
+};
 use crate::git;
+use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Extension trait for test commands with conditional output and release support.
 trait TestCmdExt {
@@ -216,6 +216,7 @@ pub fn run(
     baseline: Option<&str>,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
 
     if let Some(baseline) = baseline {
@@ -224,11 +225,7 @@ pub fn run(
             rbmt_eprintln!("No commits found between '{}' and HEAD.", baseline);
             return Ok(());
         }
-        rbmt_eprintln!(
-            "Testing {} commit(s) against baseline '{}'",
-            commits.len(),
-            baseline
-        );
+        rbmt_eprintln!("Testing {} commit(s) against baseline '{}'", commits.len(), baseline);
         for sha in &commits {
             rbmt_eprintln!("Testing commit {}...", &sha[..12]);
             let _guard = git::GitSwitchGuard::new(sh, sha)?;
@@ -242,6 +239,7 @@ pub fn run(
     }
 
     rbmt_eprintln!("Tests complete.");
+    progress.disable();
     summary.print();
     Ok(())
 }
@@ -377,11 +375,7 @@ fn do_feature_matrix(
         .filter(|f| !config.exclude_features.contains(f))
         .collect();
     if !features.is_empty() {
-        rbmt_eprintln!(
-            "Discovered {} feature(s) to test: {}",
-            features.len(),
-            features.join(", ")
-        );
+        rbmt_eprintln!("Discovered {} feature(s) to test: {}", features.len(), features.join(", "));
         sampled_feature_matrix(sh, &features, release, summary)?;
     }
 

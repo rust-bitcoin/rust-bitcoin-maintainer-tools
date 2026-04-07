@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use clap::ValueEnum;
 use xshell::Shell;
 
-use crate::environment::get_workspace_root;
+use crate::environment::{get_workspace_root, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// The standard Cargo lockfile name.
@@ -115,6 +115,7 @@ impl LockFile {
 /// The original Cargo.lock is preserved and restored after generation in case
 /// it is being tracked for publication.
 pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     let workspace_root = get_workspace_root(sh)?;

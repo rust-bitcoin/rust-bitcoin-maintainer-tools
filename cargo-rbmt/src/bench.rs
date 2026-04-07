@@ -2,11 +2,12 @@
 
 use xshell::Shell;
 
-use crate::environment::{OutputMode, Package};
+use crate::environment::{OutputMode, Package, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Run benchmark tests for all crates in the workspace.
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Running bench tests for {} crates", packages.len());
 

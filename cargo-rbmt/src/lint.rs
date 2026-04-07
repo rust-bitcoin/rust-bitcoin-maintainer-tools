@@ -5,7 +5,7 @@ use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{
-    get_packages, get_workspace_root, Package, PackageManifest,
+    get_packages, get_workspace_root, Package, PackageManifest, ProgressGuard,
 };
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -37,6 +37,7 @@ impl LintConfig {
 
 /// Run the lint task.
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Running lint task...");
 
