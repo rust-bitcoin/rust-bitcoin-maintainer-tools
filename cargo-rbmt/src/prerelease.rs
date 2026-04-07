@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::{environment::{get_target_dir, Package, PackageManifest}};
+use crate::environment::{get_target_dir, Package, PackageManifest, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -48,6 +48,7 @@ pub fn run(
     force: bool,
     baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running pre-release checks on {} packages", packages.len());
 
     for package in packages {
@@ -61,7 +62,8 @@ pub fn run(
         if !force && !has_version_bump(sh, &package.dir, baseline)? {
             rbmt_eprintln!(
                 "Skipping {} (no version bump detected since {})",
-                package.name, baseline
+                package.name,
+                baseline
             );
             continue;
         }

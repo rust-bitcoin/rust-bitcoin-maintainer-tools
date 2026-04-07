@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, WorkspaceManifest};
+use crate::environment::{get_workspace_root, ProgressGuard, WorkspaceManifest};
 
 /// Where the tool pins were found in the root `Cargo.toml`.
 ///
@@ -148,6 +148,7 @@ fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::er
 /// When `filter` is non-empty, only the named tools are operated on. Unknown
 /// tool names in the filter are treated as an error.
 pub fn run(sh: &Shell, update: bool, filter: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     rbmt_eprintln!("Installing tools...");
     let Some(mut tools) = read_tools(sh)? else {
         rbmt_eprintln!(

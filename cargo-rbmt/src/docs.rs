@@ -2,7 +2,7 @@
 
 use xshell::Shell;
 
-use crate::environment::Package;
+use crate::environment::{Package, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Build documentation for end users with the stable toolchain.
@@ -10,6 +10,7 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 /// This verifies that `cargo doc` works correctly for users with stable Rust.
 /// Uses basic rustdoc warnings to catch common documentation issues.
 pub fn run(sh: &Shell, packages: &[Package], open: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Stable)?;
     rbmt_eprintln!("Building docs...");
 
@@ -39,6 +40,7 @@ pub fn run_docsrs(
     packages: &[Package],
     open: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Building docs...");
 

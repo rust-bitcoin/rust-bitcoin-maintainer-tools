@@ -5,7 +5,7 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{discover_features, Package, PackageManifest};
+use crate::environment::{discover_features, Package, PackageManifest, ProgressGuard};
 
 /// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
@@ -61,6 +61,7 @@ fn get_package_id(sh: &Shell, dir: &Path) -> Result<String, Box<dyn std::error::
 ///
 /// * `packages` - Optional filter for specific package names.
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     rbmt_eprintln!("Looking for integration tests in {} crate(s)", packages.len());
 
     for package in packages {

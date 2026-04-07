@@ -2,7 +2,6 @@
 
 use xshell::Shell;
 
-
 /// RAII guard for temporarily switching git refs.
 ///
 /// Switches to the given ref on construction and switches back to the

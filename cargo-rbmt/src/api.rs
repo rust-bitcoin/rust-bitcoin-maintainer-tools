@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use xshell::Shell;
 
-use crate::{environment::{
-    get_target_dir, get_workspace_root, Manifest, Package, PackageManifest,
-}};
+use crate::environment::{
+    get_target_dir, get_workspace_root, Manifest, Package, PackageManifest, ProgressGuard,
+};
 use crate::{git, toolchain};
 
 /// Directory where API files are stored, relative to each package directory.
@@ -107,6 +107,7 @@ pub fn run(
     packages: &[Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 

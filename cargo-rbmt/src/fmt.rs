@@ -4,7 +4,7 @@ use std::fs;
 
 use xshell::Shell;
 
-use crate::environment::Package;
+use crate::environment::{Package, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Format (or check the formatting of) all packages in the workspace.
@@ -13,6 +13,7 @@ pub fn run(
     check: bool,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     if check {

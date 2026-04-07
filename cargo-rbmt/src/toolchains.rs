@@ -1,5 +1,6 @@
 use xshell::Shell;
 
+use crate::environment::ProgressGuard;
 use crate::toolchain::{get_workspace_msrv, Toolchain};
 
 /// Fixed components installed on every toolchain.
@@ -26,6 +27,7 @@ pub fn run(
     nightly: bool,
     stable: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     if msrv {
         let msrv = get_workspace_msrv(sh)?;
         println!("{}", msrv);
