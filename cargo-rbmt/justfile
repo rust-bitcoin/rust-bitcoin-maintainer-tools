@@ -13,12 +13,11 @@ _default:
 # Install workspace toolchains.
 [group('system')]
 @toolchains: install
-    # Redirect exports since just recipes are a sub-shell.
-    RBMT_LOG_LEVEL=quiet cargo rbmt toolchains > /dev/null
+    RBMT_LOG_LEVEL=progress cargo rbmt toolchains
 
 # Setup rbmt and run with given args.
 @rbmt *args: toolchains
-  RBMT_LOG_LEVEL=quiet cargo rbmt {{args}}
+    RBMT_LOG_LEVEL=progress cargo rbmt {{args}}
 
 # Build and open docs.
 @docs: (rbmt "docsrs --open")
