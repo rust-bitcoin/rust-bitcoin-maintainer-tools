@@ -223,7 +223,9 @@ fn main() {
                 process::exit(1);
             },
         Commands::Toolchains { update_nightly, update_stable, msrv, nightly, stable } =>
-            if let Err(e) = toolchains::run(&sh, update_nightly, update_stable, msrv, nightly, stable) {
+            if let Err(e) =
+                toolchains::run(&sh, update_nightly, update_stable, msrv, nightly, stable)
+            {
                 eprintln!("Error setting up toolchains: {}", e);
                 process::exit(1);
             },
