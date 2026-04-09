@@ -4,19 +4,19 @@ on:
   # Manually triggerable only.
   workflow_dispatch:
 
-# Permissions needed for GITHUB_TOKEN to create PR.
+# Permissions needed for to create PR.
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
   update-toolchains:
-    runs-on: ubuntu-latest
+    runs-on: debian-trixie
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: https://github.com/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
       - name: Update nightly version
-        uses: ./.github/actions/update-nightly
+        uses: ./actions/update-nightly
       - name: Update stable version
-        uses: ./.github/actions/update-stable
+        uses: ./actions/update-stable

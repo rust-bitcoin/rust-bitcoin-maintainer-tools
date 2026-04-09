@@ -44,7 +44,7 @@ runs:
   steps:
     - name: Install cargo-rbmt
       shell: bash
-      run: cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git cargo-rbmt --locked
+      run: cargo install --git https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools cargo-rbmt --locked
 
     - name: Update nightly version file
       shell: bash
@@ -53,11 +53,11 @@ runs:
     - name: Create pull request if version changed
       uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
       with:
-        token: ${{ inputs.token || github.token }}
+        token: ${{ inputs.token || forgejo.token }}
         author: RBMT Bot <bot@example.com>
         committer: RBMT Bot <bot@example.com>
         title: "Update nightly toolchain"
         commit-message: "Update nightly toolchain"
         branch: automated/update-nightly
         body: |
-          Automated update to `nightly-version` by [update-nightly](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools) action.
+          Automated update to `nightly-version` by [update-nightly](https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools) action.

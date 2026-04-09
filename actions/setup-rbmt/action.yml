@@ -5,6 +5,10 @@ inputs:
   rbmt-version:
     description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root, or falls back to master.'
     required: false
+  repo-url:
+    description: 'Git repository URL to install cargo-rbmt from. Defaults to the primary upstream repository.'
+    required: false
+    default: 'https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools'
 
 runs:
   using: "composite"
@@ -13,10 +17,11 @@ runs:
       shell: bash
       env:
         RBMT_VERSION: ${{ inputs.rbmt-version }}
+        REPO_URL: ${{ inputs.repo-url }}
       run: |
         [ -z "$RBMT_VERSION" ] && [ -f rbmt-version ] && RBMT_VERSION=$(cat rbmt-version)
         [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
-        cargo install --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools.git --rev "$RBMT_VERSION" cargo-rbmt --locked
+        cargo install --git "$REPO_URL" --rev "$RBMT_VERSION" cargo-rbmt --locked
 
     - name: Install toolchains
       shell: bash
@@ -30,5 +35,5 @@ runs:
       shell: bash
       run: |
         # --no-install-recommends reduces install size by skipping newlib.
-        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
-        echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITHUB_ENV
+        apt-get install -y --no-install-recommends gcc-arm-none-eabi
+        echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITEA_ENV
