@@ -1,1 +1,8 @@
 target/
+
+# Claude artifacts
+.claude/
+.claude.json
+.mcp.json
+
+

@@ -1,0 +1,17 @@
+# Forge Configuration File
+# Copy this to one of the following locations and fill in your credentials:
+#   - ./.forge.toml (current directory)
+#   - ~/.config/forge.toml
+#   - ~/.forge.toml
+
+# Your Forgejo username
+username = "your-username"
+
+# Your Forgejo API token
+token = "your-api-token"
+
+# HTTPS base URL for the Forgejo instance (optional, defaults to https://gitea.bitcoin.ninja)
+# https_url = "https://gitea.bitcoin.ninja"
+
+# SSH hostname for git operations (optional, defaults to gitea-ssh.bitcoin.ninja)
+# ssh_url = "gitea-ssh.bitcoin.ninja"
