@@ -1,6 +1,6 @@
 name: 'Setup rbmt'
 description: |
-  Install environment dependencies for cargo-rbmt testing including cargo-rbmt itself.
+  Install cargo-rbmt.
 inputs:
   rbmt-version:
     description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root, or falls back to master.'
@@ -26,14 +26,3 @@ runs:
     - name: Install toolchains
       shell: bash
       run: cargo rbmt toolchains
-
-    # ARM cross-compiler for C dependencies compiled at build-time (e.g. secp256k1-sys).
-    # When a crate's build.rs uses cc-rs to compile C source files for thumbv7m-none-eabi,
-    # it needs arm-none-eabi-gcc because system gcc doesn't support ARM target flags.
-    # Pure Rust crates only need rustc and rust-lld (already included with Rust).
-    - name: Install ARM cross-compiler
-      shell: bash
-      run: |
-        # --no-install-recommends reduces install size by skipping newlib.
-        apt-get install -y --no-install-recommends gcc-arm-none-eabi
-        echo "CC_thumbv7m_none_eabi=arm-none-eabi-gcc" >> $GITEA_ENV
