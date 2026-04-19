@@ -4,7 +4,6 @@ on:
   # Manually triggerable only.
   workflow_dispatch:
 
-# Permissions needed for to create PR.
 permissions:
   contents: write
   pull-requests: write
@@ -16,7 +15,19 @@ jobs:
       - uses: https://github.com/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - uses: ./actions/setup-rbmt
       - name: Update nightly version
-        uses: ./actions/update-nightly
+        run: cargo rbmt toolchains --update-nightly
       - name: Update stable version
-        uses: ./actions/update-stable
+        run: cargo rbmt toolchains --update-stable
+      - name: Create pull request if version changed
+        uses: https://github.com/peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          token: ${{ forgejo.token }}
+          author: RBMT Bot <bot@example.com>
+          committer: RBMT Bot <bot@example.com>
+          title: "Update toolchains"
+          commit-message: "Update toolchains"
+          branch: automated/update-nightly
+          body: |
+            Automated update to toolchains by update-toolchains workflow.
