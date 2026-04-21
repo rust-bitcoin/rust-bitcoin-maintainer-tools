@@ -15,6 +15,7 @@ use crate::environment::{
     discover_features, git_commit_id, OutputMode, Package, PackageManifest, ProgressGuard,
 };
 use crate::git;
+use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Extension trait for test commands with conditional output and release support.
@@ -209,6 +210,7 @@ fn test_features(
 /// [`git::GitSwitchGuard`] even on failure, and the run stops immediately if any commit fails.
 pub fn run(
     sh: &Shell,
+    lockfile: LockFile,
     toolchain: Toolchain,
     no_debug_assertions: bool,
     release: bool,
@@ -227,11 +229,15 @@ pub fn run(
         rbmt_eprintln!("Testing {} commit(s) against baseline '{}'", commits.len(), baseline);
         for sha in &commits {
             rbmt_eprintln!("Testing commit {}...", &sha[..12]);
-            let _guard = git::GitSwitchGuard::new(sh, sha)?;
+            // Switch to the commit first, then use lockfile on that commit in case
+            // there are lockfile updates. Guards will unwind in reverse order (LIFO).
+            let _git_guard = git::GitSwitchGuard::new(sh, sha)?;
+            let _lockfile_guard = lockfile.activate(sh)?;
             let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
             summary.commits.push((sha.clone(), pkg_summaries));
         }
     } else {
+        let _lockfile_guard = lockfile.activate(sh)?;
         let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
         let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
         summary.commits.push((sha, pkg_summaries));

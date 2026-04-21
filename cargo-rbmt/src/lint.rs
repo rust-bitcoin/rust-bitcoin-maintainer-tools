@@ -7,6 +7,7 @@ use xshell::Shell;
 use crate::environment::{
     get_packages, get_workspace_root, Package, PackageManifest, ProgressGuard,
 };
+use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Lint-specific configuration, read from `[package.metadata.rbmt.lint]` in `Cargo.toml`.
@@ -36,7 +37,8 @@ impl LintConfig {
 }
 
 /// Run the lint task.
-pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, lockfile: LockFile, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Running lint task...");

@@ -19,13 +19,13 @@ const CARGO_LOCK: &str = "Cargo.lock";
 const CARGO_LOCK_BACKUP: &str = "Cargo.lock.backup";
 
 /// RAII guard that backs up and restores the original Cargo.lock file.
-struct LockFileGuard {
+pub struct LockFileGuard {
     backup_path: PathBuf,
     restore_path: PathBuf,
 }
 
 impl LockFileGuard {
-    fn new(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
         let workspace_root = get_workspace_root(sh)?;
         let source = workspace_root.join(CARGO_LOCK);
         let backup = workspace_root.join(CARGO_LOCK_BACKUP);
@@ -89,7 +89,7 @@ impl LockFile {
     }
 
     /// Restore a previously derived lockfile to Cargo.lock.
-    pub fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
             Self::Minimal | Self::Recent => {
                 let workspace_root = get_workspace_root(sh)?;
@@ -101,6 +101,17 @@ impl LockFile {
                 Ok(())
             }
         }
+    }
+
+    /// Activate this lockfile and return a guard that restores the original on drop.
+    ///
+    /// This creates a backup of the current `Cargo.lock`, then copies the specified
+    /// lockfile variant to `Cargo.lock`. When the returned guard is dropped, the original
+    /// `Cargo.lock` is automatically restored.
+    pub fn activate(self, sh: &Shell) -> Result<LockFileGuard, Box<dyn std::error::Error>> {
+        let _guard = LockFileGuard::new(sh)?;
+        self.restore(sh)?;
+        Ok(_guard)
     }
 }
 

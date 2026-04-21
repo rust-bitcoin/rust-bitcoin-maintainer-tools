@@ -7,6 +7,7 @@ use xshell::Shell;
 use crate::environment::{
     get_target_dir, get_workspace_root, Manifest, Package, PackageManifest, ProgressGuard,
 };
+use crate::lock::LockFile;
 use crate::{git, toolchain};
 
 /// Directory where API files are stored, relative to each package directory.
@@ -104,9 +105,11 @@ impl FeatureConfig {
 /// * `baseline` - Git ref for optional semver comparison.
 pub fn run(
     sh: &Shell,
+    lockfile: LockFile,
     packages: &[Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;

@@ -30,7 +30,7 @@ use xshell::Shell;
 struct Cli {
     /// Lock file to use for dependencies.
     #[arg(long, global = true, value_enum, default_value_t = LockFile::Recent)]
-    lock_file: LockFile,
+    lockfile: LockFile,
 
     /// Filter which packages are operated on in the workspace. Can be a package's manifest name or directory.
     #[arg(short = 'p', long = "package", global = true)]
@@ -138,22 +138,6 @@ fn main() {
 
     let sh = Shell::new().unwrap();
 
-    // Restore the specified lock file before running commands which require lock files.
-    if !matches!(
-        cli.command,
-        Commands::Fmt { .. }
-            | Commands::Lock
-            | Commands::Integration
-            | Commands::Prerelease { .. }
-            | Commands::Toolchains { .. }
-            | Commands::Tools { .. }
-    ) {
-        if let Err(e) = cli.lock_file.restore(&sh) {
-            eprintln!("Error restoring lock file: {}", e);
-            process::exit(1);
-        }
-    }
-
     // Resolve package names once up front for all commands.
     let packages: Vec<Package> = match get_packages(&sh, &cli.packages) {
         Ok(p) => p,
@@ -165,7 +149,7 @@ fn main() {
 
     match cli.command {
         Commands::Api { baseline } => {
-            if let Err(e) = api::run(&sh, &packages, baseline.as_deref()) {
+            if let Err(e) = api::run(&sh, cli.lockfile, &packages, baseline.as_deref()) {
                 eprintln!("Error running API check: {}", e);
                 process::exit(1);
             }
@@ -176,28 +160,29 @@ fn main() {
                 process::exit(1);
             },
         Commands::Lint =>
-            if let Err(e) = lint::run(&sh, &packages) {
+            if let Err(e) = lint::run(&sh, cli.lockfile, &packages) {
                 eprintln!("Error running lint task: {}", e);
                 process::exit(1);
             },
         Commands::Docs { open } =>
-            if let Err(e) = docs::run(&sh, &packages, open) {
+            if let Err(e) = docs::run(&sh, cli.lockfile, &packages, open) {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
             },
         Commands::Docsrs { open } =>
-            if let Err(e) = docs::run_docsrs(&sh, &packages, open) {
+            if let Err(e) = docs::run_docsrs(&sh, cli.lockfile, &packages, open) {
                 eprintln!("Error building docs.rs docs: {}", e);
                 process::exit(1);
             },
         Commands::Bench =>
-            if let Err(e) = bench::run(&sh, &packages) {
+            if let Err(e) = bench::run(&sh, cli.lockfile, &packages) {
                 eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             },
         Commands::Test { toolchain, no_debug_assertions, release, baseline } =>
             if let Err(e) = test::run(
                 &sh,
+                cli.lockfile,
                 toolchain,
                 no_debug_assertions,
                 release,
