@@ -4,9 +4,61 @@ use std::{env, fs};
 use xshell::Shell;
 
 /// Environment variable to control output verbosity.
-/// Set to "quiet" to suppress informational messages and reduce cargo output.
-/// Any other value (or unset) defaults to verbose mode.
 const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
+
+/// Controls how much output is shown during command execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OutputMode {
+    /// Show all output from commands (default).
+    Verbose,
+    /// Suppress tool stderr, but show progress for interactive use.
+    Progress,
+    /// Suppress all stderr.
+    Quiet,
+}
+
+impl OutputMode {
+    /// Determine output mode from `RBMT_LOG_LEVEL` environment variable.
+    pub fn from_env() -> Self {
+        match env::var(LOG_LEVEL_ENV_VAR).as_deref() {
+            Ok("progress") => Self::Progress,
+            Ok("quiet") => Self::Quiet,
+            _ => Self::Verbose,
+        }
+    }
+}
+
+/// Guard that clears the progress line on stderr when dropped if in Progress mode.
+pub struct ProgressGuard {
+    disabled: bool,
+}
+
+impl ProgressGuard {
+    /// Create a new guard that will clear the progress line on drop if in Progress mode.
+    pub fn new() -> Self { Self { disabled: false } }
+
+    /// Disable the guard, clearing the progress line.
+    ///
+    /// Useful when handling newlines externally, like when printing a summary on stdout.
+    pub fn disable(&mut self) {
+        self.disabled = true;
+        if OutputMode::from_env() == OutputMode::Progress {
+            eprintln!();
+        }
+    }
+}
+
+impl Default for ProgressGuard {
+    fn default() -> Self { Self::new() }
+}
+
+impl Drop for ProgressGuard {
+    fn drop(&mut self) {
+        if !self.disabled && OutputMode::from_env() == OutputMode::Progress {
+            eprintln!();
+        }
+    }
+}
 
 /// A workspace package: its manifest name, directory path, and unique identifier.
 #[derive(Clone, Debug)]
@@ -19,38 +71,49 @@ pub struct Package {
     pub id: String,
 }
 
-/// Check if we're in quiet mode via environment variable.
-pub fn is_quiet_mode() -> bool { env::var(LOG_LEVEL_ENV_VAR).is_ok_and(|v| v == "quiet") }
-
-/// Helper macro to create commands that respect quiet mode.
+/// Wrap commands to respect rbmt output mode.
 #[macro_export]
-macro_rules! quiet_cmd {
+macro_rules! rbmt_cmd {
     ($sh:expr, $($arg:tt)*) => {{
         let mut cmd = xshell::cmd!($sh, $($arg)*);
-        if $crate::environment::is_quiet_mode() {
-            cmd = cmd.quiet();
+        match $crate::environment::OutputMode::from_env() {
+            $crate::environment::OutputMode::Verbose => {},
+            $crate::environment::OutputMode::Progress | $crate::environment::OutputMode::Quiet => {
+                // Do not print command and eat stderr.
+                cmd = cmd.quiet().ignore_stderr();
+            }
         }
         cmd
     }};
 }
 
-/// Print a message to stderr unless in quiet mode.
-pub fn quiet_println(msg: &str) {
-    if !is_quiet_mode() {
-        eprintln!("{}", msg);
-    }
-}
+/// Progress message output symbols (flair).
+pub const PROGRESS_SYMBOLS: &[&str] = &["b", "B", "$", "#"];
 
-/// Configure shell log level and output verbosity.
-/// Sets cargo output verbosity based on `LOG_LEVEL_ENV_VAR`.
-pub fn configure_log_level(sh: &Shell) {
-    if is_quiet_mode() {
-        sh.set_var("CARGO_TERM_VERBOSE", "false");
-        sh.set_var("CARGO_TERM_QUIET", "true");
-    } else {
-        sh.set_var("CARGO_TERM_VERBOSE", "true");
-        sh.set_var("CARGO_TERM_QUIET", "false");
-    }
+/// Progress output macro that respects [`OutputMode`] settings.
+///
+/// Wraps eprintln! so that the underlying macro's vararg handling is exposed.
+#[macro_export]
+macro_rules! rbmt_eprintln {
+    ($($arg:tt)*) => {{
+        match $crate::environment::OutputMode::from_env() {
+            $crate::environment::OutputMode::Verbose => {
+                eprintln!($($arg)*);
+            }
+            $crate::environment::OutputMode::Progress => {
+                let msg = format!($($arg)*);
+                // Show a symbol based on message hash.
+                let hash = msg
+                    .as_bytes()
+                    .iter()
+                    .fold(0usize, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize));
+                let symbol = $crate::environment::PROGRESS_SYMBOLS[hash % $crate::environment::PROGRESS_SYMBOLS.len()];
+                // Use carriage return to overwrite the same line, and ANSI escape to clear to EOL.
+                eprint!("\r[{}] {}\x1b[K", symbol, msg);
+            }
+            $crate::environment::OutputMode::Quiet => {}
+        }
+    }};
 }
 
 /// Get list of package names and their directories in the workspace using cargo metadata.
@@ -67,7 +130,7 @@ pub fn get_packages(
     sh: &Shell,
     packages: &[String],
 ) -> Result<Vec<Package>, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
     let all_packages: Vec<Package> = json["packages"]
@@ -156,7 +219,7 @@ pub fn get_packages(
 /// creates an implicit workspace and `workspace_root` resolves to the package
 /// directory itself.
 pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
     let root = json["workspace_root"].as_str().ok_or("Missing workspace_root in cargo metadata")?;
     Ok(PathBuf::from(root))
@@ -167,7 +230,7 @@ pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Err
 /// This respects `CARGO_TARGET_DIR`, .cargo/config.toml, and other cargo
 /// target directory configuration.
 pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
     let target_dir =
         json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
@@ -183,7 +246,7 @@ pub fn discover_features(
     sh: &Shell,
     package: &Package,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
 
     let packages =

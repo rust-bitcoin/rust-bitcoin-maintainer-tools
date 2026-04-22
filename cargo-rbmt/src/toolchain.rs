@@ -18,7 +18,6 @@ use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{get_workspace_root, WorkspaceManifest};
-use crate::quiet_cmd;
 
 /// Where the toolchain pins were found in the root `Cargo.toml`.
 ///
@@ -192,7 +191,7 @@ impl Toolchain {
 /// * Current toolchain doesn't match requirement.
 /// * For MSRV: cannot read rust-version from Cargo.toml.
 pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn std::error::Error>> {
-    let current = quiet_cmd!(sh, "rustc --version").read()?;
+    let current = rbmt_cmd!(sh, "rustc --version").read()?;
 
     match required {
         Toolchain::Nightly =>
@@ -261,7 +260,7 @@ pub fn prepare_toolchain(
 /// available (e.g. Nix) or when no version is configured.
 fn maybe_set_rustup_toolchain(sh: &Shell, required: Toolchain) {
     // Only attempt if rustup is available.
-    if quiet_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
+    if rbmt_cmd!(sh, "rustup --version").read().is_err() {
         return;
     }
 
@@ -313,7 +312,7 @@ type ManifestMsrv = (String, Option<String>);
 
 /// Collect all MSRVs in the workspace.
 fn collect_msrvs(sh: &Shell) -> Result<Vec<ManifestMsrv>, Box<dyn std::error::Error>> {
-    let metadata = quiet_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
     let data: serde_json::Value = serde_json::from_str(&metadata)?;
 
     Ok(data["packages"]

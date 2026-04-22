@@ -10,8 +10,7 @@ use std::path::PathBuf;
 use clap::ValueEnum;
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, quiet_println};
-use crate::quiet_cmd;
+use crate::environment::{get_workspace_root, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// The standard Cargo lockfile name.
@@ -20,13 +19,13 @@ const CARGO_LOCK: &str = "Cargo.lock";
 const CARGO_LOCK_BACKUP: &str = "Cargo.lock.backup";
 
 /// RAII guard that backs up and restores the original Cargo.lock file.
-struct LockFileGuard {
+pub struct LockFileGuard {
     backup_path: PathBuf,
     restore_path: PathBuf,
 }
 
 impl LockFileGuard {
-    fn new(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
         let workspace_root = get_workspace_root(sh)?;
         let source = workspace_root.join(CARGO_LOCK);
         let backup = workspace_root.join(CARGO_LOCK_BACKUP);
@@ -90,7 +89,7 @@ impl LockFile {
     }
 
     /// Restore a previously derived lockfile to Cargo.lock.
-    pub fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
             Self::Minimal | Self::Recent => {
                 let workspace_root = get_workspace_root(sh)?;
@@ -102,6 +101,17 @@ impl LockFile {
                 Ok(())
             }
         }
+    }
+
+    /// Activate this lockfile and return a guard that restores the original on drop.
+    ///
+    /// This creates a backup of the current `Cargo.lock`, then copies the specified
+    /// lockfile variant to `Cargo.lock`. When the returned guard is dropped, the original
+    /// `Cargo.lock` is automatically restored.
+    pub fn activate(self, sh: &Shell) -> Result<LockFileGuard, Box<dyn std::error::Error>> {
+        let _guard = LockFileGuard::new(sh)?;
+        self.restore(sh)?;
+        Ok(_guard)
     }
 }
 
@@ -116,10 +126,11 @@ impl LockFile {
 /// The original Cargo.lock is preserved and restored after generation in case
 /// it is being tracked for publication.
 pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     let workspace_root = get_workspace_root(sh)?;
-    quiet_println(&format!("Updating lock files in: {}", workspace_root.display()));
+    rbmt_eprintln!("Updating lock files in: {}", workspace_root.display());
 
     // Create guard to back up and ensure restoration, even on error.
     let _guard = LockFileGuard::new(sh)?;
@@ -127,7 +138,7 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     LockFile::Minimal.derive(sh)?;
     LockFile::Recent.derive(sh)?;
 
-    quiet_println("Lock files updated successfully");
+    rbmt_eprintln!("Lock files updated successfully");
     Ok(())
 }
 
@@ -149,16 +160,16 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
 
     // Check that all explicit direct dependency versions are not lying,
     // as in, they are not being bumped up by transitive dependency constraints.
-    quiet_println("Checking direct minimal versions...");
+    rbmt_eprintln!("Checking direct minimal versions...");
     remove_lock_file(sh)?;
-    quiet_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run()?;
 
     // Now that our own direct dependency versions can be trusted, check
     // against the lowest versions of the dependency tree which still
     // satisfy constraints.
-    quiet_println("Generating minimal versions lockfile...");
+    rbmt_eprintln!("Generating minimal versions lockfile...");
     remove_lock_file(sh)?;
-    quiet_cmd!(sh, "cargo check --all-features -Z minimal-versions").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features -Z minimal-versions").run()?;
 
     // Save a copy to Cargo-minimal.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Minimal)?;
@@ -173,13 +184,13 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
 /// at their current versions if they still satisfy constraints, only update when
 /// necessary (e.g., when adding new dependencies or constraints change).
 fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Generating recent versions lockfile...");
+    rbmt_eprintln!("Generating recent versions lockfile...");
 
     // Try to restore existing Cargo-recent.lock for conservative updates.
     // If it doesn't exist cargo check will create a fresh one.
     remove_lock_file(sh)?;
     let _ = LockFile::Recent.restore(sh);
-    quiet_cmd!(sh, "cargo check --all-features").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features").run()?;
 
     // Save a copy to Cargo-recent.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Recent)?;

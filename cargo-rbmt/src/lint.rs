@@ -4,8 +4,10 @@ use std::path::Path;
 
 use xshell::Shell;
 
-use crate::environment::{get_packages, get_workspace_root, quiet_println, PackageManifest, Package};
-use crate::quiet_cmd;
+use crate::environment::{
+    get_packages, get_workspace_root, Package, PackageManifest, ProgressGuard,
+};
+use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Lint-specific configuration, read from `[package.metadata.rbmt.lint]` in `Cargo.toml`.
@@ -35,9 +37,11 @@ impl LintConfig {
 }
 
 /// Run the lint task.
-pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, lockfile: LockFile, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    let _lockfile_guard = lockfile.activate(sh)?;
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
-    quiet_println("Running lint task...");
+    rbmt_eprintln!("Running lint task...");
 
     lint_workspace(sh)?;
     lint_packages(sh, packages)?;
@@ -45,21 +49,21 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
     check_cross_package_duplicate_deps(sh)?;
     check_clippy_toml_msrv(sh, packages)?;
 
-    quiet_println("Lint task completed successfully");
+    rbmt_eprintln!("Lint task completed successfully");
     Ok(())
 }
 
 /// Lint the workspace with clippy.
 fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Linting workspace...");
+    rbmt_eprintln!("Linting workspace...");
 
     // Run clippy on workspace with all features.
-    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
+    rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
         .args(&["--", "-D", "warnings"])
         .run()?;
 
     // Run clippy on workspace without features.
-    quiet_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
+    rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
         .args(&["--", "-D", "warnings"])
         .run()?;
 
@@ -76,17 +80,17 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// individually ensures that each package truly compiles and passes lints with only its
 /// explicitly enabled features.
 fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Running package-specific lints...");
+    rbmt_eprintln!("Running package-specific lints...");
 
     let package_names: Vec<_> = packages.iter().map(|p| p.name.as_str()).collect();
-    quiet_println(&format!("Found crates: {}", package_names.join(", ")));
+    rbmt_eprintln!("Found crates: {}", package_names.join(", "));
 
     for package in packages {
         // Returns a RAII guard which reverts the working directory to the old value when dropped.
         let _old_dir = sh.push_dir(&package.dir);
 
         // Run clippy without default features.
-        quiet_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
+        rbmt_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
             .args(&["--", "-D", "warnings"])
             .run()?;
     }
@@ -110,8 +114,11 @@ fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::er
 ///
 /// Running per-package allows each package to maintain its own whitelist of allowed duplicates
 /// via `rbmt.toml`, since some duplicates may be unavoidable for a given package but not others.
-fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Checking for duplicate dependencies...");
+fn check_duplicate_deps(
+    sh: &Shell,
+    packages: &[Package],
+) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Checking for duplicate dependencies...");
 
     let mut found_duplicates = false;
 
@@ -123,7 +130,7 @@ fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn 
 
         // Run cargo tree to find duplicates for this package, exclude dev dependencies
         // since they are not exposed to downstream consumers.
-        let output = quiet_cmd!(
+        let output = rbmt_cmd!(
             sh,
             "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
         )
@@ -137,8 +144,8 @@ fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn 
         );
         if !tree.duplicates().is_empty() {
             found_duplicates = true;
-            eprintln!("{}", output);
-            eprintln!("Error: Found duplicate dependencies in package '{}'!", package.name);
+            println!("{}", output);
+            println!("Error: Found duplicate dependencies in package '{}'!", package.name);
             for (name, versions) in tree.duplicates() {
                 for version in versions.keys() {
                     eprintln!("  {} {}", name, version);
@@ -151,7 +158,7 @@ fn check_duplicate_deps(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn 
         return Err("Dependency tree contains duplicates".into());
     }
 
-    quiet_println("No duplicate dependencies found");
+    rbmt_eprintln!("No duplicate dependencies found");
     Ok(())
 }
 
@@ -181,10 +188,10 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
         return Ok(());
     }
 
-    quiet_println("Checking for cross-package duplicate dependencies...");
+    rbmt_eprintln!("Checking for cross-package duplicate dependencies...");
 
     let package_names: HashSet<&str> = package_info.iter().map(|pkg| pkg.name.as_str()).collect();
-    let output = quiet_cmd!(
+    let output = rbmt_cmd!(
         sh,
         "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
     )
@@ -195,18 +202,18 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
     let cross_package_dupes = tree.cross_package_duplicates();
     // Currently logging a warning instead of hard failure until we gain confidence in the check.
     if !cross_package_dupes.is_empty() {
-        eprintln!("Warning: found duplicate dependencies spanning multiple workspace members.");
-        eprintln!("         These may cause duplicates in consumers that depend on multiple packages from this workspace.");
+        println!("Warning: found duplicate dependencies spanning multiple workspace members.");
+        println!("         These may cause duplicates in consumers that depend on multiple packages from this workspace.");
         for (crate_name, versions) in &cross_package_dupes {
             for (version, members) in *versions {
                 let members: Vec<&str> = members.iter().map(String::as_str).collect();
-                eprintln!("  {} {}: {}", crate_name, version, members.join(", "));
+                println!("  {} {}: {}", crate_name, version, members.join(", "));
             }
         }
-        eprintln!("Consider aligning dependency versions across workspace members.");
+        println!("Consider aligning dependency versions across workspace members.");
     }
 
-    quiet_println("No cross-package duplicate dependencies found");
+    rbmt_eprintln!("No cross-package duplicate dependencies found");
     Ok(())
 }
 
@@ -395,7 +402,7 @@ fn check_clippy_toml_msrv(
 ) -> Result<(), Box<dyn std::error::Error>> {
     const CLIPPY_CONFIG_FILES: &[&str] = &["clippy.toml", ".clippy.toml"];
 
-    quiet_println("Checking for deprecated clippy.toml MSRV settings...");
+    rbmt_eprintln!("Checking for deprecated clippy.toml MSRV settings...");
 
     let mut clippy_files = Vec::new();
 
@@ -430,16 +437,16 @@ fn check_clippy_toml_msrv(
     }
 
     if !problematic_files.is_empty() {
-        eprintln!(
+        println!(
             "\nError: Found MSRV in clippy.toml, use Cargo.toml package.rust-version instead:"
         );
         for file in &problematic_files {
-            eprintln!("  {}", file);
+            println!("  {}", file);
         }
         return Err("MSRV should be specified in Cargo.toml, not clippy.toml".into());
     }
 
-    quiet_println("No deprecated clippy.toml MSRV settings found");
+    rbmt_eprintln!("No deprecated clippy.toml MSRV settings found");
     Ok(())
 }
 

@@ -23,7 +23,10 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 ## Environment Variables
 
-* `RBMT_LOG_LEVEL=quiet` - Suppress verbose output and reduce cargo noise.
+* `RBMT_LOG_LEVEL`
+  * `verbose`: [DEFAULT] Print out underlying cargo commands and all their output, good for CI.
+  * `quiet`: Suppress both cargo and rbmt stderr to reduce all noise.
+  * `progress`: Show rbmt stderr on a single line with a visual indicator, for interactive use.
 
 ## Configuration
 
@@ -185,14 +188,10 @@ nightly = "nightly-2026-03-13"
 stable = "1.93.1"
 ```
 
-The command prints `export` statements to stdout and all other output to stderr, so it can be used with `eval` to set toolchain version environment variables in the calling shell.
+The current versions can be queried with the `--msrv`, `--stable`, or `--nightly` flags.
 
 ```bash
-eval "$(cargo rbmt toolchains)"
-
-cargo +$RBMT_NIGHTLY rbmt lint
-cargo +$RBMT_STABLE rbmt test
-cargo +$RBMT_MSRV rbmt test --toolchain msrv
+cargo +$(cargo rbmt toolchains --nightly) test --features one-off
 ```
 
 The `--update-nightly` and `--update-stable` flags each install the corresponding floating toolchain, query its resolved version from `rustc`, and write the result to the appropriate version file before proceeding with the normal install and export.

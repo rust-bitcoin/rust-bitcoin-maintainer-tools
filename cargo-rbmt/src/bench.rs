@@ -2,24 +2,31 @@
 
 use xshell::Shell;
 
-use crate::environment::{quiet_println, Package};
-use crate::quiet_cmd;
+use crate::environment::{OutputMode, Package, ProgressGuard};
+use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Run benchmark tests for all crates in the workspace.
-pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, lockfile: LockFile, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+    let _lockfile_guard = lockfile.activate(sh)?;
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
-
-    quiet_println(&format!("Running bench tests for {} crates", packages.len()));
+    rbmt_eprintln!("Running bench tests for {} crates", packages.len());
 
     for package in packages {
-        quiet_println(&format!("Running bench tests in: {}", package.dir.display()));
+        rbmt_eprintln!("Running bench tests in: {}", package.dir.display());
 
         // Use pushd pattern to change and restore directory.
         let _dir = sh.push_dir(&package.dir);
 
-        quiet_cmd!(sh, "cargo --locked bench").env("RUSTFLAGS", "--cfg=bench").run()?;
+        // Capture output and show in stdout for verbose mode.
+        let output =
+            rbmt_cmd!(sh, "cargo --locked bench").env("RUSTFLAGS", "--cfg=bench").read()?;
+        if matches!(OutputMode::from_env(), OutputMode::Verbose) {
+            println!("{}", output);
+        }
     }
 
+    rbmt_eprintln!("Benches complete.");
     Ok(())
 }

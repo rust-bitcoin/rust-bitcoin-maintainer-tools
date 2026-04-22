@@ -7,9 +7,8 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_target_dir, quiet_println, Package, PackageManifest};
+use crate::environment::{get_target_dir, Package, PackageManifest, ProgressGuard};
 use crate::lock::LockFile;
-use crate::quiet_cmd;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
@@ -49,25 +48,27 @@ pub fn run(
     force: bool,
     baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println(&format!("Running pre-release checks on {} packages", packages.len()));
+    let _progress = ProgressGuard::new();
+    rbmt_eprintln!("Running pre-release checks on {} packages", packages.len());
 
     for package in packages {
         let config = PrereleaseConfig::load(Path::new(&package.dir))?;
 
         if !config.enabled {
-            quiet_println(&format!("Skipping {} (pre-release not enabled)", package.name));
+            rbmt_eprintln!("Skipping {} (pre-release not enabled)", package.name);
             continue;
         }
 
         if !force && !has_version_bump(sh, &package.dir, baseline)? {
-            quiet_println(&format!(
+            rbmt_eprintln!(
                 "Skipping {} (no version bump detected since {})",
-                package.name, baseline
-            ));
+                package.name,
+                baseline
+            );
             continue;
         }
 
-        quiet_println(&format!("Checking package: {}", package.name));
+        rbmt_eprintln!("Checking package: {}", package.name);
 
         let _dir = sh.push_dir(&package.dir);
 
@@ -83,7 +84,7 @@ pub fn run(
         }
     }
 
-    quiet_println("All pre-release checks passed");
+    rbmt_eprintln!("All pre-release checks passed");
     Ok(())
 }
 
@@ -95,7 +96,7 @@ fn has_version_bump(
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let cargo_toml = package_dir.join("Cargo.toml");
     let range = format!("{baseline}..");
-    let output = quiet_cmd!(sh, "git log --patch --reverse {range} -- {cargo_toml}").read()?;
+    let output = rbmt_cmd!(sh, "git log --patch --reverse {range} -- {cargo_toml}").read()?;
     Ok(output.lines().any(|line| line.starts_with("+version")))
 }
 
@@ -106,7 +107,7 @@ const NONOS: &[&str] = &["doc_auto_cfg"];
 
 /// Grep source code for TODO, FIXME, TBD, and `doc_auto_cfg`.
 fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Greping source for todos and nonos...");
+    rbmt_eprintln!("Greping source for todos and nonos...");
 
     // Recursively walk the src/ directory.
     let mut issues = Vec::new();
@@ -142,7 +143,7 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!("Found {} pre-release issues", issues.len()).into());
     }
 
-    quiet_println("No pre-release issues found");
+    rbmt_eprintln!("No pre-release issues found");
     Ok(())
 }
 
@@ -153,16 +154,16 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// or don't resolve correctly.
 fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
-    quiet_cmd!(sh, "cargo publish --dry-run").run()?;
+    rbmt_cmd!(sh, "cargo publish --dry-run").run()?;
     let package_dir = get_publish_dir(sh)?;
 
     let _dir = sh.push_dir(&package_dir);
-    quiet_println(&format!("Testing publish package: {}", package_dir));
+    rbmt_eprintln!("Testing publish package: {}", package_dir);
     // Re-derive dependencies since it is what an end user will see.
     LockFile::Minimal.derive(sh)?;
-    quiet_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
+    rbmt_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
 
-    quiet_println("Publish tests passed");
+    rbmt_eprintln!("Publish tests passed");
     Ok(())
 }
 
@@ -171,7 +172,7 @@ fn get_publish_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
     let target_dir = get_target_dir(sh)?;
 
     // Find the package that matches the current directory.
-    let metadata = quiet_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
+    let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
     let current_dir = sh.current_dir();
     let current_manifest = current_dir.join("Cargo.toml");

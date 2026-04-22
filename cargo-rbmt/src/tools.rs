@@ -22,8 +22,7 @@ use std::collections::BTreeMap;
 
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, quiet_println, WorkspaceManifest};
-use crate::quiet_cmd;
+use crate::environment::{get_workspace_root, ProgressGuard, WorkspaceManifest};
 
 /// Where the tool pins were found in the root `Cargo.toml`.
 ///
@@ -111,7 +110,7 @@ fn installed_version(
     sh: &Shell,
     crate_name: &str,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    let output = quiet_cmd!(sh, "cargo install --list").read()?;
+    let output = rbmt_cmd!(sh, "cargo install --list").read()?;
 
     let prefix = format!("{} v", crate_name);
     let version = output
@@ -126,15 +125,15 @@ fn installed_version(
 
 /// Install a single tool at a pinned version using `cargo install`.
 fn install_tool(sh: &Shell, name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println(&format!("Installing {}@{}", name, version));
-    quiet_cmd!(sh, "cargo install {name} --version {version} --locked").run()?;
+    rbmt_eprintln!("Installing {}@{}", name, version);
+    rbmt_cmd!(sh, "cargo install {name} --version {version} --locked").run()?;
     Ok(())
 }
 
 /// Install a single tool at the latest version and return the resolved version.
 fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    quiet_println(&format!("Installing {} (latest)", name));
-    quiet_cmd!(sh, "cargo install {name}").run()?;
+    rbmt_eprintln!("Installing {} (latest)", name);
+    rbmt_cmd!(sh, "cargo install {name}").run()?;
 
     installed_version(sh, name)?
         .ok_or_else(|| format!("{} not found in `cargo install --list` after install", name).into())
@@ -149,8 +148,10 @@ fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::er
 /// When `filter` is non-empty, only the named tools are operated on. Unknown
 /// tool names in the filter are treated as an error.
 pub fn run(sh: &Shell, update: bool, filter: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
+    rbmt_eprintln!("Installing tools...");
     let Some(mut tools) = read_tools(sh)? else {
-        eprintln!(
+        rbmt_eprintln!(
             "No tools found in [workspace.metadata.rbmt.tools] or [package.metadata.rbmt.tools]."
         );
         return Ok(());
@@ -169,9 +170,9 @@ pub fn run(sh: &Shell, update: bool, filter: &[String]) -> Result<(), Box<dyn st
         if update {
             let latest = install_tool_latest(sh, name)?;
             if &latest == pinned_version {
-                quiet_println(&format!("{} is already at latest ({})", name, pinned_version));
+                rbmt_eprintln!("{} is already at latest ({})", name, pinned_version);
             } else {
-                quiet_println(&format!("Updated {} {} -> {}", name, pinned_version, latest));
+                rbmt_eprintln!("Updated {} {} -> {}", name, pinned_version, latest);
                 write_tool_version(sh, name, &latest, &tools.location)?;
             }
         } else {

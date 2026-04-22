@@ -5,8 +5,7 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{discover_features, quiet_println, Package, PackageManifest};
-use crate::quiet_cmd;
+use crate::environment::{discover_features, Package, PackageManifest, ProgressGuard};
 
 /// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
@@ -52,7 +51,7 @@ impl IntegrationConfig {
 /// Get the package ID by running `cargo pkgid` in the given directory.
 fn get_package_id(sh: &Shell, dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let _dir = sh.push_dir(dir);
-    let id = quiet_cmd!(sh, "cargo pkgid").read()?;
+    let id = rbmt_cmd!(sh, "cargo pkgid").read()?;
     Ok(id.trim().to_string())
 }
 
@@ -62,7 +61,8 @@ fn get_package_id(sh: &Shell, dir: &Path) -> Result<String, Box<dyn std::error::
 ///
 /// * `packages` - Optional filter for specific package names.
 pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println(&format!("Looking for integration tests in {} crate(s)", packages.len()));
+    let _progress = ProgressGuard::new();
+    rbmt_eprintln!("Looking for integration tests in {} crate(s)", packages.len());
 
     for package in packages {
         let config = IntegrationConfig::load(Path::new(&package.dir))?;
@@ -76,7 +76,7 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
             continue;
         }
 
-        quiet_println(&format!("Running integration tests for {}", package.name));
+        rbmt_eprintln!("Running integration tests for {}", package.name);
 
         let _dir = sh.push_dir(&integration_dir);
 
@@ -87,7 +87,7 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
         };
         let available_versions = discover_features(sh, &integration_package)?;
         if available_versions.is_empty() {
-            quiet_println("  No version features found in Cargo.toml");
+            rbmt_eprintln!("  No version features found in Cargo.toml");
             continue;
         }
 
@@ -114,8 +114,8 @@ pub fn run(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::error::E
 
         // Run tests for each version.
         for version in &versions_to_test {
-            quiet_println(&format!("  Testing with version: {}", version));
-            quiet_cmd!(sh, "cargo --locked test --features={version}").run()?;
+            rbmt_eprintln!("  Testing with version: {}", version);
+            rbmt_cmd!(sh, "cargo --locked test --features={version}").run()?;
         }
     }
 

@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 use xshell::Shell;
 
 use crate::environment::{
-    get_target_dir, get_workspace_root, quiet_println, Manifest, Package, PackageManifest,
+    get_target_dir, get_workspace_root, Manifest, Package, PackageManifest, ProgressGuard,
 };
-use crate::{git, quiet_cmd, toolchain};
+use crate::lock::LockFile;
+use crate::{git, toolchain};
 
 /// Directory where API files are stored, relative to each package directory.
 const API_DIR: &str = "api";
@@ -104,10 +105,13 @@ impl FeatureConfig {
 /// * `baseline` - Git ref for optional semver comparison.
 pub fn run(
     sh: &Shell,
+    lockfile: LockFile,
     packages: &[Package],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println("Running API check...");
+    let _lockfile_guard = lockfile.activate(sh)?;
+    let _progress = ProgressGuard::new();
+    rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
     check_apis(sh, packages, baseline)?;
@@ -139,7 +143,7 @@ fn get_package_apis(
 
         // Generate rustdoc JSON.
         // Use --lib to avoid ambiguity errors in packages with multiple targets (e.g. lib + bin).
-        let mut cmd = quiet_cmd!(sh, "cargo rustdoc --lib");
+        let mut cmd = rbmt_cmd!(sh, "cargo rustdoc --lib");
         for arg in config.cargo_args() {
             cmd = cmd.arg(arg);
         }
@@ -202,20 +206,20 @@ fn check_apis(
         let diff = public_api::diff::PublicApiDiff::between(no_features, all_features);
 
         if !diff.removed.is_empty() || !diff.changed.is_empty() {
-            eprintln!("Non-additive features detected in {}:", package.name);
+            println!("Non-additive features detected in {}:", package.name);
 
             if !diff.removed.is_empty() {
-                eprintln!("  Items removed when enabling features:");
+                println!("  Items removed when enabling features:");
                 for item in &diff.removed {
-                    eprintln!("    - {}", item);
+                    println!("    - {}", item);
                 }
             }
 
             if !diff.changed.is_empty() {
-                eprintln!("  Items changed when enabling features:");
+                println!("  Items changed when enabling features:");
                 for item in &diff.changed {
-                    eprintln!("    - old: {}", item.old);
-                    eprintln!("      new: {}", item.new);
+                    println!("    - old: {}", item.old);
+                    println!("      new: {}", item.new);
                 }
             }
 
@@ -228,12 +232,10 @@ fn check_apis(
     }
 
     for api_dir in &api_dirs {
-        let status_output = quiet_cmd!(sh, "git status --porcelain {api_dir}").read()?;
+        let status_output = rbmt_cmd!(sh, "git status --porcelain {api_dir}").read()?;
         if !status_output.trim().is_empty() {
             // Show the diff for context.
-            quiet_cmd!(sh, "git diff --color=always {api_dir}").run()?;
-
-            eprintln!();
+            rbmt_cmd!(sh, "git diff --color=always {api_dir}").run()?;
             return Err(format!(
                 "You have introduced changes to the public API, commit the changes to {} currently in your working directory",
                 api_dir.display()
@@ -280,7 +282,7 @@ fn check_semver(
     package_dir: &PathBuf,
     baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    quiet_println(&format!("Running semver check against baseline: {}", baseline));
+    rbmt_eprintln!("Running semver check against baseline: {}", baseline);
 
     let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
     let mut baseline_apis = {
@@ -297,31 +299,31 @@ fn check_semver(
 
     let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
 
-    eprintln!("Semver check vs {}:", baseline);
+    println!("Semver check vs {}:", baseline);
 
     if !diff.removed.is_empty() {
-        eprintln!("  Removed (possibly breaking):");
+        println!("  Removed (possibly breaking):");
         for item in &diff.removed {
-            eprintln!("    - {}", item);
+            println!("    - {}", item);
         }
     }
 
     if !diff.changed.is_empty() {
-        eprintln!("  Changed (possibly breaking):");
+        println!("  Changed (possibly breaking):");
         for item in &diff.changed {
-            eprintln!("    old: {}", item.old);
-            eprintln!("    new: {}", item.new);
+            println!("    old: {}", item.old);
+            println!("    new: {}", item.new);
         }
     }
 
     if !diff.added.is_empty() {
-        eprintln!("  Added:");
+        println!("  Added:");
         for item in &diff.added {
-            eprintln!("    + {}", item);
+            println!("    + {}", item);
         }
     }
 
-    eprintln!(
+    println!(
         "  Summary: {} removed, {} changed, {} added",
         diff.removed.len(),
         diff.changed.len(),

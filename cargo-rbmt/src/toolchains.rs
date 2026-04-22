@@ -1,7 +1,6 @@
 use xshell::Shell;
 
-use crate::environment::{is_quiet_mode, quiet_println};
-use crate::quiet_cmd;
+use crate::environment::ProgressGuard;
 use crate::toolchain::{get_workspace_msrv, Toolchain};
 
 /// Fixed components installed on every toolchain.
@@ -10,65 +9,78 @@ const COMPONENTS: &str = "rust-src,clippy,rustfmt";
 /// Fixed target installed on every toolchain (for no-std cross-compilation testing).
 const TARGET: &str = "thumbv7m-none-eabi";
 
-/// Env var names exported after setup.
-const ENV_NIGHTLY: &str = "RBMT_NIGHTLY";
-const ENV_STABLE: &str = "RBMT_STABLE";
-const ENV_MSRV: &str = "RBMT_MSRV";
-
-/// Install all three toolchains (nightly, stable, MSRV) and export env vars.
+/// Install all three toolchains (nightly, stable, MSRV) and optionally print versions.
 ///
 /// When `update_nightly` is true, the floating `nightly` toolchain is first
 /// installed, its resolved version queried from rustc, and the result written
-/// to `nightly-version` before the normal install and export path runs.
+/// to `nightly-version` before the normal install path runs. When `update_stable` is
+/// true, the same is done for `stable-version`.
 ///
-/// When `update_stable` is true, the same is done for `stable-version`.
-///
-/// When `msrv` is true, print the workspace MSRV to stdout and exit without
-/// installing any toolchains.
-pub fn run(sh: &Shell, update_nightly: bool, update_stable: bool, msrv: bool) -> Result<(), Box<dyn std::error::Error>> {
+/// When `msrv`, `nightly`, or `stable` is true, print the correspoinding version
+/// to stdout and exit without installing any toolchains.
+#[allow(clippy::fn_params_excessive_bools)]
+pub fn run(
+    sh: &Shell,
+    update_nightly: bool,
+    update_stable: bool,
+    msrv: bool,
+    nightly: bool,
+    stable: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     if msrv {
         let msrv = get_workspace_msrv(sh)?;
         println!("{}", msrv);
         return Ok(());
     }
+
+    if nightly {
+        let nightly_version = Toolchain::Nightly.read_version(sh)?;
+        println!("{}", nightly_version);
+        return Ok(());
+    }
+
+    if stable {
+        let stable_version = Toolchain::Stable.read_version(sh)?;
+        println!("{}", stable_version);
+        return Ok(());
+    }
+
     if update_nightly {
         install_toolchain(sh, "nightly")?;
         let version = resolve_nightly_version(sh)?;
         Toolchain::Nightly.write_version(sh, &version)?;
-        eprintln!("Updated nightly-version: {}", version);
+        rbmt_eprintln!("Updated nightly-version: {}", version);
     }
 
     if update_stable {
         install_toolchain(sh, "stable")?;
         let version = resolve_stable_version(sh)?;
         Toolchain::Stable.write_version(sh, &version)?;
-        eprintln!("Updated stable-version: {}", version);
+        rbmt_eprintln!("Updated stable-version: {}", version);
     }
 
-    let nightly = Toolchain::Nightly.read_version(sh)?;
-    let stable = Toolchain::Stable.read_version(sh)?;
-    let msrv = get_workspace_msrv(sh)?;
+    let nightly_version = Toolchain::Nightly.read_version(sh)?;
+    let stable_version = Toolchain::Stable.read_version(sh)?;
+    let msrv_version = get_workspace_msrv(sh)?;
 
-    quiet_println(&format!(
-        "Installing toolchains: nightly={}, stable={}, msrv={}",
-        nightly, stable, msrv
-    ));
+    install_toolchain(sh, &nightly_version)?;
+    install_toolchain(sh, &stable_version)?;
+    install_toolchain(sh, &msrv_version)?;
 
-    install_toolchain(sh, &nightly)?;
-    install_toolchain(sh, &stable)?;
-    install_toolchain(sh, &msrv)?;
-
-    // Print export statements to stdout.
-    println!("export {}={}", ENV_NIGHTLY, nightly);
-    println!("export {}={}", ENV_STABLE, stable);
-    println!("export {}={}", ENV_MSRV, msrv);
+    rbmt_eprintln!(
+        "Installed toolchains: nightly={}, stable={}, msrv={}",
+        nightly_version,
+        stable_version,
+        msrv_version
+    );
 
     Ok(())
 }
 
 /// Query the resolved nightly version string (e.g. `"nightly-2025-02-17"`) from rustc.
 fn resolve_nightly_version(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-    let output = quiet_cmd!(sh, "rustc +nightly --verbose --version").read()?;
+    let output = rbmt_cmd!(sh, "rustc +nightly --verbose --version").read()?;
 
     // Output contains a line: "commit-date: 2025-02-17"
     let date = output
@@ -81,7 +93,7 @@ fn resolve_nightly_version(sh: &Shell) -> Result<String, Box<dyn std::error::Err
 
 /// Query the resolved stable version string (e.g. `"1.85.0"`) from rustc.
 fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-    let output = quiet_cmd!(sh, "rustc +stable --version").read()?;
+    let output = rbmt_cmd!(sh, "rustc +stable --version").read()?;
 
     // Output: "rustc 1.85.0 (4d91de4e4 2025-02-17)"
     let version = output
@@ -94,21 +106,17 @@ fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
 
 /// Install a single toolchain with the fixed components and target.
 fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = quiet_cmd!(
+    rbmt_eprintln!("Installing toolchain {}", toolchain);
+
+    rbmt_cmd!(
         sh,
         "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
-    );
-    // Rustup writes its `info:` lines directly to stderr, bypassing any stdout
-    // capture. Suppress them in quiet mode.
-    if is_quiet_mode() {
-        cmd = cmd.ignore_stderr();
-    }
+    )
     // Always suppress stdout so that only the `export` statements printed by
     // [`run`] reach stdout. This matters because the caller does
     // `eval "$(cargo rbmt toolchains)"`, and any stray rustup stdout would be
     // passed to `eval`.
-    cmd.ignore_stdout().run()?;
+    .ignore_stdout()
+    .run()?;
     Ok(())
 }
-
-

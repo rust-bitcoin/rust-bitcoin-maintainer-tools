@@ -4,8 +4,7 @@ use std::fs;
 
 use xshell::Shell;
 
-use crate::environment::{quiet_println, Package};
-use crate::quiet_cmd;
+use crate::environment::{Package, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Format (or check the formatting of) all packages in the workspace.
@@ -14,15 +13,16 @@ pub fn run(
     check: bool,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     if check {
-        quiet_println("Checking formatting...");
+        rbmt_eprintln!("Checking formatting...");
     } else {
-        quiet_println("Formatting files...");
+        rbmt_eprintln!("Formatting files...");
     }
 
-    let mut cmd = quiet_cmd!(sh, "cargo fmt");
+    let mut cmd = rbmt_cmd!(sh, "cargo fmt");
 
     if packages.is_empty() {
         cmd = cmd.arg("--all");
@@ -39,10 +39,10 @@ pub fn run(
     cmd.run()?;
 
     if check {
-        quiet_println("Formatting check passed");
+        rbmt_eprintln!("Formatting check passed");
     } else {
         remove_trailing_whitespace(sh, packages)?;
-        quiet_println("Formatting complete");
+        rbmt_eprintln!("Formatting complete");
     }
 
     Ok(())
@@ -55,13 +55,13 @@ fn remove_trailing_whitespace(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Collect rust files from either all tracked files or just specified packages.
     let files = if packages.is_empty() {
-        quiet_cmd!(sh, "git ls-files --cached '*.rs'").read()?
+        rbmt_cmd!(sh, "git ls-files --cached '*.rs'").read()?
     } else {
         // Get files from each specified package directory.
         let mut all_files = Vec::new();
         for package in packages {
             let pkg_dir = package.dir.to_string_lossy();
-            let mut cmd = quiet_cmd!(sh, "git ls-files --cached");
+            let mut cmd = rbmt_cmd!(sh, "git ls-files --cached");
             cmd = cmd.arg(format!("{}/**/*.rs", pkg_dir));
             let files_output = cmd.read()?;
             all_files.push(files_output);
@@ -70,7 +70,7 @@ fn remove_trailing_whitespace(
     };
 
     if files.trim().is_empty() {
-        quiet_println("No rust files found to clean whitespace from");
+        rbmt_eprintln!("No rust files found to clean whitespace from");
         return Ok(());
     }
 
