@@ -6,9 +6,11 @@
 
 This repository contains utilities for maintaining projects in the rust-bitcoin ecosystem.
 
+* [`actions`](./actions) composable CI actions for Github/Forgejo actions.
 * [`ci`](./ci) holds the legacy shell scripts for continuous integration tests in the rust-bitcoin ecosystem.
 * [`cargo-rbmt`](./cargo-rbmt) package is a rust re-write of the legacy `ci` scripts with new features.
 * [`docs`](./docs) contains notes on overall design.
+* [`runner`](./runner`) infrastructure for CI runners.
 
 ## Contributing
 

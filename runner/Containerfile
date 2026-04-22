@@ -1,0 +1,20 @@
+# Rust Bitcoin Maintainer Tools CI Runner
+
+# Debian-based with rust toolchain pre-installed.
+FROM rust:1.85
+
+# Install system dependencies, keep layer light by removing cache.
+#
+# * git: cargo-rbmt and repository cloning.
+# * pkg-config: crates that require external system libraries.
+# * libssl-dev: crates that require external system libraries.
+# * gcc-arm-none-eabi: thumbv7m-none-eabi no-std tests.
+RUN apt-get update && apt-get install -y \
+    git \
+    pkg-config \
+    libssl-dev \
+    gcc-arm-none-eabi \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up environment for ARM no-std tests.
+ENV CC_thumbv7m_none_eabi=arm-none-eabi-gcc

@@ -1,0 +1,25 @@
+# Rust Bitcoin Maintainer Tools CI Runner Container
+
+IMAGE_NAME := "rust-bitcoin-ci"
+IMAGE_TAG := "latest"
+IMAGE := IMAGE_NAME + ":" + IMAGE_TAG
+
+REPO_ROOT := justfile_directory() / ".."
+#
+# List available recipes.
+_default:
+    @just --list
+
+# Build the container image.
+@build:
+    podman build \
+        --tag {{IMAGE}} \
+        .
+
+# Run container interactively with repository mounted.
+@run repo=REPO_ROOT: build
+    podman run \
+        --interactive \
+        --tty \
+        --volume {{repo}}:/workspace \
+        {{IMAGE}}
