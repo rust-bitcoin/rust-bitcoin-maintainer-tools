@@ -13,8 +13,10 @@
 //! For single-package repos with no explicit `[workspace]` table,
 //! `[package.metadata.rbmt.toolchains]` is used as a fallback.
 
+use std::fs;
 use std::path::Path;
 
+use toml_edit::DocumentMut;
 use xshell::Shell;
 
 use crate::environment::{get_workspace_root, WorkspaceManifest};
@@ -310,6 +312,27 @@ fn get_msrv_from_manifest(
 /// `(manifest_path, rust_version)` pair; `rust_version` is `None` when not declared.
 type ManifestMsrv = (String, Option<String>);
 
+/// Parse rust-version directly from a Cargo.toml file.
+///
+/// Used as a fallback when cargo metadata doesn't include the `rust_version` field
+/// which happens with older rust versions.
+fn parse_rust_version_from_toml(
+    manifest_path: &str,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let content = fs::read_to_string(manifest_path)?;
+    let doc = content.parse::<DocumentMut>()?;
+
+    if let Some(package) = doc.get("package").and_then(|p| p.as_table()) {
+        if let Some(rust_version) = package.get("rust-version") {
+            if let Some(version_str) = rust_version.as_str() {
+                return Ok(Some(version_str.to_string()));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 /// Collect all MSRVs in the workspace.
 fn collect_msrvs(sh: &Shell) -> Result<Vec<ManifestMsrv>, Box<dyn std::error::Error>> {
     let metadata = rbmt_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
@@ -322,7 +345,15 @@ fn collect_msrvs(sh: &Shell) -> Result<Vec<ManifestMsrv>, Box<dyn std::error::Er
                 .iter()
                 .filter_map(|pkg| {
                     let manifest_path = pkg["manifest_path"].as_str()?.to_string();
-                    let rust_version = pkg["rust_version"].as_str().map(str::to_string);
+
+                    // Try to get rust_version from metadata first,
+                    // then attempt direct parsing of manifest toml
+                    // as a fallback.
+                    let rust_version = pkg["rust_version"]
+                        .as_str()
+                        .map(str::to_string)
+                        .or_else(|| parse_rust_version_from_toml(&manifest_path).ok().flatten());
+
                     Some((manifest_path, rust_version))
                 })
                 .collect()
