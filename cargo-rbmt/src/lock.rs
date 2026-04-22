@@ -109,9 +109,9 @@ impl LockFile {
     /// lockfile variant to `Cargo.lock`. When the returned guard is dropped, the original
     /// `Cargo.lock` is automatically restored.
     pub fn activate(self, sh: &Shell) -> Result<LockFileGuard, Box<dyn std::error::Error>> {
-        let _guard = LockFileGuard::new(sh)?;
+        let guard = LockFileGuard::new(sh)?;
         self.restore(sh)?;
-        Ok(_guard)
+        Ok(guard)
     }
 }
 
