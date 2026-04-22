@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Add `run` command as a cargo passthrough with toolchain and lockfile management.
 * Add `progress` mode to `RBMT_LOG_LEVEL` for interactive use.
 * Add trailing newline clean up to `fmt`.
 * More robust lockfile management when using the baseline feature of `test`.

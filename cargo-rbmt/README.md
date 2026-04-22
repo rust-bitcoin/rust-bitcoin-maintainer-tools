@@ -12,6 +12,7 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
   - [no_std](#no_std)
 - [Integration](#integration)
 - [Prerelease](#prerelease)
+- [Run](#run)
 - [Lock Files](#lock-files)
 - [API](#api)
 - [Toolchains](#toolchains)
@@ -122,6 +123,16 @@ Use `--force` to run checks regardless of whether a version bump is detected.
 ```bash
 cargo rbmt prerelease --force
 ```
+
+## Run
+
+The `run` command executes arbitrary cargo commands with the specified toolchain and lockfile.
+
+```bash
+cargo rbmt --lock-file minimal --toolchain nightly run -- <CARGO_COMMAND> [ARGS...]
+```
+
+The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass everything after it to cargo.
 
 ## Lock Files
 
