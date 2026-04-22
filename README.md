@@ -8,4 +8,10 @@ This repository contains utilities for maintaining projects in the rust-bitcoin 
 
 * [`ci`](./ci) holds the legacy shell scripts for continuous integration tests in the rust-bitcoin ecosystem.
 * [`cargo-rbmt`](./cargo-rbmt) package is a rust re-write of the legacy `ci` scripts with new features.
-* [`.github/actions`](./.github/actions) has composite Github Actions for easy integrations.
+* [`docs`](./docs) contains notes on overall design.
+
+## Contributing
+
+The canonical repository is at [git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools](https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools). A read-only remote exists on [GitHub](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools).
+
+We have a dedicated developer channel on IRC, #bitcoin-rust@libera.chat where you may get helpful advice if you have questions.

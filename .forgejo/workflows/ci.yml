@@ -1,0 +1,67 @@
+name: CI
+
+# Several jobs use `forgejo.event.pull_request.base.sha || forgejo.event.before` as a baseline ref.
+# On PRs, `base.sha` is the merge base, which is equivalent to master. On pushes to master,
+# `event.before` is the commit just before the push using `master` instead would compare HEAD
+# against itself since master now includes the pushed commits, making the check useless.
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+permissions: {}
+
+jobs:
+  dogfood-lints:
+    runs-on: debian-trixie
+    permissions: {}
+    steps:
+      - uses: https://github.com/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: https://github.com/Swatinem/rust-cache@f51f967e158417aafa338a1e46ab22095f07aa01 # v2.9.1
+      - name: Dogfood with cargo-rbmt
+        uses: ./actions/setup-rbmt
+        with:
+          rbmt-version: ${{ forgejo.sha }}
+          repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
+      - run: cargo rbmt --lock-file existing lint
+      - run: cargo rbmt --lock-file existing docs
+      - run: cargo rbmt --lock-file existing docsrs
+
+  dogfood-prerelease:
+    runs-on: debian-trixie
+    permissions: {}
+    steps:
+      - uses: https://github.com/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0 # Context required for version bump detection.
+          persist-credentials: false
+      - uses: https://github.com/Swatinem/rust-cache@f51f967e158417aafa338a1e46ab22095f07aa01 # v2.9.1
+      - uses: ./actions/setup-rbmt
+        with:
+          rbmt-version: ${{ forgejo.sha }}
+          repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
+      - run: cargo rbmt prerelease --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
+
+  dogfood-tests:
+    runs-on: debian-trixie
+    permissions: {}
+    strategy:
+      matrix:
+        lock-file: [existing, recent, minimal]
+        toolchain: [stable, msrv]
+    steps:
+      - uses: https://github.com/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0 # Context required for bisectability tests.
+          persist-credentials: false
+      - uses: https://github.com/Swatinem/rust-cache@f51f967e158417aafa338a1e46ab22095f07aa01 # v2.9.1
+      - name: Dogfood with cargo-rbmt
+        uses: ./actions/setup-rbmt
+        with:
+          rbmt-version: ${{ forgejo.sha }}
+          repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
+      - name: Run tests (${{ matrix.toolchain }}, ${{ matrix.lock-file }} lock)
+        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test --toolchain ${{ matrix.toolchain }}

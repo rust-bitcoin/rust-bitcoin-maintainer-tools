@@ -263,7 +263,9 @@ It might be worth wrapping in an [xtask](https://github.com/matklad/cargo-xtask)
 
 ## CI Actions
 
-A composite action is provided to make it easy to use `cargo-rbmt` in Github/Forgejo Actions CI. For faster CI runs, consider adding cargo build caching to your workflow with something like `Swatinem/rust-cache`.
+A composite action is provided to make it easy to use `cargo-rbmt` in Github/Forgejo Actions CI. Although it might be easier to write a custom action per-repository.
+
+For faster CI runs, consider adding cargo build caching to your workflow with something like `Swatinem/rust-cache`.
 
 ```yaml
 steps:
@@ -273,4 +275,4 @@ steps:
   - run: cargo rbmt test
 ```
 
-See the [action](../.github/actions/setup-rbmt/action.yml) for more details.
+See the [action](../actions/setup-rbmt/action.yml) for more details.
