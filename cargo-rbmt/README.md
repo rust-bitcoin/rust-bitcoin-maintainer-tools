@@ -56,6 +56,8 @@ allowed_duplicates = [
 ]
 ```
 
+> **NOTE:** Linting is only enforced (through command failure) on the given *nightly* toolchain. It is possible for different versions of rust to have different lint rules and behaviour, so to keep things simple just the newest is considered fail worthy.
+
 ## Test
 
 The `test` command runs feature matrix testing for your package. Every run unconditionally tests all features enabled, no features enabled, and each feature by itself. A package's features are auto-discovered. Randomly sampled feature subsets (number of sets grows with the number of package features) are tested per commit ID to try and catch interaction bugs without running massive matrices on every run.
@@ -173,6 +175,10 @@ cargo rbmt api --baseline v0.1.0
 ```
 
 Compares the current API against a baseline git reference (tag, branch, or commit) to detect breaking changes.
+
+### `#[doc(hidden)]` policy
+
+Items marked with `#[doc(hidden)]` are *excluded from API snapshots and breaking change detection*. `#[doc(hidden)]` is an escape hatch to allow API changes without triggering breaking change warnings in CI. While hiding documentation doesn't change the actual types or signatures, it signals that the item is not part of the public API contract and may be modified or removed without warning.
 
 ## Toolchains
 
