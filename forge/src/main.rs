@@ -106,6 +106,13 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum PrCommands {
+    /// List open pull requests in a repository
+    #[command(alias = "l")]
+    List {
+        /// Repository in format "owner/repo" (optional, uses current repo if not specified)
+        #[arg(short, long)]
+        repo: Option<String>,
+    },
     /// Checkout a pull request locally
     #[command(alias = "c")]
     Checkout {
@@ -156,6 +163,63 @@ struct BranchInfo {
 struct RepoInfo {
     clone_url: String,
     full_name: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct ListItem {
+    number: u64,
+    title: String,
+}
+
+async fn list_prs(repo: Option<String>) -> Result<()> {
+    let config = load_config()?;
+
+    let repo = if let Some(r) = repo {
+        r
+    } else {
+        get_current_repo(&config)?
+    };
+
+    let url = format!(
+        "{}/repos/{}/pulls?state=open&limit=100",
+        config.api_url(),
+        repo
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("curl/8.5.0")
+        .build()?;
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("token {}", config.token))
+        .send()
+        .await
+        .context("Failed to send request to Forgejo API")?;
+
+    if !response.status().is_success() {
+        anyhow::bail!(
+            "API request failed with status: {} - {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
+    }
+
+    let prs: Vec<ListItem> = response
+        .json()
+        .await
+        .context("Failed to parse PRs response")?;
+
+    if prs.is_empty() {
+        println!("No open pull requests found");
+        return Ok(());
+    }
+
+    for pr in prs {
+        println!("#{:<4} {}", pr.number, pr.title);
+    }
+
+    Ok(())
 }
 
 async fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
@@ -224,7 +288,12 @@ fn get_current_repo(config: &Config) -> Result<String> {
         .trim()
         .to_string();
 
-    // Extract owner/repo from URL
+    // Check for full SSH format: ssh://git@host/owner/repo
+    let ssh_url_prefix = format!("ssh://git@{}/", config.ssh_url);
+    if let Some(path) = url.strip_prefix(&ssh_url_prefix) {
+        return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
+    }
+
     // Check for SSH format: git@host:owner/repo
     let ssh_prefix = format!("git@{}:", config.ssh_url);
     if let Some(path) = url.strip_prefix(&ssh_prefix) {
@@ -1221,6 +1290,9 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Pr { command } => match command {
+            PrCommands::List { repo } => {
+                list_prs(repo).await?;
+            }
             PrCommands::Checkout { pr_number, repo } => {
                 checkout_pr(pr_number, repo).await?;
             }
