@@ -171,7 +171,7 @@ struct ListItem {
     title: String,
 }
 
-async fn list_prs(repo: Option<String>) -> Result<()> {
+fn list_prs(repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
     let repo = if let Some(r) = repo {
@@ -186,28 +186,22 @@ async fn list_prs(repo: Option<String>) -> Result<()> {
         repo
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("curl/8.5.0")
-        .build()?;
-
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("token {}", config.token))
+    let response = bitreq::get(&url)
+        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Accept", "*/*")
+        .with_header("User-Agent", "curl/8.5.0")
         .send()
-        .await
         .context("Failed to send request to Forgejo API")?;
 
-    if !response.status().is_success() {
+    if response.status_code != 200 {
         anyhow::bail!(
-            "API request failed with status: {} - {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
+            "API request failed with status: {}",
+            response.status_code
         );
     }
 
     let prs: Vec<ListItem> = response
         .json()
-        .await
         .context("Failed to parse PRs response")?;
 
     if prs.is_empty() {
@@ -222,35 +216,29 @@ async fn list_prs(repo: Option<String>) -> Result<()> {
     Ok(())
 }
 
-async fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
+fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
     let url = format!(
         "{}/repos/{}/pulls/{}",
         config.api_url(), repo, pr_number
     );
 
     // Masquerade as curl because the Forgejo instance blocked requests marked differently.
-    let client = reqwest::Client::builder()
-        .user_agent("curl/8.5.0")
-        .build()?;
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("token {}", config.token))
-        .header("Accept", "*/*")
+    let response = bitreq::get(&url)
+        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Accept", "*/*")
+        .with_header("User-Agent", "curl/8.5.0")
         .send()
-        .await
         .context("Failed to send request to Forgejo API")?;
 
-    if !response.status().is_success() {
+    if response.status_code != 200 {
         anyhow::bail!(
-            "API request failed with status: {} - {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
+            "API request failed with status: {}",
+            response.status_code
         );
     }
 
     let pr: PullRequest = response
         .json()
-        .await
         .context("Failed to parse PR response")?;
 
     Ok(pr)
@@ -318,7 +306,7 @@ fn get_current_repo(config: &Config) -> Result<String> {
     anyhow::bail!("Remote URL does not match configured hosts: {}", url)
 }
 
-async fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
+fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     // Load config
     let config = load_config()?;
 
@@ -332,7 +320,7 @@ async fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     println!("Fetching PR #{} from {}...", pr_number, repo);
 
     // Fetch PR details
-    let pr = fetch_pr(&repo, pr_number, &config).await?;
+    let pr = fetch_pr(&repo, pr_number, &config)?;
 
     println!("PR #{}: {}", pr.number, pr.title);
     println!("From: {}/{}", pr.head.repo.full_name, pr.head.ref_name);
@@ -520,110 +508,93 @@ struct Comment {
     user: CommentUser,
 }
 
-async fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
+fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
     let url = format!(
         "{}/repos/{}/issues/{}/comments",
         config.api_url(), repo, pr_number
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("curl/8.5.0")
-        .build()?;
-
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("token {}", config.token))
-        .header("Accept", "*/*")
+    let response = bitreq::get(&url)
+        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Accept", "*/*")
+        .with_header("User-Agent", "curl/8.5.0")
         .send()
-        .await
         .context("Failed to send request to Forgejo API")?;
 
-    if !response.status().is_success() {
+    if response.status_code != 200 {
         anyhow::bail!(
-            "API request failed with status: {} - {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
+            "API request failed with status: {}",
+            response.status_code
         );
     }
 
     let comments: Vec<Comment> = response
         .json()
-        .await
         .context("Failed to parse comments response")?;
 
     Ok(comments)
 }
 
-async fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
+fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
     let url = format!(
         "{}/repos/{}/pulls/{}/reviews",
         config.api_url(), repo, pr_number
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("curl/8.5.0")
-        .build()?;
-
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("token {}", config.token))
-        .header("Accept", "*/*")
+    let response = bitreq::get(&url)
+        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Accept", "*/*")
+        .with_header("User-Agent", "curl/8.5.0")
         .send()
-        .await
         .context("Failed to send request to Forgejo API")?;
 
-    if !response.status().is_success() {
+    if response.status_code != 200 {
         anyhow::bail!(
-            "API request failed with status: {} - {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
+            "API request failed with status: {}",
+            response.status_code
         );
     }
 
     let reviews: Vec<Comment> = response
         .json()
-        .await
         .context("Failed to parse reviews response")?;
 
     Ok(reviews)
 }
 
-async fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -> Result<()> {
+fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -> Result<()> {
     let url = format!(
         "{}/repos/{}/issues/{}/comments",
         config.api_url(), repo, pr_number
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("curl/8.5.0")
-        .build()?;
-
     let request_body = CommentRequest {
         body: comment.to_string(),
     };
 
-    let response = client
-        .post(&url)
-        .header("Authorization", format!("token {}", config.token))
-        .header("Accept", "*/*")
-        .header("Content-Type", "application/json")
-        .json(&request_body)
+    let body_json = serde_json::to_string(&request_body)
+        .context("Failed to serialize comment request")?;
+
+    let response = bitreq::post(&url)
+        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Accept", "*/*")
+        .with_header("Content-Type", "application/json")
+        .with_header("User-Agent", "curl/8.5.0")
+        .with_body(body_json.as_str())
         .send()
-        .await
         .context("Failed to send request to Forgejo API")?;
 
-    if !response.status().is_success() {
+    if response.status_code != 201 && response.status_code != 200 {
         anyhow::bail!(
-            "API request failed with status: {} - {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
+            "API request failed with status: {}",
+            response.status_code
         );
     }
 
     Ok(())
 }
 
-async fn ack_pr(repo: Option<String>) -> Result<()> {
+fn ack_pr(repo: Option<String>) -> Result<()> {
     // Load config
     let config = load_config()?;
 
@@ -651,7 +622,7 @@ async fn ack_pr(repo: Option<String>) -> Result<()> {
 
     // Check if this ACK already exists from this user
     println!("Checking existing comments on PR #{}...", pr_number);
-    let existing_comments = get_pr_comments(&repo, pr_number, &config).await?;
+    let existing_comments = get_pr_comments(&repo, pr_number, &config)?;
 
     for existing in &existing_comments {
         if existing.user.login == config.username && existing.body.trim() == comment.trim() {
@@ -662,7 +633,7 @@ async fn ack_pr(repo: Option<String>) -> Result<()> {
 
     // Post the comment
     println!("Posting comment to PR #{}...", pr_number);
-    post_pr_comment(&repo, pr_number, &comment, &config).await?;
+    post_pr_comment(&repo, pr_number, &comment, &config)?;
 
     println!("Successfully posted ACK comment!");
 
@@ -784,7 +755,7 @@ fn ask_user(prompt: &str) -> Result<String> {
     Ok(input.trim().to_string())
 }
 
-async fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Result<()> {
+fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Result<()> {
     // Load config
     let config = load_config()?;
 
@@ -798,7 +769,7 @@ async fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) 
     println!("Fetching PR #{} from {}...", pr_number, repo);
 
     // Fetch PR details
-    let pr = fetch_pr(&repo, pr_number, &config).await?;
+    let pr = fetch_pr(&repo, pr_number, &config)?;
 
     // Determine target branch
     let target_branch = branch.unwrap_or_else(|| pr.base.ref_name.clone());
@@ -947,8 +918,8 @@ async fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) 
 
     // Fetch ACKs
     println!("\nFetching ACKs...");
-    let mut comments = get_pr_comments(&repo, pr_number, &config).await?;
-    let reviews = get_pr_reviews(&repo, pr_number, &config).await?;
+    let mut comments = get_pr_comments(&repo, pr_number, &config)?;
+    let reviews = get_pr_reviews(&repo, pr_number, &config)?;
 
     // Combine comments and reviews
     comments.extend(reviews);
@@ -1106,7 +1077,7 @@ async fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) 
     Ok(())
 }
 
-async fn fetch_all() -> Result<()> {
+fn fetch_all() -> Result<()> {
     // Load config
     let config = load_config()?;
 
@@ -1223,7 +1194,7 @@ async fn fetch_all() -> Result<()> {
     Ok(())
 }
 
-async fn push_with_jj(current_only: bool) -> Result<()> {
+fn push_with_jj(current_only: bool) -> Result<()> {
     // Load config
     let config = load_config()?;
 
@@ -1284,30 +1255,29 @@ async fn push_with_jj(current_only: bool) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Pr { command } => match command {
             PrCommands::List { repo } => {
-                list_prs(repo).await?;
+                list_prs(repo)?;
             }
             PrCommands::Checkout { pr_number, repo } => {
-                checkout_pr(pr_number, repo).await?;
+                checkout_pr(pr_number, repo)?;
             }
             PrCommands::Ack { repo } => {
-                ack_pr(repo).await?;
+                ack_pr(repo)?;
             }
             PrCommands::Merge { pr_number, repo, branch } => {
-                merge_pr(pr_number, repo, branch).await?;
+                merge_pr(pr_number, repo, branch)?;
             }
         },
         Commands::Fetch => {
-            fetch_all().await?;
+            fetch_all()?;
         }
         Commands::Push { current } => {
-            push_with_jj(current).await?;
+            push_with_jj(current)?;
         }
     }
 
