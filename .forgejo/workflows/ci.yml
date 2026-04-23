@@ -63,5 +63,5 @@ jobs:
         with:
           rbmt-version: ${{ forgejo.sha }}
           repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
-      - name: Run tests (${{ matrix.toolchain }}, ${{ matrix.lock-file }} lock)
-        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test --toolchain ${{ matrix.toolchain }}
+      - name: Run tests
+        run: cargo rbmt --lock-file ${{ matrix.lock-file }} test --toolchain ${{ matrix.toolchain }} --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
