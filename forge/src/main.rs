@@ -42,13 +42,14 @@ impl Config {
 
 fn load_config() -> Result<Config> {
     // Try multiple config file locations in order
+    let home = std::env::var("HOME").ok();
     let config_paths = vec![
         "./.forge.toml".to_string(),
-        dirs::home_dir()
-            .map(|h| h.join(".config/forge.toml").to_string_lossy().to_string())
+        home.as_ref()
+            .map(|h| format!("{}/.config/forge.toml", h))
             .unwrap_or_default(),
-        dirs::home_dir()
-            .map(|h| h.join(".forge.toml").to_string_lossy().to_string())
+        home.as_ref()
+            .map(|h| format!("{}/.forge.toml", h))
             .unwrap_or_default(),
     ];
 
