@@ -2,6 +2,9 @@
 members = [
     "cargo-rbmt"
 ]
+exclude = [
+    "forge"
+]
 resolver = "2"
 
 [workspace.metadata.rbmt]
