@@ -1,14 +1,22 @@
 [package]
 name = "forge"
 version = "0.1.0"
+authors = ["Tobin C. Harding <me@tobin.cc>", "Nick Johnson <nick@yonson.dev>"]
+description = "CLI tool for common rust-bitcoin forge patterns"
+repository = "https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools"
+license = "CC0-1.0"
 edition = "2021"
 rust-version = "1.85.0"
 
+[[bin]]
+name = "forge"
+path = "src/main.rs"
+
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "std", "help"], default-features = false }
 bitreq = { version = "0.3", features = ["https-rustls", "json-using-serde"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0.186", features = ["derive"] }
+serde_json = "1.0.104"
 anyhow = "1.0"
 toml = "0.8"
 sha2 = "0.10"
