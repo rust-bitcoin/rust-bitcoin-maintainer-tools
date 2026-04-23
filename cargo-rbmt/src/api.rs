@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use xshell::Shell;
 
 use crate::environment::{
-    get_target_dir, get_workspace_packages, get_workspace_root, Manifest, Package,
-    PackageManifest, ProgressGuard,
+    get_target_dir, get_workspace_packages, get_workspace_root, Manifest, Package, PackageManifest,
+    ProgressGuard,
 };
 use crate::lock::LockFile;
 use crate::{git, toolchain};

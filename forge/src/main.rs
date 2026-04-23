@@ -1,8 +1,9 @@
+use std::fs;
+use std::process::Command;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::process::Command;
 
 #[derive(Deserialize, Debug)]
 struct Config {
@@ -19,24 +20,16 @@ struct Config {
 }
 
 /// Default URL to use for HTTPS requests.
-fn default_https_url() -> String {
-    "https://gitea.bitcoin.ninja".to_string()
-}
+fn default_https_url() -> String { "https://gitea.bitcoin.ninja".to_string() }
 
 /// Default URL to use for SSH requests.
-fn default_ssh_url() -> String {
-    "gitea-ssh.bitcoin.ninja".to_string()
-}
+fn default_ssh_url() -> String { "gitea-ssh.bitcoin.ninja".to_string() }
 
 impl Config {
-    fn api_url(&self) -> String {
-        format!("{}/api/v1", self.https_url)
-    }
+    fn api_url(&self) -> String { format!("{}/api/v1", self.https_url) }
 
     fn https_host(&self) -> &str {
-        self.https_url
-            .trim_start_matches("https://")
-            .trim_start_matches("http://")
+        self.https_url.trim_start_matches("https://").trim_start_matches("http://")
     }
 }
 
@@ -45,12 +38,8 @@ fn load_config() -> Result<Config> {
     let home = std::env::var("HOME").ok();
     let config_paths = vec![
         "./.forge.toml".to_string(),
-        home.as_ref()
-            .map(|h| format!("{}/.config/forge.toml", h))
-            .unwrap_or_default(),
-        home.as_ref()
-            .map(|h| format!("{}/.forge.toml", h))
-            .unwrap_or_default(),
+        home.as_ref().map(|h| format!("{}/.config/forge.toml", h)).unwrap_or_default(),
+        home.as_ref().map(|h| format!("{}/.forge.toml", h)).unwrap_or_default(),
     ];
 
     let mut last_error = None;
@@ -175,17 +164,9 @@ struct ListItem {
 fn list_prs(repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
-    let repo = if let Some(r) = repo {
-        r
-    } else {
-        get_current_repo(&config)?
-    };
+    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
-    let url = format!(
-        "{}/repos/{}/pulls?state=open&limit=100",
-        config.api_url(),
-        repo
-    );
+    let url = format!("{}/repos/{}/pulls?state=open&limit=100", config.api_url(), repo);
 
     let response = bitreq::get(&url)
         .with_header("Authorization", format!("token {}", config.token))
@@ -195,15 +176,10 @@ fn list_prs(repo: Option<String>) -> Result<()> {
         .context("Failed to send request to Forgejo API")?;
 
     if response.status_code != 200 {
-        anyhow::bail!(
-            "API request failed with status: {}",
-            response.status_code
-        );
+        anyhow::bail!("API request failed with status: {}", response.status_code);
     }
 
-    let prs: Vec<ListItem> = response
-        .json()
-        .context("Failed to parse PRs response")?;
+    let prs: Vec<ListItem> = response.json().context("Failed to parse PRs response")?;
 
     if prs.is_empty() {
         println!("No open pull requests found");
@@ -218,10 +194,7 @@ fn list_prs(repo: Option<String>) -> Result<()> {
 }
 
 fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
-    let url = format!(
-        "{}/repos/{}/pulls/{}",
-        config.api_url(), repo, pr_number
-    );
+    let url = format!("{}/repos/{}/pulls/{}", config.api_url(), repo, pr_number);
 
     // Masquerade as curl because the Forgejo instance blocked requests marked differently.
     let response = bitreq::get(&url)
@@ -232,15 +205,10 @@ fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> 
         .context("Failed to send request to Forgejo API")?;
 
     if response.status_code != 200 {
-        anyhow::bail!(
-            "API request failed with status: {}",
-            response.status_code
-        );
+        anyhow::bail!("API request failed with status: {}", response.status_code);
     }
 
-    let pr: PullRequest = response
-        .json()
-        .context("Failed to parse PR response")?;
+    let pr: PullRequest = response.json().context("Failed to parse PR response")?;
 
     Ok(pr)
 }
@@ -311,11 +279,7 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
     // Get repository
-    let repo = if let Some(r) = repo {
-        r
-    } else {
-        get_current_repo(&config)?
-    };
+    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
     println!("Fetching PR #{} from {}...", pr_number, repo);
 
@@ -349,10 +313,7 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
             .context("Failed to fetch from fork remote")?;
 
         if !output.status.success() {
-            anyhow::bail!(
-                "Failed to fetch from fork: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+            anyhow::bail!("Failed to fetch from fork: {}", String::from_utf8_lossy(&output.stderr));
         }
 
         // Checkout the branch
@@ -400,10 +361,7 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
             .context("Failed to fetch from repo")?;
 
         if !output.status.success() {
-            anyhow::bail!(
-                "Failed to fetch: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+            anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&output.stderr));
         }
 
         // Checkout the branch
@@ -459,10 +417,7 @@ fn get_current_branch() -> Result<String> {
         anyhow::bail!("Failed to get current branch");
     }
 
-    Ok(String::from_utf8(output.stdout)
-        .context("Invalid UTF-8 in branch name")?
-        .trim()
-        .to_string())
+    Ok(String::from_utf8(output.stdout).context("Invalid UTF-8 in branch name")?.trim().to_string())
 }
 
 fn get_current_commit_hash() -> Result<String> {
@@ -475,17 +430,12 @@ fn get_current_commit_hash() -> Result<String> {
         anyhow::bail!("Failed to get current commit hash");
     }
 
-    Ok(String::from_utf8(output.stdout)
-        .context("Invalid UTF-8 in commit hash")?
-        .trim()
-        .to_string())
+    Ok(String::from_utf8(output.stdout).context("Invalid UTF-8 in commit hash")?.trim().to_string())
 }
 
 fn extract_pr_number_from_branch(branch: &str) -> Result<u64> {
     if let Some(num_str) = branch.strip_prefix("pr-") {
-        num_str
-            .parse::<u64>()
-            .context("Failed to parse PR number from branch name")
+        num_str.parse::<u64>().context("Failed to parse PR number from branch name")
     } else {
         anyhow::bail!("Not on a PR branch (branch name should be pr-<number>)")
     }
@@ -508,10 +458,7 @@ struct Comment {
 }
 
 fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
-    let url = format!(
-        "{}/repos/{}/issues/{}/comments",
-        config.api_url(), repo, pr_number
-    );
+    let url = format!("{}/repos/{}/issues/{}/comments", config.api_url(), repo, pr_number);
 
     let response = bitreq::get(&url)
         .with_header("Authorization", format!("token {}", config.token))
@@ -521,24 +468,16 @@ fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Co
         .context("Failed to send request to Forgejo API")?;
 
     if response.status_code != 200 {
-        anyhow::bail!(
-            "API request failed with status: {}",
-            response.status_code
-        );
+        anyhow::bail!("API request failed with status: {}", response.status_code);
     }
 
-    let comments: Vec<Comment> = response
-        .json()
-        .context("Failed to parse comments response")?;
+    let comments: Vec<Comment> = response.json().context("Failed to parse comments response")?;
 
     Ok(comments)
 }
 
 fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
-    let url = format!(
-        "{}/repos/{}/pulls/{}/reviews",
-        config.api_url(), repo, pr_number
-    );
+    let url = format!("{}/repos/{}/pulls/{}/reviews", config.api_url(), repo, pr_number);
 
     let response = bitreq::get(&url)
         .with_header("Authorization", format!("token {}", config.token))
@@ -548,31 +487,21 @@ fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Com
         .context("Failed to send request to Forgejo API")?;
 
     if response.status_code != 200 {
-        anyhow::bail!(
-            "API request failed with status: {}",
-            response.status_code
-        );
+        anyhow::bail!("API request failed with status: {}", response.status_code);
     }
 
-    let reviews: Vec<Comment> = response
-        .json()
-        .context("Failed to parse reviews response")?;
+    let reviews: Vec<Comment> = response.json().context("Failed to parse reviews response")?;
 
     Ok(reviews)
 }
 
 fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -> Result<()> {
-    let url = format!(
-        "{}/repos/{}/issues/{}/comments",
-        config.api_url(), repo, pr_number
-    );
+    let url = format!("{}/repos/{}/issues/{}/comments", config.api_url(), repo, pr_number);
 
-    let request_body = CommentRequest {
-        body: comment.to_string(),
-    };
+    let request_body = CommentRequest { body: comment.to_string() };
 
-    let body_json = serde_json::to_string(&request_body)
-        .context("Failed to serialize comment request")?;
+    let body_json =
+        serde_json::to_string(&request_body).context("Failed to serialize comment request")?;
 
     let response = bitreq::post(&url)
         .with_header("Authorization", format!("token {}", config.token))
@@ -584,10 +513,7 @@ fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -
         .context("Failed to send request to Forgejo API")?;
 
     if response.status_code != 201 && response.status_code != 200 {
-        anyhow::bail!(
-            "API request failed with status: {}",
-            response.status_code
-        );
+        anyhow::bail!("API request failed with status: {}", response.status_code);
     }
 
     Ok(())
@@ -598,11 +524,7 @@ fn ack_pr(repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
     // Get repository
-    let repo = if let Some(r) = repo {
-        r
-    } else {
-        get_current_repo(&config)?
-    };
+    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
     // Get current branch name
     let branch = get_current_branch()?;
@@ -668,9 +590,10 @@ fn check_for_symlinks() -> Result<Vec<String>> {
 }
 
 fn compute_tree_sha512() -> Result<String> {
-    use std::process::Stdio;
     use std::io::{BufRead, BufReader, Write};
-    use sha2::{Sha512, Digest};
+    use std::process::Stdio;
+
+    use sha2::{Digest, Sha512};
 
     // Get all files in tree
     let output = Command::new("git")
@@ -760,11 +683,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     let config = load_config()?;
 
     // Get repository
-    let repo = if let Some(r) = repo {
-        r
-    } else {
-        get_current_repo(&config)?
-    };
+    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
     println!("Fetching PR #{} from {}...", pr_number, repo);
 
@@ -810,10 +729,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         .context("Failed to fetch PR")?;
 
     if !output.status.success() {
-        anyhow::bail!(
-            "Failed to fetch PR: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        anyhow::bail!("Failed to fetch PR: {}", String::from_utf8_lossy(&output.stderr));
     }
 
     // Get head commit
@@ -822,9 +738,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         .output()
         .context("Failed to get head commit")?;
 
-    let head_commit = String::from_utf8(output.stdout)?
-        .trim()
-        .to_string();
+    let head_commit = String::from_utf8(output.stdout)?.trim().to_string();
 
     println!("Head commit: {}", head_commit);
 
@@ -835,9 +749,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         .context("Failed to checkout base")?;
 
     // Delete old local merge branch if exists
-    let _ = Command::new("git")
-        .args(["branch", "-D", &local_merge_branch])
-        .output();
+    let _ = Command::new("git").args(["branch", "-D", &local_merge_branch]).output();
 
     Command::new("git")
         .args(["checkout", "-b", &local_merge_branch])
@@ -907,12 +819,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     // Show merge details
     println!("\n{} {} into {}", pull_reference, pr.title, target_branch);
     Command::new("git")
-        .args([
-            "log",
-            "--graph",
-            "--topo-order",
-            &format!("{}..{}", base_branch, head_branch),
-        ])
+        .args(["log", "--graph", "--topo-order", &format!("{}..{}", base_branch, head_branch)])
         .status()
         .ok();
 
@@ -970,10 +877,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     println!("Type 'exit' when done.");
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".to_string());
-    Command::new(shell)
-        .arg("-i")
-        .status()
-        .context("Failed to spawn shell")?;
+    Command::new(shell).arg("-i").status().context("Failed to spawn shell")?;
 
     // Verify tree hash unchanged
     let second_sha512 = compute_tree_sha512()?;
@@ -1037,7 +941,10 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 
     // Ask about pushing
     loop {
-        let reply = ask_user(&format!("Type 'push' to push to {}/{}, or 'x' to exit:", repo, target_branch))?;
+        let reply = ask_user(&format!(
+            "Type 'push' to push to {}/{}, or 'x' to exit:",
+            repo, target_branch
+        ))?;
         match reply.as_str() {
             "push" => {
                 println!("Pushing...");
@@ -1048,24 +955,29 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
                     .context("Failed to push")?;
 
                 if !output.status.success() {
-                    anyhow::bail!(
-                        "Push failed: {}",
-                        String::from_utf8_lossy(&output.stderr)
-                    );
+                    anyhow::bail!("Push failed: {}", String::from_utf8_lossy(&output.stderr));
                 }
                 println!("Pushed successfully!");
 
                 // Note: If your repository has "Autodetect manual merge" enabled,
                 // Forgejo will automatically detect this merge and mark the PR as merged.
                 // This may take a few moments to process.
-                println!("\nNote: If 'Autodetect manual merge' is enabled in your repository settings,");
-                println!("      Forgejo will automatically detect and mark PR #{} as merged.", pr_number);
+                println!(
+                    "\nNote: If 'Autodetect manual merge' is enabled in your repository settings,"
+                );
+                println!(
+                    "      Forgejo will automatically detect and mark PR #{} as merged.",
+                    pr_number
+                );
                 println!("      This may take a few moments. Check the PR status in the web UI.");
 
                 break;
             }
             "x" => {
-                println!("Not pushing. You can push later with: git push <remote> {}", target_branch);
+                println!(
+                    "Not pushing. You can push later with: git push <remote> {}",
+                    target_branch
+                );
                 break;
             }
             _ => {
@@ -1082,10 +994,8 @@ fn fetch_all() -> Result<()> {
     let config = load_config()?;
 
     // Get all remotes
-    let output = Command::new("git")
-        .args(["remote"])
-        .output()
-        .context("Failed to get git remotes")?;
+    let output =
+        Command::new("git").args(["remote"]).output().context("Failed to get git remotes")?;
 
     if !output.status.success() {
         anyhow::bail!("Failed to list remotes");
@@ -1122,7 +1032,8 @@ fn fetch_all() -> Result<()> {
         let ssh_prefix = format!("git@{}:", config.ssh_url);
         if let Some(path) = url.strip_prefix(&ssh_prefix) {
             let repo_path = path.strip_suffix(".git").unwrap_or(path);
-            fetch_url = format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
+            fetch_url =
+                format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
         } else {
             // Check for HTTPS URLs on configured host
             let https_prefix = format!("https://{}/", config.https_host());
@@ -1130,16 +1041,19 @@ fn fetch_all() -> Result<()> {
                 let repo_path = path.strip_suffix(".git").unwrap_or(path);
                 // Already HTTPS, just add token if not present
                 if !url.contains('@') {
-                    fetch_url = format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
+                    fetch_url = format!(
+                        "https://{}@{}/{}.git",
+                        config.token,
+                        config.https_host(),
+                        repo_path
+                    );
                 }
             }
         }
 
         // Fetch from the URL
-        let output = Command::new("git")
-            .args(["fetch", &fetch_url])
-            .output()
-            .context("Failed to fetch")?;
+        let output =
+            Command::new("git").args(["fetch", &fetch_url]).output().context("Failed to fetch")?;
 
         if output.status.success() {
             println!("Successfully fetched from {}", remote);
@@ -1153,11 +1067,7 @@ fn fetch_all() -> Result<()> {
     }
 
     // Also run jj git fetch if jj is available
-    if Command::new("jj")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-    {
+    if Command::new("jj").arg("--version").output().is_ok_and(|o| o.status.success()) {
         println!("\nRunning jj git fetch...");
 
         // Set up git URL rewriting to convert SSH to HTTPS with token
@@ -1165,7 +1075,13 @@ fn fetch_all() -> Result<()> {
 
         // Configure URL rewriting for SSH hostname
         Command::new("git")
-            .args(["config", "--local", "--add", &format!("url.{}.insteadOf", https_url), &format!("git@{}:", config.ssh_url)])
+            .args([
+                "config",
+                "--local",
+                "--add",
+                &format!("url.{}.insteadOf", https_url),
+                &format!("git@{}:", config.ssh_url),
+            ])
             .output()
             .ok();
 
@@ -1183,10 +1099,7 @@ fn fetch_all() -> Result<()> {
         if output.status.success() {
             println!("jj git fetch completed successfully");
         } else {
-            println!(
-                "Warning: jj git fetch failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+            println!("Warning: jj git fetch failed: {}", String::from_utf8_lossy(&output.stderr));
         }
     }
 
@@ -1198,11 +1111,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     let config = load_config()?;
 
     // Check if jj is available
-    if !Command::new("jj")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-    {
+    if !Command::new("jj").arg("--version").output().is_ok_and(|o| o.status.success()) {
         anyhow::bail!("jj command not found. Please install jj (jujutsu) first.");
     }
 
@@ -1213,7 +1122,13 @@ fn push_with_jj(current_only: bool) -> Result<()> {
 
     // Configure URL rewriting for SSH hostname
     Command::new("git")
-        .args(["config", "--local", "--add", &format!("url.{}.insteadOf", https_url), &format!("git@{}:", config.ssh_url)])
+        .args([
+            "config",
+            "--local",
+            "--add",
+            &format!("url.{}.insteadOf", https_url),
+            &format!("git@{}:", config.ssh_url),
+        ])
         .output()
         .context("Failed to configure git URL rewriting")?;
 
@@ -1226,10 +1141,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
 
     println!("Running jj git push{}...", if current_only { " -c @" } else { "" });
 
-    let output = Command::new("jj")
-        .args(&args)
-        .output()
-        .context("Failed to run jj git push")?;
+    let output = Command::new("jj").args(&args).output().context("Failed to run jj git push")?;
 
     // Clean up URL rewriting config (remove all instances)
     Command::new("git")
@@ -1244,10 +1156,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
             println!("{}", String::from_utf8_lossy(&output.stdout));
         }
     } else {
-        anyhow::bail!(
-            "jj git push failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        anyhow::bail!("jj git push failed: {}", String::from_utf8_lossy(&output.stderr));
     }
 
     Ok(())

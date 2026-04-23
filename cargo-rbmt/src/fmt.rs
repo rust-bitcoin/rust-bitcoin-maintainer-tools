@@ -8,11 +8,7 @@ use crate::environment::{get_workspace_packages, Package, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Format (or check the formatting of) all packages in the workspace.
-pub fn run(
-    sh: &Shell,
-    check: bool,
-    packages: &[String],
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, check: bool, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let packages = get_workspace_packages(sh, packages)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;

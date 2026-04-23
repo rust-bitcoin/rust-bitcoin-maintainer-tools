@@ -5,7 +5,9 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{discover_features, get_workspace_packages, Package, PackageManifest, ProgressGuard};
+use crate::environment::{
+    discover_features, get_workspace_packages, Package, PackageManifest, ProgressGuard,
+};
 
 /// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
