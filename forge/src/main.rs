@@ -74,7 +74,7 @@ fn load_config() -> Result<Config> {
     anyhow::bail!(
         "Failed to read config file. Tried locations: {}\nLast error: {}",
         config_paths.join(", "),
-        last_error.map(|e| e.to_string()).unwrap_or_else(|| "unknown".to_string())
+        last_error.map_or_else(|| "unknown".to_string(), |e| e.to_string())
     )
 }
 
@@ -250,8 +250,7 @@ fn get_preferred_remote() -> String {
     if Command::new("git")
         .args(["remote", "get-url", "upstream"])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
     {
         "upstream".to_string()
     } else {
@@ -331,8 +330,7 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     let branch_name = format!("pr-{}", pr_number);
 
     // Check if we need to add a remote for the fork
-    let current_repo_name = get_current_repo(&config).unwrap_or(repo.clone());
-    let is_from_fork = pr.head.repo.full_name != current_repo_name;
+    let is_from_fork = pr.head.repo.full_name != repo;
 
     if is_from_fork {
         println!("PR is from a fork, adding remote...");
@@ -657,7 +655,7 @@ fn check_for_symlinks() -> Result<Vec<String>> {
         if parts.len() >= 2 {
             // File mode for symlinks is 120000 (octal)
             if let Ok(mode) = u32::from_str_radix(parts[0], 8) {
-                if (mode & 0o170000) == 0o120000 {
+                if (mode & 0o170_000) == 0o120_000 {
                     if let Some(tab_pos) = line.find('\t') {
                         symlinks.push(line[tab_pos + 1..].to_string());
                     }
@@ -672,6 +670,7 @@ fn check_for_symlinks() -> Result<Vec<String>> {
 fn compute_tree_sha512() -> Result<String> {
     use std::process::Stdio;
     use std::io::{BufRead, BufReader, Write};
+    use sha2::{Sha512, Digest};
 
     // Get all files in tree
     let output = Command::new("git")
@@ -709,7 +708,6 @@ fn compute_tree_sha512() -> Result<String> {
     let stdout = cat_file.stdout.take().context("Failed to get stdout")?;
     let reader = BufReader::new(stdout);
 
-    use sha2::{Sha512, Digest};
     let mut overall = Sha512::new();
 
     let blob_ids: Vec<String> = files_and_blobs.iter().map(|(_, id)| id.clone()).collect();
@@ -756,6 +754,7 @@ fn ask_user(prompt: &str) -> Result<String> {
     Ok(input.trim().to_string())
 }
 
+#[allow(clippy::too_many_lines)]
 fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Result<()> {
     // Load config
     let config = load_config()?;
@@ -932,7 +931,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         for line in comment.body.lines() {
             if line.contains("ACK")
                 && line.contains(head_abbrev)
-                && !line.starts_with(">")
+                && !line.starts_with('>')
                 && !line.starts_with("    ")
             {
                 acks.push((comment.user.login.clone(), line.to_string()));
@@ -942,7 +941,10 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     }
 
     // Add ACKs to message
-    if !acks.is_empty() {
+    if acks.is_empty() {
+        message.push_str("\n\nTop commit has no ACKs.\n");
+        println!("\nWARNING: Top commit has no ACKs!");
+    } else {
         message.push_str("\n\nACKs for top commit:\n");
         for (user, ack_msg) in &acks {
             message.push_str(&format!("  {}:\n    {}\n", user, ack_msg));
@@ -951,9 +953,6 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         for (user, msg) in &acks {
             println!("* {} ({})", msg, user);
         }
-    } else {
-        message.push_str("\n\nTop commit has no ACKs.\n");
-        println!("\nWARNING: Top commit has no ACKs!");
     }
 
     // Add tree hash to message
@@ -1142,14 +1141,14 @@ fn fetch_all() -> Result<()> {
             .output()
             .context("Failed to fetch")?;
 
-        if !output.status.success() {
+        if output.status.success() {
+            println!("Successfully fetched from {}", remote);
+        } else {
             println!(
                 "Warning: Failed to fetch from {}: {}",
                 remote,
                 String::from_utf8_lossy(&output.stderr)
             );
-        } else {
-            println!("Successfully fetched from {}", remote);
         }
     }
 
@@ -1157,8 +1156,7 @@ fn fetch_all() -> Result<()> {
     if Command::new("jj")
         .arg("--version")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
     {
         println!("\nRunning jj git fetch...");
 
@@ -1182,13 +1180,13 @@ fn fetch_all() -> Result<()> {
             .output()
             .ok();
 
-        if !output.status.success() {
+        if output.status.success() {
+            println!("jj git fetch completed successfully");
+        } else {
             println!(
                 "Warning: jj git fetch failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
-        } else {
-            println!("jj git fetch completed successfully");
         }
     }
 
@@ -1203,8 +1201,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     if !Command::new("jj")
         .arg("--version")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
     {
         anyhow::bail!("jj command not found. Please install jj (jujutsu) first.");
     }
@@ -1240,17 +1237,17 @@ fn push_with_jj(current_only: bool) -> Result<()> {
         .output()
         .ok();
 
-    if !output.status.success() {
-        anyhow::bail!(
-            "jj git push failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    } else {
+    if output.status.success() {
         println!("Push completed successfully");
         // Print any output from jj
         if !output.stdout.is_empty() {
             println!("{}", String::from_utf8_lossy(&output.stdout));
         }
+    } else {
+        anyhow::bail!(
+            "jj git push failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     Ok(())
