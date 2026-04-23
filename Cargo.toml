@@ -1,8 +1,6 @@
 [workspace]
 members = [
-    "cargo-rbmt"
-]
-exclude = [
+    "cargo-rbmt",
     "forge"
 ]
 resolver = "2"

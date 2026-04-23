@@ -188,7 +188,7 @@ fn list_prs(repo: Option<String>) -> Result<()> {
     );
 
     let response = bitreq::get(&url)
-        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Authorization", format!("token {}", config.token))
         .with_header("Accept", "*/*")
         .with_header("User-Agent", "curl/8.5.0")
         .send()
@@ -225,7 +225,7 @@ fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> 
 
     // Masquerade as curl because the Forgejo instance blocked requests marked differently.
     let response = bitreq::get(&url)
-        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Authorization", format!("token {}", config.token))
         .with_header("Accept", "*/*")
         .with_header("User-Agent", "curl/8.5.0")
         .send()
@@ -516,7 +516,7 @@ fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Co
     );
 
     let response = bitreq::get(&url)
-        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Authorization", format!("token {}", config.token))
         .with_header("Accept", "*/*")
         .with_header("User-Agent", "curl/8.5.0")
         .send()
@@ -543,7 +543,7 @@ fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Com
     );
 
     let response = bitreq::get(&url)
-        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Authorization", format!("token {}", config.token))
         .with_header("Accept", "*/*")
         .with_header("User-Agent", "curl/8.5.0")
         .send()
@@ -577,7 +577,7 @@ fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -
         .context("Failed to serialize comment request")?;
 
     let response = bitreq::post(&url)
-        .with_header("Authorization", &format!("token {}", config.token))
+        .with_header("Authorization", format!("token {}", config.token))
         .with_header("Accept", "*/*")
         .with_header("Content-Type", "application/json")
         .with_header("User-Agent", "curl/8.5.0")
