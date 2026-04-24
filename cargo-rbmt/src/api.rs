@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use xshell::Shell;
 
 use crate::environment::{
-    get_target_dir, get_workspace_root, Manifest, Package, PackageManifest, ProgressGuard,
+    get_target_dir, get_workspace_packages, get_workspace_root, Manifest, Package,
+    PackageManifest, ProgressGuard,
 };
 use crate::lock::LockFile;
 use crate::{git, toolchain};
@@ -106,15 +107,16 @@ impl FeatureConfig {
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
-    packages: &[Package],
+    packages: &[String],
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
-    check_apis(sh, packages, baseline)?;
+    check_apis(sh, &packages, baseline)?;
 
     Ok(())
 }

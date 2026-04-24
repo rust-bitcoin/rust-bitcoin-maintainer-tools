@@ -2,7 +2,7 @@
 
 use xshell::Shell;
 
-use crate::environment::{Package, ProgressGuard};
+use crate::environment::{get_workspace_packages, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -13,9 +13,10 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
-    packages: &[Package],
+    packages: &[String],
     open: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Stable)?;
@@ -45,9 +46,10 @@ pub fn run(
 pub fn run_docsrs(
     sh: &Shell,
     lockfile: LockFile,
-    packages: &[Package],
+    packages: &[String],
     open: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;

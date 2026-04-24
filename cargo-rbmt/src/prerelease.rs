@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_target_dir, Package, PackageManifest, ProgressGuard};
+use crate::environment::{get_target_dir, get_workspace_packages, PackageManifest, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -44,10 +44,11 @@ impl PrereleaseConfig {
 /// Run pre-release readiness checks for all packages.
 pub fn run(
     sh: &Shell,
-    packages: &[Package],
+    packages: &[String],
     force: bool,
     baseline: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let packages = get_workspace_packages(sh, packages)?;
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running pre-release checks on {} packages", packages.len());
 

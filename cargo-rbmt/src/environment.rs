@@ -164,14 +164,14 @@ macro_rules! rbmt_eprintln {
 ///
 /// # Arguments
 ///
-/// * `packages` - Optional filter for specific package names. If empty, returns all packages.
+/// * `package_filter` - Optional filter for specific package names. If empty, returns all packages.
 ///
 /// # Errors
 ///
 /// Returns an error if any requested package name doesn't exist in the workspace.
-pub fn get_packages(
+pub fn get_workspace_packages(
     sh: &Shell,
-    packages: &[String],
+    package_filter: &[String],
 ) -> Result<Vec<Package>, Box<dyn std::error::Error>> {
     let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
@@ -192,7 +192,7 @@ pub fn get_packages(
         .collect();
 
     // If no package filter specified, return all packages.
-    if packages.is_empty() {
+    if package_filter.is_empty() {
         return Ok(all_packages);
     }
 
@@ -201,7 +201,7 @@ pub fn get_packages(
     let mut resolved_names: Vec<String> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
 
-    for requested in packages {
+    for requested in package_filter {
         // Exact manifest name match.
         if all_packages.iter().any(|pkg| &pkg.name == requested) {
             resolved_names.push(requested.clone());

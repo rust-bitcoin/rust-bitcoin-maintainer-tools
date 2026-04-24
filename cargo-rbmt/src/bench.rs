@@ -2,7 +2,7 @@
 
 use xshell::Shell;
 
-use crate::environment::{OutputMode, Package, ProgressGuard};
+use crate::environment::{get_workspace_packages, OutputMode, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -10,8 +10,9 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
-    packages: &[Package],
+    packages: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
