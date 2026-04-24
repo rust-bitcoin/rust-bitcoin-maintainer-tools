@@ -11,6 +11,7 @@ mod integration;
 mod lint;
 mod lock;
 mod prerelease;
+mod run;
 mod test;
 mod toolchain;
 mod toolchains;
@@ -89,6 +90,15 @@ enum Commands {
     Integration,
     /// Update Cargo-minimal.lock and Cargo-recent.lock files.
     Lock,
+    /// Run arbitrary cargo commands with toolchain and lockfile management.
+    Run {
+        /// Toolchain to use: stable, nightly, or msrv.
+        #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
+        toolchain: Toolchain,
+        /// Cargo command and arguments (everything after `--`).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Run pre-release readiness checks.
     Prerelease {
         /// Run checks even for packages that have pre-release checks disabled.
@@ -200,6 +210,11 @@ fn main() {
         Commands::Lock =>
             if let Err(e) = lock::run(&sh) {
                 eprintln!("Error updating lock files: {}", e);
+                process::exit(1);
+            },
+        Commands::Run { toolchain, args } =>
+            if let Err(e) = run::run(&sh, cli.lockfile, toolchain, args) {
+                eprintln!("Error running cargo command: {}", e);
                 process::exit(1);
             },
         Commands::Prerelease { force, baseline } =>
