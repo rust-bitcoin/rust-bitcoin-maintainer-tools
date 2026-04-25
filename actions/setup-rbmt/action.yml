@@ -21,6 +21,7 @@ runs:
       run: |
         [ -z "$RBMT_VERSION" ] && [ -f rbmt-version ] && RBMT_VERSION=$(cat rbmt-version)
         [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
+        [ -z "$REPO_URL" ] && REPO_URL='https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools'
         cargo install --git "$REPO_URL" --rev "$RBMT_VERSION" cargo-rbmt --locked
 
     - name: Install toolchains
