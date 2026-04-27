@@ -171,13 +171,19 @@ pub fn run(
     sh: &Shell,
     lockfile: LockFile,
     toolchain: Toolchain,
-    no_debug_assertions: bool,
+    debug_assertions: bool,
     release: bool,
     baseline: Option<&str>,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
+
+    // Configure RUSTFLAGS for all tests.
+    let _rustflags_guard = sh.push_env(
+        "RUSTFLAGS",
+        if debug_assertions { "-C debug-assertions=on" } else { "-C debug-assertions=off" },
+    );
 
     if let Some(baseline) = baseline {
         let commits = git::list_commits(sh, baseline)?;
@@ -192,13 +198,13 @@ pub fn run(
             // there are lockfile updates. Guards will unwind in reverse order (LIFO).
             let _git_guard = git::GitSwitchGuard::new(sh, sha)?;
             let _lockfile_guard = lockfile.activate(sh)?;
-            let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
+            let pkg_summaries = test_commit(sh, toolchain, release, packages)?;
             summary.commits.push((sha.clone(), pkg_summaries));
         }
     } else {
         let _lockfile_guard = lockfile.activate(sh)?;
         let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
-        let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
+        let pkg_summaries = test_commit(sh, toolchain, release, packages)?;
         summary.commits.push((sha, pkg_summaries));
     }
 
@@ -212,17 +218,10 @@ pub fn run(
 fn test_commit(
     sh: &Shell,
     toolchain: Toolchain,
-    no_debug_assertions: bool,
     release: bool,
     packages: &[Package],
 ) -> Result<Vec<PackageSummary>, Box<dyn std::error::Error>> {
     rbmt_eprintln!("Testing {} crate(s)", packages.len());
-
-    // Configure RUSTFLAGS for debug assertions.
-    let _env = sh.push_env(
-        "RUSTFLAGS",
-        if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
-    );
 
     let mut pkg_summaries = Vec::new();
 
