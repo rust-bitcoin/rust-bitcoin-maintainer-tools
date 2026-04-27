@@ -5,7 +5,7 @@ use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{
-    get_packages, get_workspace_root, Package, PackageManifest, ProgressGuard,
+    get_packages, get_workspace_root, CmdExt, Package, PackageManifest, ProgressGuard,
 };
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
@@ -64,12 +64,12 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     // Run clippy on workspace with all features.
     rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
         .args(&["--", "-D", "warnings"])
-        .run()?;
+        .run_verbose()?;
 
     // Run clippy on workspace without features.
     rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
         .args(&["--", "-D", "warnings"])
-        .run()?;
+        .run_verbose()?;
 
     Ok(())
 }
@@ -96,7 +96,7 @@ fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::er
         // Run clippy without default features.
         rbmt_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
             .args(&["--", "-D", "warnings"])
-            .run()?;
+            .run_verbose()?;
     }
 
     Ok(())
