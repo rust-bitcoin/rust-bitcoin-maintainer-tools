@@ -38,17 +38,19 @@ pub trait CmdExt {
 
 impl CmdExt for Cmd<'_> {
     fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Unconditionally grab stdout and ignore the exit status
+        // Unconditionally grab stdout/stderr and ignore the exit status
         // since we handle piping it out below based on if a build
         // or test command fails.
         self.set_ignore_stdout(false);
+        self.set_ignore_stderr(false);
         self.set_ignore_status(true);
 
         // Run command and capture output.
         let output = self.output()?;
 
-        // Pipe out stdout in verbose mode or on failure.
+        // Pipe out stderr and stdout in verbose mode or on failure.
         if matches!(OutputMode::from_env(), OutputMode::Verbose) || !output.status.success() {
+            eprint!("{}", String::from_utf8(output.stderr)?);
             print!("{}", String::from_utf8(output.stdout)?);
         }
 
