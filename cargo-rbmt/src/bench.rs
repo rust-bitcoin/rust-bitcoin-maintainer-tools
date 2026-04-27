@@ -7,7 +7,11 @@ use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Run benchmark tests for all crates in the workspace.
-pub fn run(sh: &Shell, lockfile: LockFile, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    sh: &Shell,
+    lockfile: LockFile,
+    packages: &[Package],
+) -> Result<(), Box<dyn std::error::Error>> {
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;

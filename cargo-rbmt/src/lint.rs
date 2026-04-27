@@ -37,7 +37,11 @@ impl LintConfig {
 }
 
 /// Run the lint task.
-pub fn run(sh: &Shell, lockfile: LockFile, packages: &[Package]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    sh: &Shell,
+    lockfile: LockFile,
+    packages: &[Package],
+) -> Result<(), Box<dyn std::error::Error>> {
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
