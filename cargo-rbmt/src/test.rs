@@ -9,55 +9,14 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use serde::Deserialize;
-use xshell::{Cmd, Shell};
+use xshell::Shell;
 
 use crate::environment::{
-    discover_features, git_commit_id, OutputMode, Package, PackageManifest, ProgressGuard,
+    discover_features, git_commit_id, CmdExt, Package, PackageManifest, ProgressGuard,
 };
 use crate::git;
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
-
-/// Extension trait for test commands with conditional output and release support.
-trait TestCmdExt {
-    /// Run command and show output only in Verbose mode, but always show on failure.
-    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    /// Conditionally append `--release` flag and run.
-    fn set_release(self, release: bool) -> Self;
-}
-
-impl TestCmdExt for Cmd<'_> {
-    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Unconditionally grab stdout and ignore the exit status
-        // since we handle piping it out below based on if a build
-        // or test command fails.
-        self.set_ignore_stdout(false);
-        self.set_ignore_status(true);
-
-        // Run command and capture output.
-        let output = self.output()?;
-
-        // Pipe out stdout in verbose mode or on failure.
-        if matches!(OutputMode::from_env(), OutputMode::Verbose) || !output.status.success() {
-            print!("{}", String::from_utf8(output.stdout)?);
-        }
-
-        // Err on command failure.
-        if !output.status.success() {
-            return Err(format!("Command failed: {}", output.status).into());
-        }
-
-        Ok(())
-    }
-
-    fn set_release(self, release: bool) -> Self {
-        if release {
-            self.arg("--release")
-        } else {
-            self
-        }
-    }
-}
 
 /// Summary of everything tested for a single package.
 #[derive(Debug, Default)]

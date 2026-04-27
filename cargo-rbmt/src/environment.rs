@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use xshell::Shell;
+use xshell::{Cmd, Shell};
 
 /// Environment variable to control output verbosity.
 const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
@@ -24,6 +24,47 @@ impl OutputMode {
             Ok("progress") => Self::Progress,
             Ok("quiet") => Self::Quiet,
             _ => Self::Verbose,
+        }
+    }
+}
+
+/// Extension trait for commands with conditional output and release support.
+pub trait CmdExt {
+    /// Run command and show output only in Verbose mode, but always show on failure.
+    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    /// Conditionally append `--release` flag and run.
+    fn set_release(self, release: bool) -> Self;
+}
+
+impl CmdExt for Cmd<'_> {
+    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Unconditionally grab stdout and ignore the exit status
+        // since we handle piping it out below based on if a build
+        // or test command fails.
+        self.set_ignore_stdout(false);
+        self.set_ignore_status(true);
+
+        // Run command and capture output.
+        let output = self.output()?;
+
+        // Pipe out stdout in verbose mode or on failure.
+        if matches!(OutputMode::from_env(), OutputMode::Verbose) || !output.status.success() {
+            print!("{}", String::from_utf8(output.stdout)?);
+        }
+
+        // Err on command failure.
+        if !output.status.success() {
+            return Err(format!("Command failed: {}", output.status).into());
+        }
+
+        Ok(())
+    }
+
+    fn set_release(self, release: bool) -> Self {
+        if release {
+            self.arg("--release")
+        } else {
+            self
         }
     }
 }
