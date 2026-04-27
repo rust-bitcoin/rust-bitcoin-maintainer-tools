@@ -32,7 +32,7 @@ impl OutputMode {
 pub trait CmdExt {
     /// Run command and show output only in Verbose mode, but always show on failure.
     fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    /// Conditionally append `--release` flag and run.
+    /// Conditionally append `--release` flag.
     fn set_release(self, release: bool) -> Self;
 }
 
