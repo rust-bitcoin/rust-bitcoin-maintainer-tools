@@ -108,10 +108,15 @@ fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
 fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing toolchain {}", toolchain);
 
+    // --no-self-update keeps rustup from updating itself, not related to toolchains.
     rbmt_cmd!(
         sh,
         "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
     )
+    // An unstable fallback feature which makes updating toolchains more robust
+    // when working inside containers (the usual for CI actions). Should not
+    // have any effect elsewhere.
+    .env("RUSTUP_PERMIT_COPY_RENAME", "true")
     // Always suppress stdout so that only the `export` statements printed by
     // [`run`] reach stdout. This matters because the caller does
     // `eval "$(cargo rbmt toolchains)"`, and any stray rustup stdout would be
