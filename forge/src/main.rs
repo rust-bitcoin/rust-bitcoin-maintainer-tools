@@ -275,6 +275,19 @@ fn get_current_repo(config: &Config) -> Result<String> {
 }
 
 fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
+    // Check if working directory is clean
+    let status_output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()
+        .context("Failed to check git status")?;
+
+    if !status_output.stdout.is_empty() {
+        anyhow::bail!(
+            "Working directory is not clean. Please commit or stash your changes before checking out a PR.\n\
+             Use 'git status' to see uncommitted changes."
+        );
+    }
+
     // Load config
     let config = load_config()?;
 
