@@ -1006,9 +1006,20 @@ fn fetch_all() -> Result<()> {
             }
         }
 
-        // Fetch from the URL
+        // Temporarily override the remote URL to use HTTPS with token
+        let original_url = url.clone();
+        if fetch_url != original_url {
+            Command::new("git").args(["remote", "set-url", remote, &fetch_url]).output().ok();
+        }
+
+        // Fetch from the remote name (this updates remote-tracking branches)
         let output =
-            Command::new("git").args(["fetch", &fetch_url]).output().context("Failed to fetch")?;
+            Command::new("git").args(["fetch", remote]).output().context("Failed to fetch")?;
+
+        // Restore original URL if we changed it
+        if fetch_url != original_url {
+            Command::new("git").args(["remote", "set-url", remote, &original_url]).output().ok();
+        }
 
         if output.status.success() {
             println!("Successfully fetched from {}", remote);
