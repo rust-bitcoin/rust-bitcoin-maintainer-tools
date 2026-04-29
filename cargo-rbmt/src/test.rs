@@ -12,7 +12,8 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    discover_features, git_commit_id, CmdExt, Package, PackageManifest, ProgressGuard,
+    discover_features, get_workspace_packages, git_commit_id, CmdExt, Package, PackageManifest,
+    ProgressGuard,
 };
 use crate::git;
 use crate::lock::LockFile;
@@ -174,7 +175,7 @@ pub fn run(
     debug_assertions: bool,
     release: bool,
     baseline: Option<&str>,
-    packages: &[Package],
+    packages: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
@@ -198,13 +199,16 @@ pub fn run(
             // there are lockfile updates. Guards will unwind in reverse order (LIFO).
             let _git_guard = git::GitSwitchGuard::new(sh, sha)?;
             let _lockfile_guard = lockfile.activate(sh)?;
-            let pkg_summaries = test_commit(sh, toolchain, release, packages)?;
+            // Resolve packages for each commit, so we only test packages that exist in that commit.
+            let packages = get_workspace_packages(sh, packages)?;
+            let pkg_summaries = test_commit(sh, toolchain, release, &packages)?;
             summary.commits.push((sha.clone(), pkg_summaries));
         }
     } else {
+        let packages = get_workspace_packages(sh, packages)?;
         let _lockfile_guard = lockfile.activate(sh)?;
         let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
-        let pkg_summaries = test_commit(sh, toolchain, release, packages)?;
+        let pkg_summaries = test_commit(sh, toolchain, release, &packages)?;
         summary.commits.push((sha, pkg_summaries));
     }
 

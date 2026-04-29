@@ -5,7 +5,7 @@ use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{
-    get_packages, get_workspace_root, CmdExt, Package, PackageManifest, ProgressGuard,
+    get_workspace_packages, get_workspace_root, CmdExt, Package, PackageManifest, ProgressGuard,
 };
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
@@ -40,18 +40,19 @@ impl LintConfig {
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
-    packages: &[Package],
+    packages: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Running lint task...");
 
     lint_workspace(sh)?;
-    lint_packages(sh, packages)?;
-    check_duplicate_deps(sh, packages)?;
+    lint_packages(sh, &packages)?;
+    check_duplicate_deps(sh, &packages)?;
     check_cross_package_duplicate_deps(sh)?;
-    check_clippy_toml_msrv(sh, packages)?;
+    check_clippy_toml_msrv(sh, &packages)?;
 
     rbmt_eprintln!("Lint task completed successfully");
     Ok(())
@@ -185,7 +186,7 @@ fn check_duplicate_deps(
 /// [`check_duplicate_deps`] if a workspace contains a facade package which re-exports all
 /// the other packages of the workspace.
 fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    let package_info = get_packages(sh, &[])?;
+    let package_info = get_workspace_packages(sh, &[])?;
 
     // No point running a workspace-level check for a single package.
     if package_info.len() <= 1 {

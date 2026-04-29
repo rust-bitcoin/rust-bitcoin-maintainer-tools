@@ -4,15 +4,12 @@ use std::fs;
 
 use xshell::Shell;
 
-use crate::environment::{Package, ProgressGuard};
+use crate::environment::{get_workspace_packages, Package, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Format (or check the formatting of) all packages in the workspace.
-pub fn run(
-    sh: &Shell,
-    check: bool,
-    packages: &[Package],
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sh: &Shell, check: bool, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let packages = get_workspace_packages(sh, packages)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
@@ -27,7 +24,7 @@ pub fn run(
     if packages.is_empty() {
         cmd = cmd.arg("--all");
     } else {
-        for package in packages {
+        for package in &packages {
             cmd = cmd.args(&["-p", &package.name]);
         }
     }
@@ -41,7 +38,7 @@ pub fn run(
     if check {
         rbmt_eprintln!("Formatting check passed");
     } else {
-        remove_trailing_whitespace(sh, packages)?;
+        remove_trailing_whitespace(sh, &packages)?;
         rbmt_eprintln!("Formatting complete");
     }
 

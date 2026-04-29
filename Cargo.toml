@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "cargo-rbmt"
+    "cargo-rbmt",
+    "forge"
 ]
 resolver = "2"
 
