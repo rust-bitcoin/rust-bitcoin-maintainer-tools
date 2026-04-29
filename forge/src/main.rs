@@ -1139,15 +1139,21 @@ fn push_with_jj(current_only: bool) -> Result<()> {
         .output()
         .ok();
 
-    if output.status.success() {
-        println!("Push completed successfully");
-        // Print any output from jj
-        if !output.stdout.is_empty() {
-            println!("{}", String::from_utf8_lossy(&output.stdout));
-        }
-    } else {
-        anyhow::bail!("jj git push failed: {}", String::from_utf8_lossy(&output.stderr));
+    // Print stdout
+    if !output.stdout.is_empty() {
+        print!("{}", String::from_utf8_lossy(&output.stdout));
     }
+
+    // Print stderr
+    if !output.stderr.is_empty() {
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    if !output.status.success() {
+        anyhow::bail!("jj git push failed");
+    }
+
+    println!("Push completed successfully");
 
     Ok(())
 }
