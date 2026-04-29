@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 // Allow all other modules to use environment macros.
 #[macro_use]
 mod environment;

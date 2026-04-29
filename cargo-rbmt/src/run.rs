@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 //! Run arbitrary cargo commands with specified toolchain and lockfile management.
 
 use xshell::Shell;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 use xshell::Shell;
 
 use crate::environment::ProgressGuard;

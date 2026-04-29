@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 //! Management of pinned external cargo tools.
 //!
 //! Cargo currently has no native mechanism for pinning the versions of tools

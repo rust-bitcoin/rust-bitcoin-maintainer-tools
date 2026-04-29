@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 //! Rust toolchain management.
 //!
 //! Toolchain versions are stored in the root `Cargo.toml` manifest. The preferred location is

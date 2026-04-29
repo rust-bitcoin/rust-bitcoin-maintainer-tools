@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 //! Build and test tasks with feature matrix testing.
 //!
 //! `cargo build` runs before `cargo test` throughout this module to try
