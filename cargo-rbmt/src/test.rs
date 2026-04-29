@@ -9,55 +9,14 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use serde::Deserialize;
-use xshell::{Cmd, Shell};
+use xshell::Shell;
 
 use crate::environment::{
-    discover_features, git_commit_id, OutputMode, Package, PackageManifest, ProgressGuard,
+    discover_features, git_commit_id, CmdExt, Package, PackageManifest, ProgressGuard,
 };
 use crate::git;
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
-
-/// Extension trait for test commands with conditional output and release support.
-trait TestCmdExt {
-    /// Run command and show output only in Verbose mode, but always show on failure.
-    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    /// Conditionally append `--release` flag and run.
-    fn set_release(self, release: bool) -> Self;
-}
-
-impl TestCmdExt for Cmd<'_> {
-    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Unconditionally grab stdout and ignore the exit status
-        // since we handle piping it out below based on if a build
-        // or test command fails.
-        self.set_ignore_stdout(false);
-        self.set_ignore_status(true);
-
-        // Run command and capture output.
-        let output = self.output()?;
-
-        // Pipe out stdout in verbose mode or on failure.
-        if matches!(OutputMode::from_env(), OutputMode::Verbose) || !output.status.success() {
-            print!("{}", String::from_utf8(output.stdout)?);
-        }
-
-        // Err on command failure.
-        if !output.status.success() {
-            return Err(format!("Command failed: {}", output.status).into());
-        }
-
-        Ok(())
-    }
-
-    fn set_release(self, release: bool) -> Self {
-        if release {
-            self.arg("--release")
-        } else {
-            self
-        }
-    }
-}
 
 /// Summary of everything tested for a single package.
 #[derive(Debug, Default)]
@@ -212,13 +171,19 @@ pub fn run(
     sh: &Shell,
     lockfile: LockFile,
     toolchain: Toolchain,
-    no_debug_assertions: bool,
+    debug_assertions: bool,
     release: bool,
     baseline: Option<&str>,
     packages: &[Package],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
+
+    // Configure RUSTFLAGS for all tests.
+    let _rustflags_guard = sh.push_env(
+        "RUSTFLAGS",
+        if debug_assertions { "-C debug-assertions=on" } else { "-C debug-assertions=off" },
+    );
 
     if let Some(baseline) = baseline {
         let commits = git::list_commits(sh, baseline)?;
@@ -233,13 +198,13 @@ pub fn run(
             // there are lockfile updates. Guards will unwind in reverse order (LIFO).
             let _git_guard = git::GitSwitchGuard::new(sh, sha)?;
             let _lockfile_guard = lockfile.activate(sh)?;
-            let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
+            let pkg_summaries = test_commit(sh, toolchain, release, packages)?;
             summary.commits.push((sha.clone(), pkg_summaries));
         }
     } else {
         let _lockfile_guard = lockfile.activate(sh)?;
         let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
-        let pkg_summaries = test_commit(sh, toolchain, no_debug_assertions, release, packages)?;
+        let pkg_summaries = test_commit(sh, toolchain, release, packages)?;
         summary.commits.push((sha, pkg_summaries));
     }
 
@@ -253,17 +218,10 @@ pub fn run(
 fn test_commit(
     sh: &Shell,
     toolchain: Toolchain,
-    no_debug_assertions: bool,
     release: bool,
     packages: &[Package],
 ) -> Result<Vec<PackageSummary>, Box<dyn std::error::Error>> {
     rbmt_eprintln!("Testing {} crate(s)", packages.len());
-
-    // Configure RUSTFLAGS for debug assertions.
-    let _env = sh.push_env(
-        "RUSTFLAGS",
-        if no_debug_assertions { "-C debug-assertions=off" } else { "-C debug-assertions=on" },
-    );
 
     let mut pkg_summaries = Vec::new();
 

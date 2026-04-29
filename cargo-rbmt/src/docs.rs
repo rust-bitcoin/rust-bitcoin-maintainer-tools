@@ -10,7 +10,12 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 ///
 /// This verifies that `cargo doc` works correctly for users with stable Rust.
 /// Uses basic rustdoc warnings to catch common documentation issues.
-pub fn run(sh: &Shell, lockfile: LockFile, packages: &[Package], open: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    sh: &Shell,
+    lockfile: LockFile,
+    packages: &[Package],
+    open: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Stable)?;

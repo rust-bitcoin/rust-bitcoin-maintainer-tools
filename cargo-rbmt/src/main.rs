@@ -194,7 +194,7 @@ fn main() {
                 &sh,
                 cli.lockfile,
                 toolchain,
-                no_debug_assertions,
+                !no_debug_assertions,
                 release,
                 baseline.as_deref(),
                 &packages,
