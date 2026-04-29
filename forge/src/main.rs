@@ -1028,9 +1028,14 @@ fn fetch_all() -> Result<()> {
         // Convert SSH URLs to HTTPS with token
         let mut fetch_url = url.clone();
 
-        // Check for SSH format: git@host:owner/repo
-        let ssh_prefix = format!("git@{}:", config.ssh_url);
-        if let Some(path) = url.strip_prefix(&ssh_prefix) {
+        // Check for full SSH format: ssh://git@host/owner/repo
+        let full_ssh_prefix = format!("ssh://git@{}/", config.ssh_url);
+        if let Some(path) = url.strip_prefix(&full_ssh_prefix) {
+            let repo_path = path.strip_suffix(".git").unwrap_or(path);
+            fetch_url =
+                format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
+        } else if let Some(path) = url.strip_prefix(&format!("git@{}:", config.ssh_url)) {
+            // Check for short SSH format: git@host:owner/repo
             let repo_path = path.strip_suffix(".git").unwrap_or(path);
             fetch_url =
                 format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
@@ -1073,7 +1078,7 @@ fn fetch_all() -> Result<()> {
         // Set up git URL rewriting to convert SSH to HTTPS with token
         let https_url = format!("https://{}@{}/", config.token, config.https_host());
 
-        // Configure URL rewriting for SSH hostname
+        // Configure URL rewriting for short SSH format (git@host:)
         Command::new("git")
             .args([
                 "config",
@@ -1081,6 +1086,18 @@ fn fetch_all() -> Result<()> {
                 "--add",
                 &format!("url.{}.insteadOf", https_url),
                 &format!("git@{}:", config.ssh_url),
+            ])
+            .output()
+            .ok();
+
+        // Configure URL rewriting for full SSH format (ssh://git@host/)
+        Command::new("git")
+            .args([
+                "config",
+                "--local",
+                "--add",
+                &format!("url.{}.insteadOf", https_url),
+                &format!("ssh://git@{}/", config.ssh_url),
             ])
             .output()
             .ok();
@@ -1120,7 +1137,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     // Set up git URL rewriting to convert SSH to HTTPS with token
     let https_url = format!("https://{}@{}/", config.token, config.https_host());
 
-    // Configure URL rewriting for SSH hostname
+    // Configure URL rewriting for short SSH format (git@host:)
     Command::new("git")
         .args([
             "config",
@@ -1128,6 +1145,18 @@ fn push_with_jj(current_only: bool) -> Result<()> {
             "--add",
             &format!("url.{}.insteadOf", https_url),
             &format!("git@{}:", config.ssh_url),
+        ])
+        .output()
+        .context("Failed to configure git URL rewriting")?;
+
+    // Configure URL rewriting for full SSH format (ssh://git@host/)
+    Command::new("git")
+        .args([
+            "config",
+            "--local",
+            "--add",
+            &format!("url.{}.insteadOf", https_url),
+            &format!("ssh://git@{}/", config.ssh_url),
         ])
         .output()
         .context("Failed to configure git URL rewriting")?;
