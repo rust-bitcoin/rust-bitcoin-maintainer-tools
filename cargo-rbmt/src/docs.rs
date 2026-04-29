@@ -22,7 +22,7 @@ pub fn run(
     prepare_toolchain(sh, Toolchain::Stable)?;
     rbmt_eprintln!("Building docs...");
 
-    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps");
+    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps --examples");
 
     // Add package filters if specified.
     for package in packages {
@@ -55,7 +55,7 @@ pub fn run_docsrs(
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Building docs...");
 
-    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps");
+    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps --examples");
 
     // Add package filters if specified.
     for package in packages {
