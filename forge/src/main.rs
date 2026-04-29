@@ -293,114 +293,64 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     // Create a branch name for the PR
     let branch_name = format!("pr-{}", pr_number);
 
-    // Check if we need to add a remote for the fork
-    let is_from_fork = pr.head.repo.full_name != repo;
+    // Fetch directly from the PR repository URL (works for both forks and same-repo PRs)
+    println!("Fetching from {}...", pr.head.repo.clone_url);
+    let output = Command::new("git")
+        .args(["fetch", &pr.head.repo.clone_url, &pr.head.ref_name])
+        .output()
+        .context("Failed to fetch from PR repository")?;
 
-    if is_from_fork {
-        println!("PR is from a fork, adding remote...");
-        let remote_name = format!("pr-{}-fork", pr_number);
+    if !output.status.success() {
+        anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&output.stderr));
+    }
 
-        // Try to add the remote (ignore error if it already exists)
-        let _ = Command::new("git")
-            .args(["remote", "add", &remote_name, &pr.head.repo.clone_url])
-            .output();
+    // Checkout the branch
+    println!("Checking out branch {}...", branch_name);
 
-        // Fetch from the fork remote
-        println!("Fetching from remote {}...", remote_name);
+    // First try to create a new branch from FETCH_HEAD
+    let output = Command::new("git")
+        .args(["checkout", "-b", &branch_name, "FETCH_HEAD"])
+        .output()
+        .context("Failed to checkout branch")?;
+
+    if !output.status.success() {
+        // Branch might already exist, try to switch to it
         let output = Command::new("git")
-            .args(["fetch", &remote_name, &pr.head.ref_name])
+            .args(["checkout", &branch_name])
             .output()
-            .context("Failed to fetch from fork remote")?;
+            .context("Failed to checkout existing branch")?;
 
         if !output.status.success() {
-            anyhow::bail!("Failed to fetch from fork: {}", String::from_utf8_lossy(&output.stderr));
+            anyhow::bail!("Failed to checkout branch: {}", String::from_utf8_lossy(&output.stderr));
         }
 
-        // Checkout the branch
-        println!("Checking out branch {}...", branch_name);
-
-        // First try to create a new branch from FETCH_HEAD
+        // Reset to FETCH_HEAD to ensure we're at the right commit
         let output = Command::new("git")
-            .args(["checkout", "-b", &branch_name, "FETCH_HEAD"])
+            .args(["reset", "--hard", "FETCH_HEAD"])
             .output()
-            .context("Failed to checkout branch")?;
+            .context("Failed to reset branch")?;
 
         if !output.status.success() {
-            // Branch might already exist, try to switch to it
-            let output = Command::new("git")
-                .args(["checkout", &branch_name])
-                .output()
-                .context("Failed to checkout existing branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to checkout branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-
-            // Reset to FETCH_HEAD to ensure we're at the right commit
-            let output = Command::new("git")
-                .args(["reset", "--hard", "FETCH_HEAD"])
-                .output()
-                .context("Failed to reset branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to reset branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-        }
-    } else {
-        // PR is from the same repo, fetch directly from the clone URL
-        println!("Fetching from {}...", pr.head.repo.clone_url);
-        let output = Command::new("git")
-            .args(["fetch", &pr.head.repo.clone_url, &pr.head.ref_name])
-            .output()
-            .context("Failed to fetch from repo")?;
-
-        if !output.status.success() {
-            anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&output.stderr));
-        }
-
-        // Checkout the branch
-        println!("Checking out branch {}...", branch_name);
-
-        // First try to create a new branch from FETCH_HEAD
-        let output = Command::new("git")
-            .args(["checkout", "-b", &branch_name, "FETCH_HEAD"])
-            .output()
-            .context("Failed to checkout branch")?;
-
-        if !output.status.success() {
-            // Branch might already exist, try to switch to it
-            let output = Command::new("git")
-                .args(["checkout", &branch_name])
-                .output()
-                .context("Failed to checkout existing branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to checkout branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-
-            // Reset to FETCH_HEAD to ensure we're at the right commit
-            let output = Command::new("git")
-                .args(["reset", "--hard", "FETCH_HEAD"])
-                .output()
-                .context("Failed to reset branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to reset branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
+            anyhow::bail!("Failed to reset branch: {}", String::from_utf8_lossy(&output.stderr));
         }
     }
+
+    // Configure the branch to track the remote URL directly
+    let merge_ref = format!("refs/heads/{}", pr.head.ref_name);
+    Command::new("git")
+        .args(["config", &format!("branch.{}.remote", branch_name), &pr.head.repo.clone_url])
+        .output()
+        .context("Failed to set branch.remote config")?;
+
+    Command::new("git")
+        .args(["config", &format!("branch.{}.pushRemote", branch_name), &pr.head.repo.clone_url])
+        .output()
+        .context("Failed to set branch.pushRemote config")?;
+
+    Command::new("git")
+        .args(["config", &format!("branch.{}.merge", branch_name), &merge_ref])
+        .output()
+        .context("Failed to set branch.merge config")?;
 
     println!("Successfully checked out PR #{}", pr_number);
 
