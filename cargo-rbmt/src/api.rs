@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

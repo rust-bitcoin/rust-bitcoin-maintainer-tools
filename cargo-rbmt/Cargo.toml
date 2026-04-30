@@ -6,7 +6,7 @@ description = "Maintainer tools for rust-bitcoin projects"
 repository = "https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools"
 keywords = ["bitcoin"]
 categories = ["development-tools::cargo-plugins"]
-license = "CC0-1.0"
+license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.85.0"
 

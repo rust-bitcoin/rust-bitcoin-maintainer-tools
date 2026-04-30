@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 //! Manage cargo lock files for minimal and recent dependency versions.
 //!
 //! Note: These commands intentionally omit `--locked` because they need to

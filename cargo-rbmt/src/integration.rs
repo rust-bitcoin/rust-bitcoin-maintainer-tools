@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 //! Integration test tasks for packages with bitcoind-tests or similar test packages.
 
 use std::path::Path;

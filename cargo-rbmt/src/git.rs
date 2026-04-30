@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT AND Apache-2.0
+
 //! Git utilities for switching refs and enumerating commits.
 
 use std::fmt;
