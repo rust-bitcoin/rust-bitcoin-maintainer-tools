@@ -1,7 +1,7 @@
 use xshell::Shell;
 
 use crate::environment::ProgressGuard;
-use crate::toolchain::{get_workspace_msrv, Toolchain};
+use crate::toolchain::Toolchain;
 
 /// Fixed components installed on every toolchain.
 const COMPONENTS: &str = "rust-src,clippy,rustfmt";
@@ -9,15 +9,22 @@ const COMPONENTS: &str = "rust-src,clippy,rustfmt";
 /// Fixed target installed on every toolchain (for no-std cross-compilation testing).
 const TARGET: &str = "thumbv7m-none-eabi";
 
-/// Install all three toolchains (nightly, stable, MSRV) and optionally print versions.
+/// Status string for toolchains that are not configured.
+const NOT_CONFIGURED: &str = "(not configured)";
+
+/// Install configured toolchains nightly, stable, and MSRV.
 ///
 /// When `update_nightly` is true, the floating `nightly` toolchain is first
 /// installed, its resolved version queried from rustc, and the result written
 /// to `nightly-version` before the normal install path runs. When `update_stable` is
 /// true, the same is done for `stable-version`.
 ///
-/// When `msrv`, `nightly`, or `stable` is true, print the correspoinding version
-/// to stdout and exit without installing any toolchains.
+/// When `msrv`, `nightly`, or `stable` is true, print the corresponding version
+/// to stdout and exit without installing any toolchains. If a requested version is
+/// not configured, it is not printed (silent handling).
+///
+/// During normal installation, any missing toolchain configurations trigger a warning
+/// but do not prevent installation of the remaining toolchains.
 #[allow(clippy::fn_params_excessive_bools)]
 pub fn run(
     sh: &Shell,
@@ -29,20 +36,23 @@ pub fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _progress = ProgressGuard::new();
     if msrv {
-        let msrv = get_workspace_msrv(sh)?;
-        println!("{}", msrv);
+        if let Some(msrv) = Toolchain::Msrv.try_read_version(sh) {
+            println!("{}", msrv);
+        }
         return Ok(());
     }
 
     if nightly {
-        let nightly_version = Toolchain::Nightly.read_version(sh)?;
-        println!("{}", nightly_version);
+        if let Some(nightly_version) = Toolchain::Nightly.try_read_version(sh) {
+            println!("{}", nightly_version);
+        }
         return Ok(());
     }
 
     if stable {
-        let stable_version = Toolchain::Stable.read_version(sh)?;
-        println!("{}", stable_version);
+        if let Some(stable_version) = Toolchain::Stable.try_read_version(sh) {
+            println!("{}", stable_version);
+        }
         return Ok(());
     }
 
@@ -60,19 +70,35 @@ pub fn run(
         rbmt_eprintln!("Updated stable-version: {}", version);
     }
 
-    let nightly_version = Toolchain::Nightly.read_version(sh)?;
-    let stable_version = Toolchain::Stable.read_version(sh)?;
-    let msrv_version = get_workspace_msrv(sh)?;
+    let nightly_status = if let Some(version) = Toolchain::Nightly.try_read_version(sh) {
+        install_toolchain(sh, &version)?;
+        version
+    } else {
+        rbmt_eprintln!("No pinned nightly toolchain found in [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains]");
+        NOT_CONFIGURED.to_string()
+    };
 
-    install_toolchain(sh, &nightly_version)?;
-    install_toolchain(sh, &stable_version)?;
-    install_toolchain(sh, &msrv_version)?;
+    let stable_status = if let Some(version) = Toolchain::Stable.try_read_version(sh) {
+        install_toolchain(sh, &version)?;
+        version
+    } else {
+        rbmt_eprintln!("No pinned stable toolchain found in [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains]");
+        NOT_CONFIGURED.to_string()
+    };
+
+    let msrv_status = if let Some(version) = Toolchain::Msrv.try_read_version(sh) {
+        install_toolchain(sh, &version)?;
+        version
+    } else {
+        rbmt_eprintln!("No MSRV (rust-version) found in any Cargo.toml in the workspace");
+        NOT_CONFIGURED.to_string()
+    };
 
     rbmt_eprintln!(
-        "Installed toolchains: nightly={}, stable={}, msrv={}",
-        nightly_version,
-        stable_version,
-        msrv_version
+        "Toolchain installation complete: nightly={}, stable={}, msrv={}",
+        nightly_status,
+        stable_status,
+        msrv_status
     );
 
     Ok(())
