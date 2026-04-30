@@ -1,14 +1,14 @@
 # `rust-bitcoin` Maintainer Tools
 
 [![CI](https://github.com/nyonson/rust-bitcoin-maintainer-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/nyonson/rust-bitcoin-maintainer-tools/actions/workflows/ci.yml)
-[![CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](http://creativecommons.org/publicdomain/zero/1.0/)
 
 This repository contains utilities for maintaining projects in the rust-bitcoin ecosystem.
 
 * [`actions`](./actions) composable CI actions for Github/Forgejo actions.
 * [`ci`](./ci) holds the legacy shell scripts for continuous integration tests in the rust-bitcoin ecosystem.
-* [`cargo-rbmt`](./cargo-rbmt) package is a rust re-write of the legacy `ci` scripts with new features.
+* [`cargo-rbmt`](./cargo-rbmt) is a rust re-write of the legacy `ci` scripts, providing advanced test and lint features.
 * [`docs`](./docs) contains notes on overall design.
+* [`forge`](./forge) is a tool for working with the rust-bitcoin's central repository server.
 * [`runner`](./runner`) infrastructure for CI runners.
 
 ## Contributing
