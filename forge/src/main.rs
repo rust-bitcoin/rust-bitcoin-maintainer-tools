@@ -952,6 +952,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)] // Who cares, this file is mainly read and created by AI.
 fn fetch_all() -> Result<()> {
     // Load config
     let config = load_config()?;
