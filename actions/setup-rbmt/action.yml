@@ -3,7 +3,7 @@ description: |
   Install cargo-rbmt.
 inputs:
   rbmt-version:
-    description: 'Git ref (commit, tag, or branch) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root, or falls back to master.'
+    description: 'Git revision (SHA) of cargo-rbmt to install. If not provided, reads from rbmt-version file in repo root.'
     required: false
   repo-url:
     description: 'Git repository URL to install cargo-rbmt from. Defaults to the primary upstream repository.'
@@ -20,7 +20,6 @@ runs:
         REPO_URL: ${{ inputs.repo-url }}
       run: |
         [ -z "$RBMT_VERSION" ] && [ -f rbmt-version ] && RBMT_VERSION=$(cat rbmt-version)
-        [ -z "$RBMT_VERSION" ] && RBMT_VERSION=master
         [ -z "$REPO_URL" ] && REPO_URL='https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools'
         cargo install --git "$REPO_URL" --rev "$RBMT_VERSION" cargo-rbmt --locked
 
