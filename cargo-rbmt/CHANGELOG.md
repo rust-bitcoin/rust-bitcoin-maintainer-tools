@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-29
+
 * Add `run` command as a cargo passthrough with toolchain and lockfile management.
 * Add `progress` mode to `RBMT_LOG_LEVEL` for interactive use.
 * Add trailing newline clean up to `fmt`.
@@ -23,5 +25,6 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...HEAD
+[Unreleased]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...HEAD
+[0.2.0]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...cargo-rbmt-0.2.0
 [0.1.0]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/releases/tag/cargo-rbmt-0.1.0
