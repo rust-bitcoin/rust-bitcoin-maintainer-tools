@@ -1,6 +1,6 @@
 [package]
 name = "cargo-rbmt"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Nick Johnson <nick@yonson.dev>"]
 description = "Maintainer tools for rust-bitcoin projects"
 repository = "https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools"
@@ -22,9 +22,6 @@ serde_json = "1.0.104"
 toml = "0.8"
 toml_edit = { version = "0.22.7", features = ["serde"] }
 public-api = { version = "0.50", default-features = false }
-
-[package.metadata.rbmt.prerelease]
-enabled = true
 
 [lints]
 workspace = true
