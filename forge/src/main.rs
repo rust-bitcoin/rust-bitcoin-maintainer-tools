@@ -277,6 +277,19 @@ fn get_current_repo(config: &Config) -> Result<String> {
 }
 
 fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
+    // Check if working directory is clean
+    let status_output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()
+        .context("Failed to check git status")?;
+
+    if !status_output.stdout.is_empty() {
+        anyhow::bail!(
+            "Working directory is not clean. Please commit or stash your changes before checking out a PR.\n\
+             Use 'git status' to see uncommitted changes."
+        );
+    }
+
     // Load config
     let config = load_config()?;
 
@@ -295,114 +308,64 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     // Create a branch name for the PR
     let branch_name = format!("pr-{}", pr_number);
 
-    // Check if we need to add a remote for the fork
-    let is_from_fork = pr.head.repo.full_name != repo;
+    // Fetch directly from the PR repository URL (works for both forks and same-repo PRs)
+    println!("Fetching from {}...", pr.head.repo.clone_url);
+    let output = Command::new("git")
+        .args(["fetch", &pr.head.repo.clone_url, &pr.head.ref_name])
+        .output()
+        .context("Failed to fetch from PR repository")?;
 
-    if is_from_fork {
-        println!("PR is from a fork, adding remote...");
-        let remote_name = format!("pr-{}-fork", pr_number);
+    if !output.status.success() {
+        anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&output.stderr));
+    }
 
-        // Try to add the remote (ignore error if it already exists)
-        let _ = Command::new("git")
-            .args(["remote", "add", &remote_name, &pr.head.repo.clone_url])
-            .output();
+    // Checkout the branch
+    println!("Checking out branch {}...", branch_name);
 
-        // Fetch from the fork remote
-        println!("Fetching from remote {}...", remote_name);
+    // First try to create a new branch from FETCH_HEAD
+    let output = Command::new("git")
+        .args(["checkout", "-b", &branch_name, "FETCH_HEAD"])
+        .output()
+        .context("Failed to checkout branch")?;
+
+    if !output.status.success() {
+        // Branch might already exist, try to switch to it
         let output = Command::new("git")
-            .args(["fetch", &remote_name, &pr.head.ref_name])
+            .args(["checkout", &branch_name])
             .output()
-            .context("Failed to fetch from fork remote")?;
+            .context("Failed to checkout existing branch")?;
 
         if !output.status.success() {
-            anyhow::bail!("Failed to fetch from fork: {}", String::from_utf8_lossy(&output.stderr));
+            anyhow::bail!("Failed to checkout branch: {}", String::from_utf8_lossy(&output.stderr));
         }
 
-        // Checkout the branch
-        println!("Checking out branch {}...", branch_name);
-
-        // First try to create a new branch from FETCH_HEAD
+        // Reset to FETCH_HEAD to ensure we're at the right commit
         let output = Command::new("git")
-            .args(["checkout", "-b", &branch_name, "FETCH_HEAD"])
+            .args(["reset", "--hard", "FETCH_HEAD"])
             .output()
-            .context("Failed to checkout branch")?;
+            .context("Failed to reset branch")?;
 
         if !output.status.success() {
-            // Branch might already exist, try to switch to it
-            let output = Command::new("git")
-                .args(["checkout", &branch_name])
-                .output()
-                .context("Failed to checkout existing branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to checkout branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-
-            // Reset to FETCH_HEAD to ensure we're at the right commit
-            let output = Command::new("git")
-                .args(["reset", "--hard", "FETCH_HEAD"])
-                .output()
-                .context("Failed to reset branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to reset branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-        }
-    } else {
-        // PR is from the same repo, fetch directly from the clone URL
-        println!("Fetching from {}...", pr.head.repo.clone_url);
-        let output = Command::new("git")
-            .args(["fetch", &pr.head.repo.clone_url, &pr.head.ref_name])
-            .output()
-            .context("Failed to fetch from repo")?;
-
-        if !output.status.success() {
-            anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&output.stderr));
-        }
-
-        // Checkout the branch
-        println!("Checking out branch {}...", branch_name);
-
-        // First try to create a new branch from FETCH_HEAD
-        let output = Command::new("git")
-            .args(["checkout", "-b", &branch_name, "FETCH_HEAD"])
-            .output()
-            .context("Failed to checkout branch")?;
-
-        if !output.status.success() {
-            // Branch might already exist, try to switch to it
-            let output = Command::new("git")
-                .args(["checkout", &branch_name])
-                .output()
-                .context("Failed to checkout existing branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to checkout branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-
-            // Reset to FETCH_HEAD to ensure we're at the right commit
-            let output = Command::new("git")
-                .args(["reset", "--hard", "FETCH_HEAD"])
-                .output()
-                .context("Failed to reset branch")?;
-
-            if !output.status.success() {
-                anyhow::bail!(
-                    "Failed to reset branch: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
+            anyhow::bail!("Failed to reset branch: {}", String::from_utf8_lossy(&output.stderr));
         }
     }
+
+    // Configure the branch to track the remote URL directly
+    let merge_ref = format!("refs/heads/{}", pr.head.ref_name);
+    Command::new("git")
+        .args(["config", &format!("branch.{}.remote", branch_name), &pr.head.repo.clone_url])
+        .output()
+        .context("Failed to set branch.remote config")?;
+
+    Command::new("git")
+        .args(["config", &format!("branch.{}.pushRemote", branch_name), &pr.head.repo.clone_url])
+        .output()
+        .context("Failed to set branch.pushRemote config")?;
+
+    Command::new("git")
+        .args(["config", &format!("branch.{}.merge", branch_name), &merge_ref])
+        .output()
+        .context("Failed to set branch.merge config")?;
 
     println!("Successfully checked out PR #{}", pr_number);
 
@@ -991,6 +954,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)] // Who cares, this file is mainly read and created by AI.
 fn fetch_all() -> Result<()> {
     // Load config
     let config = load_config()?;
@@ -1030,9 +994,14 @@ fn fetch_all() -> Result<()> {
         // Convert SSH URLs to HTTPS with token
         let mut fetch_url = url.clone();
 
-        // Check for SSH format: git@host:owner/repo
-        let ssh_prefix = format!("git@{}:", config.ssh_url);
-        if let Some(path) = url.strip_prefix(&ssh_prefix) {
+        // Check for full SSH format: ssh://git@host/owner/repo
+        let full_ssh_prefix = format!("ssh://git@{}/", config.ssh_url);
+        if let Some(path) = url.strip_prefix(&full_ssh_prefix) {
+            let repo_path = path.strip_suffix(".git").unwrap_or(path);
+            fetch_url =
+                format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
+        } else if let Some(path) = url.strip_prefix(&format!("git@{}:", config.ssh_url)) {
+            // Check for short SSH format: git@host:owner/repo
             let repo_path = path.strip_suffix(".git").unwrap_or(path);
             fetch_url =
                 format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
@@ -1053,9 +1022,20 @@ fn fetch_all() -> Result<()> {
             }
         }
 
-        // Fetch from the URL
+        // Temporarily override the remote URL to use HTTPS with token
+        let original_url = url.clone();
+        if fetch_url != original_url {
+            Command::new("git").args(["remote", "set-url", remote, &fetch_url]).output().ok();
+        }
+
+        // Fetch from the remote name (this updates remote-tracking branches)
         let output =
-            Command::new("git").args(["fetch", &fetch_url]).output().context("Failed to fetch")?;
+            Command::new("git").args(["fetch", remote]).output().context("Failed to fetch")?;
+
+        // Restore original URL if we changed it
+        if fetch_url != original_url {
+            Command::new("git").args(["remote", "set-url", remote, &original_url]).output().ok();
+        }
 
         if output.status.success() {
             println!("Successfully fetched from {}", remote);
@@ -1075,7 +1055,7 @@ fn fetch_all() -> Result<()> {
         // Set up git URL rewriting to convert SSH to HTTPS with token
         let https_url = format!("https://{}@{}/", config.token, config.https_host());
 
-        // Configure URL rewriting for SSH hostname
+        // Configure URL rewriting for short SSH format (git@host:)
         Command::new("git")
             .args([
                 "config",
@@ -1083,6 +1063,18 @@ fn fetch_all() -> Result<()> {
                 "--add",
                 &format!("url.{}.insteadOf", https_url),
                 &format!("git@{}:", config.ssh_url),
+            ])
+            .output()
+            .ok();
+
+        // Configure URL rewriting for full SSH format (ssh://git@host/)
+        Command::new("git")
+            .args([
+                "config",
+                "--local",
+                "--add",
+                &format!("url.{}.insteadOf", https_url),
+                &format!("ssh://git@{}/", config.ssh_url),
             ])
             .output()
             .ok();
@@ -1122,7 +1114,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     // Set up git URL rewriting to convert SSH to HTTPS with token
     let https_url = format!("https://{}@{}/", config.token, config.https_host());
 
-    // Configure URL rewriting for SSH hostname
+    // Configure URL rewriting for short SSH format (git@host:)
     Command::new("git")
         .args([
             "config",
@@ -1130,6 +1122,18 @@ fn push_with_jj(current_only: bool) -> Result<()> {
             "--add",
             &format!("url.{}.insteadOf", https_url),
             &format!("git@{}:", config.ssh_url),
+        ])
+        .output()
+        .context("Failed to configure git URL rewriting")?;
+
+    // Configure URL rewriting for full SSH format (ssh://git@host/)
+    Command::new("git")
+        .args([
+            "config",
+            "--local",
+            "--add",
+            &format!("url.{}.insteadOf", https_url),
+            &format!("ssh://git@{}/", config.ssh_url),
         ])
         .output()
         .context("Failed to configure git URL rewriting")?;
@@ -1151,15 +1155,21 @@ fn push_with_jj(current_only: bool) -> Result<()> {
         .output()
         .ok();
 
-    if output.status.success() {
-        println!("Push completed successfully");
-        // Print any output from jj
-        if !output.stdout.is_empty() {
-            println!("{}", String::from_utf8_lossy(&output.stdout));
-        }
-    } else {
-        anyhow::bail!("jj git push failed: {}", String::from_utf8_lossy(&output.stderr));
+    // Print stdout
+    if !output.stdout.is_empty() {
+        print!("{}", String::from_utf8_lossy(&output.stdout));
     }
+
+    // Print stderr
+    if !output.stderr.is_empty() {
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    if !output.status.success() {
+        anyhow::bail!("jj git push failed");
+    }
+
+    println!("Push completed successfully");
 
     Ok(())
 }
