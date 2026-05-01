@@ -112,6 +112,21 @@ impl Toolchain {
         }
     }
 
+    /// Try to read the pinned version for this toolchain, returning `None` if not configured.
+    ///
+    /// For nightly and stable, returns `None` if not in `[workspace.metadata.rbmt.toolchains]`
+    /// or `[package.metadata.rbmt.toolchains]`. For MSRV, returns `None` if no `rust-version`
+    /// is found in any workspace package.
+    pub fn try_read_version(self, sh: &Shell) -> Option<std::string::String> {
+        let config = Self::read_toolchains_config(sh).ok();
+
+        match self {
+            Self::Nightly => config.and_then(|c| c.nightly),
+            Self::Stable => config.and_then(|c| c.stable),
+            Self::Msrv => get_workspace_msrv(sh).ok(),
+        }
+    }
+
     /// Write an updated version to Cargo.toml.
     ///
     /// Writes to the same location where the toolchains were originally found
