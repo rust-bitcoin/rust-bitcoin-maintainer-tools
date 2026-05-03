@@ -132,6 +132,21 @@ macro_rules! rbmt_cmd {
     }};
 }
 
+/// Create a cargo command with rbmt standards.
+///
+/// Forces use of a lockfile. Use [`rbmt_cmd!`] directly
+/// not using one for some reason.
+pub fn cargo_cmd(sh: &Shell) -> Cmd<'_> {
+    let mut cmd = rbmt_cmd!(sh, "cargo --locked");
+    // Force colors in interactive mode since the captured
+    // output sometimes confuses cargo from enabling colors
+    // automatically.
+    if matches!(OutputMode::from_env(), OutputMode::Progress) {
+        cmd = cmd.arg("--color=always");
+    }
+    cmd
+}
+
 /// Progress message output symbols (flair).
 pub const PROGRESS_SYMBOLS: &[&str] = &["b", "B", "$", "#"];
 

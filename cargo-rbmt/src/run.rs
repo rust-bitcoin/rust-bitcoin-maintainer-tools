@@ -4,6 +4,7 @@
 
 use xshell::Shell;
 
+use crate::environment::cargo_cmd;
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -24,7 +25,7 @@ pub fn run(
     prepare_toolchain(sh, toolchain)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     rbmt_eprintln!("Running cargo command with {:?} deps and {:?} toolchain", lockfile, toolchain);
-    let mut cmd = rbmt_cmd!(sh, "cargo --locked");
+    let mut cmd = cargo_cmd(sh);
     for arg in cargo_args {
         cmd = cmd.arg(arg);
     }

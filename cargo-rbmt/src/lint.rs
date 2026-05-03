@@ -7,7 +7,8 @@ use std::path::Path;
 use xshell::Shell;
 
 use crate::environment::{
-    get_workspace_packages, get_workspace_root, CmdExt, Package, PackageManifest, ProgressGuard,
+    cargo_cmd, get_workspace_packages, get_workspace_root, CmdExt, Package, PackageManifest,
+    ProgressGuard,
 };
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
@@ -65,12 +66,21 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Linting workspace...");
 
     // Run clippy on workspace with all features.
-    rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --all-features --keep-going")
+    cargo_cmd(sh)
+        .arg("clippy")
+        .arg("--workspace")
+        .arg("--all-targets")
+        .arg("--all-features")
+        .arg("--keep-going")
         .args(&["--", "-D", "warnings"])
         .run_verbose()?;
 
     // Run clippy on workspace without features.
-    rbmt_cmd!(sh, "cargo --locked clippy --workspace --all-targets --keep-going")
+    cargo_cmd(sh)
+        .arg("clippy")
+        .arg("--workspace")
+        .arg("--all-targets")
+        .arg("--keep-going")
         .args(&["--", "-D", "warnings"])
         .run_verbose()?;
 
@@ -97,7 +107,11 @@ fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::er
         let _old_dir = sh.push_dir(&package.dir);
 
         // Run clippy without default features.
-        rbmt_cmd!(sh, "cargo --locked clippy --all-targets --no-default-features --keep-going")
+        cargo_cmd(sh)
+            .arg("clippy")
+            .arg("--all-targets")
+            .arg("--no-default-features")
+            .arg("--keep-going")
             .args(&["--", "-D", "warnings"])
             .run_verbose()?;
     }

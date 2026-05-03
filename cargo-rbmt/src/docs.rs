@@ -4,7 +4,7 @@
 
 use xshell::Shell;
 
-use crate::environment::{get_workspace_packages, ProgressGuard};
+use crate::environment::{cargo_cmd, get_workspace_packages, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -24,7 +24,7 @@ pub fn run(
     prepare_toolchain(sh, Toolchain::Stable)?;
     rbmt_eprintln!("Building docs...");
 
-    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps --examples");
+    let mut cmd = cargo_cmd(sh).arg("doc").arg("--all-features").arg("--no-deps").arg("--examples");
 
     // Add package filters if specified.
     for package in packages {
@@ -57,7 +57,7 @@ pub fn run_docsrs(
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Building docs...");
 
-    let mut cmd = rbmt_cmd!(sh, "cargo --locked doc --all-features --no-deps --examples");
+    let mut cmd = cargo_cmd(sh).arg("doc").arg("--all-features").arg("--no-deps").arg("--examples");
 
     // Add package filters if specified.
     for package in packages {
