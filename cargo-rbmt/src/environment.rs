@@ -40,24 +40,22 @@ pub trait CmdExt {
 
 impl CmdExt for Cmd<'_> {
     fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Unconditionally grab stdout/stderr and ignore the exit status
-        // since we handle piping it out below based on if a build
-        // or test command fails.
+        // In verbose mode, just run the command normally.
+        if matches!(OutputMode::from_env(), OutputMode::Verbose) {
+            return Ok(self.run()?);
+        }
+
+        // In quiet/progress modes, capture output and only show on failure.
         self.set_ignore_stdout(false);
         self.set_ignore_stderr(false);
         self.set_ignore_status(true);
 
-        // Run command and capture output.
         let output = self.output()?;
 
-        // Pipe out stderr and stdout in verbose mode or on failure.
-        if matches!(OutputMode::from_env(), OutputMode::Verbose) || !output.status.success() {
+        // Show output on failure.
+        if !output.status.success() {
             eprint!("{}", String::from_utf8(output.stderr)?);
             print!("{}", String::from_utf8(output.stdout)?);
-        }
-
-        // Err on command failure.
-        if !output.status.success() {
             return Err(format!("Command failed: {}", output.status).into());
         }
 
@@ -130,6 +128,21 @@ macro_rules! rbmt_cmd {
         }
         cmd
     }};
+}
+
+/// Create a cargo command with rbmt standards.
+///
+/// Forces use of a lockfile. Use [`rbmt_cmd!`] directly
+/// not using one for some reason.
+pub fn cargo_cmd(sh: &Shell) -> Cmd<'_> {
+    let mut cmd = rbmt_cmd!(sh, "cargo --locked");
+    // Force colors in interactive mode since the captured
+    // output sometimes confuses cargo from enabling colors
+    // automatically.
+    if matches!(OutputMode::from_env(), OutputMode::Progress) {
+        cmd = cmd.arg("--color=always");
+    }
+    cmd
 }
 
 /// Progress message output symbols (flair).

@@ -14,8 +14,8 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    discover_features, get_workspace_packages, git_commit_id, CmdExt, Package, PackageManifest,
-    ProgressGuard,
+    cargo_cmd, discover_features, get_workspace_packages, git_commit_id, CmdExt, Package,
+    PackageManifest, ProgressGuard,
 };
 use crate::git;
 use crate::lock::LockFile;
@@ -156,10 +156,18 @@ fn test_features(
     release: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
-    rbmt_cmd!(sh, "cargo --locked build --no-default-features --features={features_str}")
+    cargo_cmd(sh)
+        .arg("build")
+        .arg("--no-default-features")
+        .arg("--features")
+        .arg(&features_str)
         .set_release(release)
         .run_verbose()?;
-    rbmt_cmd!(sh, "cargo --locked test --no-default-features --features={features_str}")
+    cargo_cmd(sh)
+        .arg("test")
+        .arg("--no-default-features")
+        .arg("--features")
+        .arg(&features_str)
         .set_release(release)
         .run_verbose()?;
     Ok(())
@@ -263,8 +271,8 @@ fn do_test(
     rbmt_eprintln!("Running default tests on {}", summary.name);
 
     // Defualt build and test.
-    rbmt_cmd!(sh, "cargo --locked build").set_release(release).run_verbose()?;
-    rbmt_cmd!(sh, "cargo --locked test").set_release(release).run_verbose()?;
+    cargo_cmd(sh).arg("build").set_release(release).run_verbose()?;
+    cargo_cmd(sh).arg("test").set_release(release).run_verbose()?;
 
     // Run examples.
     for example in &config.examples {
@@ -279,7 +287,10 @@ fn do_test(
                     name,
                     summary.name
                 );
-                rbmt_cmd!(sh, "cargo --locked run --example {name}")
+                cargo_cmd(sh)
+                    .arg("run")
+                    .arg("--example")
+                    .arg(name)
                     .set_release(release)
                     .run_verbose()?;
             }
@@ -294,7 +305,11 @@ fn do_test(
                         name,
                         summary.name
                     );
-                    rbmt_cmd!(sh, "cargo --locked run --no-default-features --example {name}")
+                    cargo_cmd(sh)
+                        .arg("run")
+                        .arg("--no-default-features")
+                        .arg("--example")
+                        .arg(name)
                         .set_release(release)
                         .run_verbose()?;
                 } else {
@@ -305,7 +320,12 @@ fn do_test(
                         features,
                         summary.name
                     );
-                    rbmt_cmd!(sh, "cargo --locked run --example {name} --features={features}")
+                    cargo_cmd(sh)
+                        .arg("run")
+                        .arg("--example")
+                        .arg(name)
+                        .arg("--features")
+                        .arg(features)
                         .set_release(release)
                         .run_verbose()?;
                 }
@@ -342,17 +362,13 @@ fn do_feature_matrix(
 
     // Test all features.
     rbmt_eprintln!("Testing all features in {}", package.name);
-    rbmt_cmd!(sh, "cargo --locked build --all-features").set_release(release).run_verbose()?;
-    rbmt_cmd!(sh, "cargo --locked test --all-features").set_release(release).run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--all-features").set_release(release).run_verbose()?;
+    cargo_cmd(sh).arg("test").arg("--all-features").set_release(release).run_verbose()?;
 
     // Test no features.
     rbmt_eprintln!("Testing no features in {}", package.name);
-    rbmt_cmd!(sh, "cargo --locked build --no-default-features")
-        .set_release(release)
-        .run_verbose()?;
-    rbmt_cmd!(sh, "cargo --locked test --no-default-features")
-        .set_release(release)
-        .run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--no-default-features").set_release(release).run_verbose()?;
+    cargo_cmd(sh).arg("test").arg("--no-default-features").set_release(release).run_verbose()?;
 
     // Test each feature in isolation, plus sampled subsets.
     let features: Vec<String> = discover_features(sh, package)?

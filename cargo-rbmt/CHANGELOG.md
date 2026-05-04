@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+* Fix color output in `verbose` mode.
+
 ## [0.2.0] - 2026-04-29
 
+* Switch license from CC0 to Apache-2.0/MIT.
 * Add `run` command as a cargo passthrough with toolchain and lockfile management.
 * Add `progress` mode to `RBMT_LOG_LEVEL` for interactive use.
 * Add trailing newline clean up to `fmt`.
