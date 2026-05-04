@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 * Dedupe lines in API file output.
+* [BREAKING] Refactor the `test` command interface to allow any cargo commands to be passed to all the underlying `cargo test` commands.
 
 ## [0.2.1] - 2026-05-04
 
