@@ -579,77 +579,112 @@ fn check_for_symlinks() -> Result<Vec<String>> {
     Ok(symlinks)
 }
 
-fn compute_tree_sha512() -> Result<String> {
-    use std::io::{BufRead, BufReader, Write};
+fn compute_tree_sha512(repo_root: &std::path::Path) -> Result<String> {
+    use std::io::{Read, Write};
     use std::process::Stdio;
 
     use sha2::{Digest, Sha512};
 
-    // Get all files in tree
+    // List all blobs, recursively. Mirrors tree_sha512sum()'s git ls-tree call.
     let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
         .args(["ls-tree", "--full-tree", "-r", "HEAD"])
         .output()
         .context("Failed to list git tree")?;
-
     if !output.status.success() {
-        anyhow::bail!("Failed to list git tree");
+        anyhow::bail!("git ls-tree failed: {}", String::from_utf8_lossy(&output.stderr));
     }
 
-    let mut files_and_blobs = Vec::new();
-    for line in String::from_utf8(output.stdout)?.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 3 && parts[1] == "blob" {
-            let blob_id = parts[2];
-            if let Some(tab_pos) = line.find('\t') {
-                let filename = &line[tab_pos + 1..];
-                files_and_blobs.push((filename.to_string(), blob_id.to_string()));
-            }
+    // Parse each line into (name_bytes, blob_sha). Keep names as raw bytes
+    // (matching Python's bytes behaviour) so byte-sort is identical.
+    let mut entries: Vec<(Vec<u8>, String)> = Vec::new();
+    for line in output.stdout.split(|&b| b == b'\n') {
+        if line.is_empty() {
+            continue;
         }
+        let tab =
+            line.iter().position(|&b| b == b'\t').context("Malformed ls-tree line: no tab")?;
+        let metadata =
+            std::str::from_utf8(&line[..tab]).context("Non-UTF-8 in ls-tree metadata")?;
+        let parts: Vec<&str> = metadata.split_whitespace().collect();
+        if parts.len() < 3 {
+            anyhow::bail!("Malformed ls-tree metadata: {}", metadata);
+        }
+        if parts[1] != "blob" {
+            anyhow::bail!("Unexpected non-blob entry: {}", metadata);
+        }
+        entries.push((line[tab + 1..].to_vec(), parts[2].to_string()));
     }
 
-    files_and_blobs.sort_by(|a, b| a.0.cmp(&b.0));
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Start git cat-file in batch mode
-    let mut cat_file = Command::new("git")
+    // Open git-cat-file --batch for streaming blob content.
+    let mut cat = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
         .args(["cat-file", "--batch"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .context("Failed to spawn git cat-file")?;
-
-    let mut stdin = cat_file.stdin.take().context("Failed to get stdin")?;
-    let stdout = cat_file.stdout.take().context("Failed to get stdout")?;
-    let reader = BufReader::new(stdout);
+    let mut cat_stdin = cat.stdin.take().context("Failed to take cat-file stdin")?;
+    let mut cat_stdout = cat.stdout.take().context("Failed to take cat-file stdout")?;
 
     let mut overall = Sha512::new();
+    let mut buf = vec![0u8; 65536];
+    let mut hdr = Vec::with_capacity(128);
 
-    let blob_ids: Vec<String> = files_and_blobs.iter().map(|(_, id)| id.clone()).collect();
-    std::thread::spawn(move || {
-        for blob_id in &blob_ids {
-            writeln!(stdin, "{}", blob_id).ok();
-        }
-    });
+    for (name, blob_sha) in &entries {
+        // Request blob.
+        writeln!(cat_stdin, "{}", blob_sha).context("Failed to write to cat-file")?;
+        cat_stdin.flush().context("Failed to flush cat-file stdin")?;
 
-    let mut lines = reader.lines();
-    for (filename, _) in &files_and_blobs {
-        // Read header line
-        if let Some(Ok(header)) = lines.next() {
-            let parts: Vec<&str> = header.split_whitespace().collect();
-            if parts.len() >= 3 && parts[1] == "blob" {
-                if let Ok(_size) = parts[2].parse::<usize>() {
-                    // Note: This is simplified - in production we'd read from stdout properly
-                    // For now, hash the filename as a placeholder
-                    let mut intern = Sha512::new();
-                    intern.update(filename.as_bytes());
-                    let dig = format!("{:x}", intern.finalize());
-
-                    overall.update(dig.as_bytes());
-                    overall.update(b"  ");
-                    overall.update(filename.as_bytes());
-                    overall.update(b"\n");
-                }
+        // Read header line up to '\n'.
+        hdr.clear();
+        let mut byte = [0u8; 1];
+        loop {
+            cat_stdout.read_exact(&mut byte).context("Premature EOF reading cat-file header")?;
+            if byte[0] == b'\n' {
+                break;
             }
+            hdr.push(byte[0]);
         }
+        let hdr_str = std::str::from_utf8(&hdr).context("Non-UTF-8 in cat-file header")?;
+        let hparts: Vec<&str> = hdr_str.split_whitespace().collect();
+        if hparts.len() < 3 || hparts[0] != blob_sha || hparts[1] != "blob" {
+            anyhow::bail!("Unexpected cat-file header: {}", hdr_str);
+        }
+        let size: usize = hparts[2].parse().context("Bad blob size in cat-file header")?;
+
+        // Hash exactly `size` blob bytes.
+        let mut intern = Sha512::new();
+        let mut remaining = size;
+        while remaining > 0 {
+            let want = remaining.min(buf.len());
+            cat_stdout.read_exact(&mut buf[..want]).context("Premature EOF reading blob")?;
+            intern.update(&buf[..want]);
+            remaining -= want;
+        }
+
+        // Consume the trailing LF that follows every blob.
+        cat_stdout.read_exact(&mut byte).context("Failed to read trailing LF after blob")?;
+        if byte[0] != b'\n' {
+            anyhow::bail!("Expected LF after blob data, got 0x{:02x}", byte[0]);
+        }
+
+        // Feed hex(inner) + "  " + name + "\n" into overall hash.
+        let dig = format!("{:x}", intern.finalize());
+        overall.update(dig.as_bytes());
+        overall.update(b"  ");
+        overall.update(name);
+        overall.update(b"\n");
+    }
+
+    drop(cat_stdin);
+    let status = cat.wait().context("Failed to wait for git cat-file")?;
+    if !status.success() {
+        anyhow::bail!("git cat-file exited non-zero");
     }
 
     Ok(format!("{:x}", overall.finalize()))
@@ -803,7 +838,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 
     // Compute tree hash
     println!("Computing tree hash...");
-    let first_sha512 = compute_tree_sha512()?;
+    let first_sha512 = compute_tree_sha512(std::path::Path::new("."))?;
     println!("Tree-SHA512: {}", first_sha512);
 
     // Show merge details
@@ -870,7 +905,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Command::new(shell).arg("-i").status().context("Failed to spawn shell")?;
 
     // Verify tree hash unchanged
-    let second_sha512 = compute_tree_sha512()?;
+    let second_sha512 = compute_tree_sha512(std::path::Path::new("."))?;
     if first_sha512 != second_sha512 {
         anyhow::bail!("ERROR: Tree hash changed unexpectedly");
     }
@@ -1163,4 +1198,70 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+    use std::process::Command as Cmd;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::compute_tree_sha512;
+
+    /// RAII guard that creates a fresh temporary directory on construction
+    /// and removes it (recursively) on drop.
+    struct TempDirGuard {
+        path: PathBuf,
+    }
+
+    impl TempDirGuard {
+        fn new() -> std::io::Result<Self> {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path =
+                std::env::temp_dir().join(format!("forge-test-{}-{}", std::process::id(), n));
+            std::fs::create_dir(&path)?;
+            Ok(Self { path })
+        }
+
+        fn path(&self) -> &Path { self.path.as_path() }
+    }
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.path); }
+    }
+
+    /// Pinned vector: a repo with exactly two files:
+    ///   a.txt = "hello\n"
+    ///   b.txt = "world\n"
+    ///
+    /// Expected digest produced by github-merge.py's `tree_sha512sum()` algorithm.
+    #[test]
+    fn tree_sha512_matches_canonical() {
+        let dir = TempDirGuard::new().unwrap();
+        let root = dir.path();
+
+        let run =
+            |args: &[&str]| Cmd::new(args[0]).args(&args[1..]).current_dir(root).output().unwrap();
+        run(&["git", "init"]);
+        run(&["git", "config", "user.email", "test@test.com"]);
+        run(&["git", "config", "user.name", "Test"]);
+        std::fs::write(root.join("a.txt"), b"hello\n").unwrap();
+        std::fs::write(root.join("b.txt"), b"world\n").unwrap();
+        run(&["git", "add", "."]);
+        run(&["git", "commit", "-m", "init"]);
+
+        let digest = compute_tree_sha512(root).unwrap();
+
+        // Pinned by computing tree_sha512sum() from first principles on
+        // this exact tree (a.txt="hello\n", b.txt="world\n"):
+        //   inner_a = SHA512("hello\n").hexdigest()
+        //   inner_b = SHA512("world\n").hexdigest()
+        //   overall = SHA512((inner_a + "  a.txt\n") + (inner_b + "  b.txt\n"))
+        assert_eq!(
+            digest,
+            "0879634a7a0b2a60c156a6eaf0301db4afcf209b58d01dc28a817edcd7226bb\
+             f9864299559fff718d1c88998ca1d9a1768e7b1b053149a7276bc86cf127782de"
+        );
+    }
 }
