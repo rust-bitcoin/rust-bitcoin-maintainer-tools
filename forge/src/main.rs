@@ -163,25 +163,49 @@ struct ListItem {
     title: String,
 }
 
+fn api_get<T: serde::de::DeserializeOwned>(api_url: &str, token: &str, path: &str) -> Result<T> {
+    let url = format!("{}{}", api_url, path);
+    let response = bitreq::get(&url)
+        .with_header("Authorization", format!("token {}", token))
+        .with_header("Accept", "*/*")
+        // Masquerade as curl because the Forgejo instance blocked requests marked differently.
+        .with_header("User-Agent", "curl/8.5.0")
+        .send()
+        .context("Failed to send request to Forgejo API")?;
+    if response.status_code != 200 {
+        anyhow::bail!("API request failed with status: {}", response.status_code);
+    }
+    response.json().context("Failed to parse API response")
+}
+
+fn api_post<B: Serialize>(api_url: &str, token: &str, path: &str, body: &B) -> Result<()> {
+    let url = format!("{}{}", api_url, path);
+    let body_json = serde_json::to_string(body).context("Failed to serialize request body")?;
+    let response = bitreq::post(&url)
+        .with_header("Authorization", format!("token {}", token))
+        .with_header("Accept", "*/*")
+        // Masquerade as curl because the Forgejo instance blocked requests marked differently.
+        .with_header("Content-Type", "application/json")
+        .with_header("User-Agent", "curl/8.5.0")
+        .with_body(body_json.as_str())
+        .send()
+        .context("Failed to send request to Forgejo API")?;
+    if response.status_code != 200 && response.status_code != 201 {
+        anyhow::bail!("API request failed with status: {}", response.status_code);
+    }
+    Ok(())
+}
+
 fn list_prs(repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
-    let url = format!("{}/repos/{}/pulls?state=open&limit=100", config.api_url(), repo);
-
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    let prs: Vec<ListItem> = response.json().context("Failed to parse PRs response")?;
+    let prs: Vec<ListItem> = api_get(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/pulls?state=open&limit=100", repo),
+    )?;
 
     if prs.is_empty() {
         println!("No open pull requests found");
@@ -196,23 +220,7 @@ fn list_prs(repo: Option<String>) -> Result<()> {
 }
 
 fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
-    let url = format!("{}/repos/{}/pulls/{}", config.api_url(), repo, pr_number);
-
-    // Masquerade as curl because the Forgejo instance blocked requests marked differently.
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    let pr: PullRequest = response.json().context("Failed to parse PR response")?;
-
-    Ok(pr)
+    api_get(&config.api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
 }
 
 fn get_preferred_remote() -> String {
@@ -423,65 +431,28 @@ struct Comment {
 }
 
 fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
-    let url = format!("{}/repos/{}/issues/{}/comments", config.api_url(), repo, pr_number);
-
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    let comments: Vec<Comment> = response.json().context("Failed to parse comments response")?;
-
-    Ok(comments)
+    api_get(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/issues/{}/comments", repo, pr_number),
+    )
 }
 
 fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
-    let url = format!("{}/repos/{}/pulls/{}/reviews", config.api_url(), repo, pr_number);
-
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    let reviews: Vec<Comment> = response.json().context("Failed to parse reviews response")?;
-
-    Ok(reviews)
+    api_get(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
+    )
 }
 
 fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -> Result<()> {
-    let url = format!("{}/repos/{}/issues/{}/comments", config.api_url(), repo, pr_number);
-
-    let request_body = CommentRequest { body: comment.to_string() };
-
-    let body_json =
-        serde_json::to_string(&request_body).context("Failed to serialize comment request")?;
-
-    let response = bitreq::post(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("Content-Type", "application/json")
-        .with_header("User-Agent", "curl/8.5.0")
-        .with_body(body_json.as_str())
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 201 && response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    Ok(())
+    api_post(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/issues/{}/comments", repo, pr_number),
+        &CommentRequest { body: comment.to_string() },
+    )
 }
 
 fn ack_pr(repo: Option<String>) -> Result<()> {
