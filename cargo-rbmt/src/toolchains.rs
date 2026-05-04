@@ -59,14 +59,20 @@ pub fn run(
     }
 
     if update_nightly {
-        install_toolchain(sh, "nightly")?;
+        if install_toolchain(sh, "nightly").is_err() {
+            rbmt_eprintln!("Install failed, retrying with reinstall");
+            reinstall_toolchain(sh, "nightly")?;
+        }
         let version = resolve_nightly_version(sh)?;
         Toolchain::Nightly.write_version(sh, &version)?;
         rbmt_eprintln!("Updated nightly-version: {}", version);
     }
 
     if update_stable {
-        install_toolchain(sh, "stable")?;
+        if install_toolchain(sh, "stable").is_err() {
+            rbmt_eprintln!("Install failed, retrying with reinstall");
+            reinstall_toolchain(sh, "stable")?;
+        }
         let version = resolve_stable_version(sh)?;
         Toolchain::Stable.write_version(sh, &version)?;
         rbmt_eprintln!("Updated stable-version: {}", version);
@@ -152,4 +158,12 @@ fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::err
     .ignore_stdout()
     .run()?;
     Ok(())
+}
+
+/// Reinstall a toolchain by uninstalling and then installing fresh.
+/// Used as a fallback when the normal install fails (e.g., due to overlayfs issues in containers).
+fn reinstall_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Uninstalling toolchain {}", toolchain);
+    rbmt_cmd!(sh, "rustup toolchain uninstall {toolchain}").ignore_stdout().run()?;
+    install_toolchain(sh, toolchain)
 }
