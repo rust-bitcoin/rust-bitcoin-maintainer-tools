@@ -135,6 +135,8 @@ enum Commands {
         /// Only operate on these tools (default: all tools in the manifest).
         tools: Vec<String>,
     },
+    /// Print version and build information.
+    Version,
 }
 
 fn main() {
@@ -149,6 +151,7 @@ fn main() {
     let sh = Shell::new().unwrap();
 
     match cli.command {
+        Commands::Version => println!("{}", env!("RBMT_BUILD_VERSION")),
         Commands::Api { baseline } => {
             if let Err(e) = api::run(&sh, cli.lockfile, &cli.packages, baseline.as_deref()) {
                 eprintln!("Error running API check: {}", e);

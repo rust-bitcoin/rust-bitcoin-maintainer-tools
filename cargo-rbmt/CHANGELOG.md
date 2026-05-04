@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 
-* Fix color output in `verbose` mode.
+* Fix color output in `progress` mode.
+* Add a `version` command which shows git revision and manifest version of rbmt.
 
 ## [0.2.0] - 2026-04-29
 
