@@ -196,6 +196,51 @@ fn api_post<B: Serialize>(api_url: &str, token: &str, path: &str, body: &B) -> R
     Ok(())
 }
 
+/// RAII guard that configures `git config --local url.<https>.insteadOf`
+/// for both `git@host:` and `ssh://git@host/` SSH forms on construction,
+/// and removes them on drop.
+///
+/// Lets `jj` (and any sub-command resolving SSH URLs through git)
+/// transparently use HTTPS-with-token without permanently mutating
+/// repo config — even on early return or panic.
+struct SshToHttpsGuard {
+    https_url: String,
+}
+
+impl SshToHttpsGuard {
+    fn new(config: &Config) -> Result<Self> {
+        let https_url = format!("https://{}@{}/", config.token, config.https_host());
+        let key = format!("url.{}.insteadOf", https_url);
+
+        let add = |value: &str| -> Result<()> {
+            let out = Command::new("git")
+                .args(["config", "--local", "--add", &key, value])
+                .output()
+                .with_context(|| format!("Failed to configure git URL rewriting for {}", value))?;
+            if !out.status.success() {
+                anyhow::bail!("git config failed: {}", String::from_utf8_lossy(&out.stderr));
+            }
+            Ok(())
+        };
+
+        add(&format!("git@{}:", config.ssh_url))?;
+        if let Err(e) = add(&format!("ssh://git@{}/", config.ssh_url)) {
+            // Roll back the first --add before bubbling up.
+            let _ = Command::new("git").args(["config", "--local", "--unset-all", &key]).output();
+            return Err(e);
+        }
+
+        Ok(Self { https_url })
+    }
+}
+
+impl Drop for SshToHttpsGuard {
+    fn drop(&mut self) {
+        let key = format!("url.{}.insteadOf", self.https_url);
+        let _ = Command::new("git").args(["config", "--local", "--unset-all", &key]).output();
+    }
+}
+
 fn list_prs(repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
@@ -1032,43 +1077,12 @@ fn fetch_all() -> Result<()> {
     if Command::new("jj").arg("--version").output().is_ok_and(|o| o.status.success()) {
         println!("\nRunning jj git fetch...");
 
-        // Set up git URL rewriting to convert SSH to HTTPS with token
-        let https_url = format!("https://{}@{}/", config.token, config.https_host());
-
-        // Configure URL rewriting for short SSH format (git@host:)
-        Command::new("git")
-            .args([
-                "config",
-                "--local",
-                "--add",
-                &format!("url.{}.insteadOf", https_url),
-                &format!("git@{}:", config.ssh_url),
-            ])
-            .output()
-            .ok();
-
-        // Configure URL rewriting for full SSH format (ssh://git@host/)
-        Command::new("git")
-            .args([
-                "config",
-                "--local",
-                "--add",
-                &format!("url.{}.insteadOf", https_url),
-                &format!("ssh://git@{}/", config.ssh_url),
-            ])
-            .output()
-            .ok();
+        let _guard = SshToHttpsGuard::new(&config)?;
 
         let output = Command::new("jj")
             .args(["git", "fetch"])
             .output()
             .context("Failed to run jj git fetch")?;
-
-        // Clean up URL rewriting config (remove all instances)
-        Command::new("git")
-            .args(["config", "--local", "--unset-all", &format!("url.{}.insteadOf", https_url)])
-            .output()
-            .ok();
 
         if output.status.success() {
             println!("jj git fetch completed successfully");
@@ -1090,33 +1104,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     }
 
     println!("Setting up HTTPS authentication for push...");
-
-    // Set up git URL rewriting to convert SSH to HTTPS with token
-    let https_url = format!("https://{}@{}/", config.token, config.https_host());
-
-    // Configure URL rewriting for short SSH format (git@host:)
-    Command::new("git")
-        .args([
-            "config",
-            "--local",
-            "--add",
-            &format!("url.{}.insteadOf", https_url),
-            &format!("git@{}:", config.ssh_url),
-        ])
-        .output()
-        .context("Failed to configure git URL rewriting")?;
-
-    // Configure URL rewriting for full SSH format (ssh://git@host/)
-    Command::new("git")
-        .args([
-            "config",
-            "--local",
-            "--add",
-            &format!("url.{}.insteadOf", https_url),
-            &format!("ssh://git@{}/", config.ssh_url),
-        ])
-        .output()
-        .context("Failed to configure git URL rewriting")?;
+    let _guard = SshToHttpsGuard::new(&config)?;
 
     // Build jj command
     let mut args = vec!["git", "push"];
@@ -1128,12 +1116,6 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     println!("Running jj git push{}...", if current_only { " -c @" } else { "" });
 
     let output = Command::new("jj").args(&args).output().context("Failed to run jj git push")?;
-
-    // Clean up URL rewriting config (remove all instances)
-    Command::new("git")
-        .args(["config", "--local", "--unset-all", &format!("url.{}.insteadOf", https_url)])
-        .output()
-        .ok();
 
     // Print stdout
     if !output.stdout.is_empty() {
