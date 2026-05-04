@@ -114,7 +114,7 @@ enum PrCommands {
         #[arg(short, long)]
         repo: Option<String>,
     },
-    /// Post an ACK comment on the currently checked out PR
+    /// Submit an approving ACK review on the currently checked out PR
     #[command(alias = "a")]
     Ack {
         /// Repository in format "owner/repo" (optional, uses current repo if not specified)
@@ -468,12 +468,32 @@ fn extract_pr_number_from_branch(branch: &str) -> Result<u64> {
     }
 }
 
+/// State of a Forgejo pull-request review. Only `Approved` is constructible
+/// today; unknown values from the API deserialize to `Other`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PrReviewState {
+    Approved,
+    #[serde(other)]
+    Other,
+}
+
 #[derive(Serialize)]
-struct CommentRequest {
+struct CreatePullReviewOptions {
     body: String,
+    commit_id: String,
+    event: PrReviewState,
 }
 
 #[derive(Deserialize, Debug)]
+struct PullReview {
+    commit_id: Option<String>,
+    state: PrReviewState,
+    user: CommentUser,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct CommentUser {
     login: String,
 }
@@ -500,12 +520,25 @@ fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Com
     )
 }
 
-fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -> Result<()> {
+fn get_pr_review_objects(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
+    api_get(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
+    )
+}
+
+fn submit_pr_review(
+    repo: &str,
+    pr_number: u64,
+    body: &CreatePullReviewOptions,
+    config: &Config,
+) -> Result<()> {
     api_post(
         &config.api_url(),
         &config.token,
-        &format!("/repos/{}/issues/{}/comments", repo, pr_number),
-        &CommentRequest { body: comment.to_string() },
+        &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
+        body,
     )
 }
 
@@ -529,24 +562,30 @@ fn ack_pr(repo: Option<String>) -> Result<()> {
     println!("Current commit: {}", commit_hash);
 
     // Format the ACK message
-    let comment = format!("ACK {}", commit_hash);
+    let body = format!("ACK {}", commit_hash);
 
-    // Check if this ACK already exists from this user
-    println!("Checking existing comments on PR #{}...", pr_number);
-    let existing_comments = get_pr_comments(&repo, pr_number, &config)?;
+    println!("Checking existing reviews on PR #{}...", pr_number);
+    let existing_reviews = get_pr_review_objects(&repo, pr_number, &config)?;
 
-    for existing in &existing_comments {
-        if existing.user.login == config.username && existing.body.trim() == comment.trim() {
-            println!("PR already ACK'ed");
+    for r in &existing_reviews {
+        if r.user.login == config.username
+            && r.state == PrReviewState::Approved
+            && r.commit_id.as_deref() == Some(commit_hash.as_str())
+        {
+            println!("PR already approved for this commit");
             return Ok(());
         }
     }
 
-    // Post the comment
-    println!("Posting comment to PR #{}...", pr_number);
-    post_pr_comment(&repo, pr_number, &comment, &config)?;
+    println!("Submitting approving review on PR #{}...", pr_number);
+    submit_pr_review(
+        &repo,
+        pr_number,
+        &CreatePullReviewOptions { body, commit_id: commit_hash, event: PrReviewState::Approved },
+        &config,
+    )?;
 
-    println!("Successfully posted ACK comment!");
+    println!("Successfully submitted approving review!");
 
     Ok(())
 }
@@ -1263,5 +1302,24 @@ mod tests {
             "0879634a7a0b2a60c156a6eaf0301db4afcf209b58d01dc28a817edcd7226bb\
              f9864299559fff718d1c88998ca1d9a1768e7b1b053149a7276bc86cf127782de"
         );
+    }
+
+    #[test]
+    fn pr_review_state_serde() {
+        use super::PrReviewState;
+        assert_eq!(serde_json::to_string(&PrReviewState::Approved).unwrap(), "\"APPROVED\"");
+        assert_eq!(
+            serde_json::from_str::<PrReviewState>("\"APPROVED\"").unwrap(),
+            PrReviewState::Approved
+        );
+        assert_eq!(
+            serde_json::from_str::<PrReviewState>("\"PENDING\"").unwrap(),
+            PrReviewState::Other
+        );
+        assert_eq!(
+            serde_json::from_str::<PrReviewState>("\"COMMENT\"").unwrap(),
+            PrReviewState::Other
+        );
+        assert_eq!(serde_json::from_str::<PrReviewState>("\"\"").unwrap(), PrReviewState::Other);
     }
 }
