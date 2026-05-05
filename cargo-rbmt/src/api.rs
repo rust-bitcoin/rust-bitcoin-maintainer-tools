@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -170,6 +170,27 @@ fn get_package_apis(
     Ok(apis)
 }
 
+/// Deduplicate items in an API.
+///
+/// A single `impl Trait for Type` can be "named" multiple ways in rustdoc JSON. When
+/// `public_api` renders these to text, the identical method signatures appear as
+/// duplicates even though they refer to the same single impl.
+///
+/// For example, the `Decode` trait defines a default `decoder()` method. When `LockTime`
+/// implements `Decode`, rustdoc generates entries for both the trait's default and the impl's
+/// method, resulting in duplicate `decoder()` lines in the output. From the public API
+/// perspective, `LockTime::decoder()` is just one method. This function removes exact duplicate
+/// items (by string representation) to show the actual callable surface without noise from
+/// rustdoc's duplicate trait default entries.
+fn deduplicate_display(api: &public_api::PublicApi) -> String {
+    let lines: Vec<String> = api.items().map(std::string::ToString::to_string).collect();
+    let mut seen = HashSet::new();
+    let unique_lines: Vec<String> =
+        lines.into_iter().filter(|line| seen.insert(line.clone())).collect();
+
+    unique_lines.join("\n")
+}
+
 /// Check API files for all packages.
 ///
 /// For each package, generates public API files for different feature configurations,
@@ -198,7 +219,8 @@ fn check_apis(
 
         for (config, public_api) in &apis {
             let output_file = package_api_dir.join(config.filename());
-            fs::write(&output_file, public_api.to_string())?;
+            let api_display = deduplicate_display(public_api);
+            fs::write(&output_file, api_display)?;
         }
 
         // Check that features are additive (all-features contains everything from no-features).
