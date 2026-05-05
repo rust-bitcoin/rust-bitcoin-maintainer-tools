@@ -196,48 +196,51 @@ fn api_post<B: Serialize>(api_url: &str, token: &str, path: &str, body: &B) -> R
     Ok(())
 }
 
-/// RAII guard that configures `git config --local url.<https>.insteadOf`
-/// for both `git@host:` and `ssh://git@host/` SSH forms on construction,
-/// and removes them on drop.
+/// RAII guard that configures `git config --local url.<https-with-token>.insteadOf`
+/// for the configured host on construction, and removes the entries on drop.
 ///
-/// Lets `jj` (and any sub-command resolving SSH URLs through git)
-/// transparently use HTTPS-with-token without permanently mutating
-/// repo config — even on early return or panic.
-struct SshToHttpsGuard {
-    https_url: String,
+/// Rewrites all three forms — `git@host:`, `ssh://git@host/`, and plain
+/// `https://host/` — to a tokenized `https://<token>@host/` URL. Lets `git`
+/// and `jj` (and any sub-command resolving URLs through git) transparently
+/// authenticate over HTTPS without permanently mutating repo config — even
+/// on early return or panic.
+struct AuthHttpsGuard {
+    key: String,
+    added: Vec<String>,
 }
 
-impl SshToHttpsGuard {
+impl AuthHttpsGuard {
     fn new(config: &Config) -> Result<Self> {
         let https_url = format!("https://{}@{}/", config.token, config.https_host());
         let key = format!("url.{}.insteadOf", https_url);
+        let mut guard = Self { key: key.clone(), added: Vec::new() };
 
-        let add = |value: &str| -> Result<()> {
+        for value in [
+            format!("git@{}:", config.ssh_url),
+            format!("ssh://git@{}/", config.ssh_url),
+            format!("https://{}/", config.https_host()),
+        ] {
             let out = Command::new("git")
-                .args(["config", "--local", "--add", &key, value])
+                .args(["config", "--local", "--add", &key, &value])
                 .output()
                 .with_context(|| format!("Failed to configure git URL rewriting for {}", value))?;
             if !out.status.success() {
+                // Drop will unset whatever made it in.
                 anyhow::bail!("git config failed: {}", String::from_utf8_lossy(&out.stderr));
             }
-            Ok(())
-        };
-
-        add(&format!("git@{}:", config.ssh_url))?;
-        if let Err(e) = add(&format!("ssh://git@{}/", config.ssh_url)) {
-            // Roll back the first --add before bubbling up.
-            let _ = Command::new("git").args(["config", "--local", "--unset-all", &key]).output();
-            return Err(e);
+            guard.added.push(value);
         }
-
-        Ok(Self { https_url })
+        Ok(guard)
     }
 }
 
-impl Drop for SshToHttpsGuard {
+impl Drop for AuthHttpsGuard {
     fn drop(&mut self) {
-        let key = format!("url.{}.insteadOf", self.https_url);
-        let _ = Command::new("git").args(["config", "--local", "--unset-all", &key]).output();
+        for value in &self.added {
+            let _ = Command::new("git")
+                .args(["config", "--local", "--unset", &self.key, value])
+                .output();
+        }
     }
 }
 
@@ -266,6 +269,17 @@ fn list_prs(repo: Option<String>) -> Result<()> {
 
 fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
     api_get(&config.api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
+}
+
+fn fetch_pr_refs(repo: &str, refspecs: &[&str], config: &Config) -> Result<()> {
+    let url = format!("{}/{}.git", config.https_url, repo);
+    let mut args = vec!["fetch", &url];
+    args.extend_from_slice(refspecs);
+    let out = Command::new("git").args(&args).output().context("Failed to fetch PR refs")?;
+    if !out.status.success() {
+        anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    Ok(())
 }
 
 fn get_preferred_remote() -> String {
@@ -396,6 +410,7 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
 
     // Load config
     let config = load_config()?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get repository
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
@@ -410,17 +425,10 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     println!("Into: {}/{}", pr.base.repo.full_name, pr.base.ref_name);
 
     let branch_name = format!("pr-{}", pr_number);
-    let fetch_url = format!("{}/{}.git", config.https_url, repo);
     let refspec = format!("refs/pull/{}/head", pr_number);
 
-    println!("Fetching {} from {}...", refspec, fetch_url);
-    let output = Command::new("git")
-        .args(["fetch", &fetch_url, &refspec])
-        .output()
-        .context("Failed to fetch PR ref")?;
-    if !output.status.success() {
-        anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&output.stderr));
-    }
+    println!("Fetching {} from {}/{}...", refspec, config.https_url, repo);
+    fetch_pr_refs(&repo, &[&refspec], &config)?;
 
     checkout_or_reset(&branch_name)?;
 
@@ -745,6 +753,7 @@ fn ask_user(prompt: &str) -> Result<String> {
 fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Result<()> {
     // Load config
     let config = load_config()?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get repository
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
@@ -783,18 +792,9 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 
     // Fetch PR branches
     println!("Fetching PR branches...");
-    let fetch_url = format!("{}/{}.git", config.https_url, repo);
     let refspec = format!("+refs/pull/{}/head:refs/heads/{}", pull_str, head_branch);
     let base_refspec = format!("+refs/heads/{}:refs/heads/{}", target_branch, base_branch);
-
-    let output = Command::new("git")
-        .args(["fetch", &fetch_url, &refspec, &base_refspec])
-        .output()
-        .context("Failed to fetch PR")?;
-
-    if !output.status.success() {
-        anyhow::bail!("Failed to fetch PR: {}", String::from_utf8_lossy(&output.stderr));
-    }
+    fetch_pr_refs(&repo, &[&refspec, &base_refspec], &config)?;
 
     // Get head commit
     let output = Command::new("git")
@@ -1023,8 +1023,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Command::new("git").args(["branch", "-D", &base_branch]).output().ok();
     Command::new("git").args(["branch", "-D", &local_merge_branch]).output().ok();
 
-    // Construct HTTPS URL for pushing (to avoid SSH deploy key issues)
-    let push_url = format!("https://{}@{}/{}.git", config.token, config.https_host(), repo);
+    let push_url = format!("{}/{}.git", config.https_url, repo);
 
     // Ask about pushing
     loop {
@@ -1076,10 +1075,10 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)] // Who cares, this file is mainly read and created by AI.
 fn fetch_all() -> Result<()> {
     // Load config
     let config = load_config()?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get all remotes
     let output =
@@ -1091,7 +1090,6 @@ fn fetch_all() -> Result<()> {
 
     let remotes = String::from_utf8(output.stdout)?;
 
-    // For each remote, get its URL and convert to HTTPS if needed
     for remote in remotes.lines() {
         let remote = remote.trim();
         if remote.is_empty() {
@@ -1100,64 +1098,8 @@ fn fetch_all() -> Result<()> {
 
         println!("Fetching from {}...", remote);
 
-        // Get the remote URL
-        let output = Command::new("git")
-            .args(["remote", "get-url", remote])
-            .output()
-            .context("Failed to get remote URL")?;
-
-        if !output.status.success() {
-            println!("Warning: Could not get URL for remote {}", remote);
-            continue;
-        }
-
-        let url = String::from_utf8(output.stdout)?.trim().to_string();
-
-        // Convert SSH URLs to HTTPS with token
-        let mut fetch_url = url.clone();
-
-        // Check for full SSH format: ssh://git@host/owner/repo
-        let full_ssh_prefix = format!("ssh://git@{}/", config.ssh_url);
-        if let Some(path) = url.strip_prefix(&full_ssh_prefix) {
-            let repo_path = path.strip_suffix(".git").unwrap_or(path);
-            fetch_url =
-                format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
-        } else if let Some(path) = url.strip_prefix(&format!("git@{}:", config.ssh_url)) {
-            // Check for short SSH format: git@host:owner/repo
-            let repo_path = path.strip_suffix(".git").unwrap_or(path);
-            fetch_url =
-                format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
-        } else {
-            // Check for HTTPS URLs on configured host
-            let https_prefix = format!("https://{}/", config.https_host());
-            if let Some(path) = url.strip_prefix(&https_prefix) {
-                let repo_path = path.strip_suffix(".git").unwrap_or(path);
-                // Already HTTPS, just add token if not present
-                if !url.contains('@') {
-                    fetch_url = format!(
-                        "https://{}@{}/{}.git",
-                        config.token,
-                        config.https_host(),
-                        repo_path
-                    );
-                }
-            }
-        }
-
-        // Temporarily override the remote URL to use HTTPS with token
-        let original_url = url.clone();
-        if fetch_url != original_url {
-            Command::new("git").args(["remote", "set-url", remote, &fetch_url]).output().ok();
-        }
-
-        // Fetch from the remote name (this updates remote-tracking branches)
         let output =
             Command::new("git").args(["fetch", remote]).output().context("Failed to fetch")?;
-
-        // Restore original URL if we changed it
-        if fetch_url != original_url {
-            Command::new("git").args(["remote", "set-url", remote, &original_url]).output().ok();
-        }
 
         if output.status.success() {
             println!("Successfully fetched from {}", remote);
@@ -1173,8 +1115,6 @@ fn fetch_all() -> Result<()> {
     // Also run jj git fetch if jj is available
     if Command::new("jj").arg("--version").output().is_ok_and(|o| o.status.success()) {
         println!("\nRunning jj git fetch...");
-
-        let _guard = SshToHttpsGuard::new(&config)?;
 
         let output = Command::new("jj")
             .args(["git", "fetch"])
@@ -1201,7 +1141,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     }
 
     println!("Setting up HTTPS authentication for push...");
-    let _guard = SshToHttpsGuard::new(&config)?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Build jj command
     let mut args = vec!["git", "push"];
