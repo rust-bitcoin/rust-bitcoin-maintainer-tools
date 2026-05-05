@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
       - uses: ./actions/setup-rbmt
         with:
-          rbmt-version: ${{ forgejo.sha }}
+          rbmt-path: cargo-rbmt
           repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
       - run: cargo rbmt tools
       - run: zizmor .

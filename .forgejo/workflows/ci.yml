@@ -23,8 +23,7 @@ jobs:
       - name: Dogfood with cargo-rbmt
         uses: ./actions/setup-rbmt
         with:
-          rbmt-version: ${{ forgejo.sha }}
-          repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
+          rbmt-path: cargo-rbmt
       - run: cargo rbmt --lock-file existing lint
       - run: cargo rbmt --lock-file existing docs
       - run: cargo rbmt --lock-file existing docsrs
@@ -40,8 +39,7 @@ jobs:
           persist-credentials: false
       - uses: ./actions/setup-rbmt
         with:
-          rbmt-version: ${{ forgejo.sha }}
-          repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
+          rbmt-path: cargo-rbmt
       - run: cargo rbmt prerelease --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
 
   dogfood-tests:
@@ -59,7 +57,6 @@ jobs:
       - name: Dogfood with cargo-rbmt
         uses: ./actions/setup-rbmt
         with:
-          rbmt-version: ${{ forgejo.sha }}
-          repo-url: ${{ forgejo.event.pull_request.head.repo.clone_url }}
+          rbmt-path: cargo-rbmt
       - name: Run tests
         run: cargo rbmt --lock-file ${{ matrix.lock-file }} test --toolchain ${{ matrix.toolchain }} --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
