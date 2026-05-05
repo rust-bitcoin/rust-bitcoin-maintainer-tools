@@ -496,6 +496,7 @@ struct CreatePullReviewOptions {
 
 #[derive(Deserialize, Debug)]
 struct PullReview {
+    body: String,
     commit_id: Option<String>,
     state: PrReviewState,
     user: CommentUser,
@@ -520,7 +521,7 @@ fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Co
     )
 }
 
-fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
+fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
     api_get(
         &config.api_url(),
         &config.token,
@@ -528,12 +529,17 @@ fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Com
     )
 }
 
-fn get_pr_review_objects(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
-    api_get(
-        &config.api_url(),
-        &config.token,
-        &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
-    )
+fn scrape_acks(body: &str, login: &str, head_abbrev: &str, acks: &mut Vec<(String, String)>) {
+    for line in body.lines() {
+        if line.contains("ACK")
+            && line.contains(head_abbrev)
+            && !line.starts_with('>')
+            && !line.starts_with("    ")
+        {
+            acks.push((login.to_string(), line.to_string()));
+            break;
+        }
+    }
 }
 
 fn submit_pr_review(
@@ -573,7 +579,7 @@ fn ack_pr(repo: Option<String>) -> Result<()> {
     let body = format!("ACK {}", commit_hash);
 
     println!("Checking existing reviews on PR #{}...", pr_number);
-    let existing_reviews = get_pr_review_objects(&repo, pr_number, &config)?;
+    let existing_reviews = get_pr_reviews(&repo, pr_number, &config)?;
 
     for r in &existing_reviews {
         if r.user.login == config.username
@@ -889,26 +895,17 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 
     // Fetch ACKs
     println!("\nFetching ACKs...");
-    let mut comments = get_pr_comments(&repo, pr_number, &config)?;
+    let comments = get_pr_comments(&repo, pr_number, &config)?;
     let reviews = get_pr_reviews(&repo, pr_number, &config)?;
-
-    // Combine comments and reviews
-    comments.extend(reviews);
 
     let head_abbrev = &head_commit[0..6];
     let mut acks: Vec<(String, String)> = Vec::new();
 
-    for comment in &comments {
-        for line in comment.body.lines() {
-            if line.contains("ACK")
-                && line.contains(head_abbrev)
-                && !line.starts_with('>')
-                && !line.starts_with("    ")
-            {
-                acks.push((comment.user.login.clone(), line.to_string()));
-                break;
-            }
-        }
+    for c in &comments {
+        scrape_acks(&c.body, &c.user.login, head_abbrev, &mut acks);
+    }
+    for r in &reviews {
+        scrape_acks(&r.body, &r.user.login, head_abbrev, &mut acks);
     }
 
     // Add ACKs to message
