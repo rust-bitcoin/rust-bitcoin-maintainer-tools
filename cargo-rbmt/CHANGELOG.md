@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Dedupe lines in API file output.
+
 ## [0.2.1] - 2026-05-04
 
 * Fix color output in `progress` mode.
