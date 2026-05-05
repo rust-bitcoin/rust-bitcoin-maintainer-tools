@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-04
+
 * Fix color output in `progress` mode.
 * Add a `version` command which shows git revision and manifest version of rbmt.
 
@@ -29,6 +31,7 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...HEAD
+[Unreleased]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.1...HEAD
+[0.2.1]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...cargo-rbmt-0.2.1
 [0.2.0]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...cargo-rbmt-0.2.0
 [0.1.0]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/releases/tag/cargo-rbmt-0.1.0
