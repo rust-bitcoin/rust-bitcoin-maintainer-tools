@@ -936,6 +936,29 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         .context("Failed to amend commit")?;
 
     // Interactive verification
+    // Show the merge commit author and require explicit confirmation.
+    // The Forgejo API does not expose enough information to validate the
+    // author automatically, so this requires a human check.
+    let author_out = Command::new("git")
+        .args(["log", "-1", "--format=%an <%ae>"])
+        .output()
+        .context("Failed to read merge commit author")?;
+    if !author_out.status.success() {
+        anyhow::bail!("Failed to read merge commit author");
+    }
+    let author = String::from_utf8(author_out.stdout)?.trim().to_string();
+    println!("\nMerge commit author: {}", author);
+    let reply = ask_user("Is this the correct author for your Forgejo account? [y/N]:")?;
+    if reply != "y" && reply != "Y" {
+        println!("Author rejected. Aborting merge.");
+        Command::new("git").args(["checkout", &target_branch]).output().ok();
+        Command::new("git").args(["branch", "-D", &head_branch]).output().ok();
+        Command::new("git").args(["branch", "-D", &base_branch]).output().ok();
+        Command::new("git").args(["branch", "-D", &local_merge_branch]).output().ok();
+        anyhow::bail!("Merge author not confirmed by user");
+    }
+
+    // Interactive shell for manual inspection
     println!("\nDropping you into a shell to test the merge.");
     println!("Run 'git diff HEAD~' to see changes.");
     println!("Type 'exit' when done.");
