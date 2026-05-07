@@ -80,12 +80,12 @@ enum Commands {
         /// Disable debug assertions in compiled code.
         #[arg(long)]
         no_debug_assertions: bool,
-        /// Build and test in release mode.
-        #[arg(long)]
-        release: bool,
         /// Test every commit between the given baseline ref and HEAD to verify bisectability.
         #[arg(long)]
         baseline: Option<String>,
+        /// Cargo test arguments (everything after `--`).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        cargo_args: Vec<String>,
     },
     /// Run bitcoin core integration tests.
     Integration,
@@ -183,15 +183,15 @@ fn main() {
                 eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             },
-        Commands::Test { toolchain, no_debug_assertions, release, baseline } =>
+        Commands::Test { toolchain, no_debug_assertions, baseline, cargo_args } =>
             if let Err(e) = test::run(
                 &sh,
                 cli.lockfile,
                 toolchain,
                 !no_debug_assertions,
-                release,
                 baseline.as_deref(),
                 &cli.packages,
+                &cargo_args,
             ) {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);

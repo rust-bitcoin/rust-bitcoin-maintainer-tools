@@ -126,9 +126,6 @@ struct TestConfig {
 
     /// Exact feature combinations to always test.
     exact_features: Vec<Vec<String>>,
-
-    /// Always run tests with `--release` for this package.
-    release: bool,
 }
 
 impl TestConfig {
@@ -149,26 +146,27 @@ impl TestConfig {
     }
 }
 
-/// Build and test with the given features and optional `--release` flag.
+/// Build and test with the given features and cargo test arguments.
 fn test_features(
     sh: &Shell,
     features: &[impl AsRef<str>],
-    release: bool,
+    cargo_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
+
     cargo_cmd(sh)
         .arg("build")
         .arg("--no-default-features")
         .arg("--features")
         .arg(&features_str)
-        .set_release(release)
         .run_verbose()?;
+
     cargo_cmd(sh)
         .arg("test")
         .arg("--no-default-features")
         .arg("--features")
         .arg(&features_str)
-        .set_release(release)
+        .args(cargo_args)
         .run_verbose()?;
     Ok(())
 }
@@ -178,14 +176,24 @@ fn test_features(
 /// If `baseline` is `Some`, checks out each commit between `baseline` and HEAD in turn,
 /// running the full test suite at each one. The checkout is restored via
 /// [`git::GitSwitchGuard`] even on failure, and the run stops immediately if any commit fails.
+///
+/// # Arguments
+///
+/// * `sh` - The shell environment.
+/// * `lockfile` - Which lockfile variant to use.
+/// * `toolchain` - Which toolchain to use.
+/// * `debug_assertions` - Whether to enable debug assertions.
+/// * `baseline` - Optional baseline ref for testing multiple commits.
+/// * `packages` - Packages to test (empty = all).
+/// * `cargo_args` - Additional arguments to pass to cargo test commands.
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
     toolchain: Toolchain,
     debug_assertions: bool,
-    release: bool,
     baseline: Option<&str>,
     packages: &[String],
+    cargo_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
@@ -211,14 +219,14 @@ pub fn run(
             let _lockfile_guard = lockfile.activate(sh)?;
             // Resolve packages for each commit, so we only test packages that exist in that commit.
             let packages = get_workspace_packages(sh, packages)?;
-            let pkg_summaries = test_commit(sh, toolchain, release, &packages)?;
+            let pkg_summaries = test_commit(sh, toolchain, &packages, cargo_args)?;
             summary.commits.push((sha.clone(), pkg_summaries));
         }
     } else {
         let packages = get_workspace_packages(sh, packages)?;
         let _lockfile_guard = lockfile.activate(sh)?;
         let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
-        let pkg_summaries = test_commit(sh, toolchain, release, &packages)?;
+        let pkg_summaries = test_commit(sh, toolchain, &packages, cargo_args)?;
         summary.commits.push((sha, pkg_summaries));
     }
 
@@ -232,8 +240,8 @@ pub fn run(
 fn test_commit(
     sh: &Shell,
     toolchain: Toolchain,
-    release: bool,
     packages: &[Package],
+    cargo_args: &[String],
 ) -> Result<Vec<PackageSummary>, Box<dyn std::error::Error>> {
     rbmt_eprintln!("Testing {} crate(s)", packages.len());
 
@@ -247,12 +255,11 @@ fn test_commit(
         // each package's Cargo.toml individually rather than the workspace root.
         prepare_toolchain(sh, toolchain)?;
         let config = TestConfig::load(Path::new(&package.dir))?;
-        let release = release || config.release;
 
         let mut pkg_summary = PackageSummary { name: package.name.clone(), ..Default::default() };
 
-        do_test(sh, &config, release, &mut pkg_summary)?;
-        do_feature_matrix(sh, package, &config, release, &mut pkg_summary)?;
+        do_test(sh, &config, cargo_args, &mut pkg_summary)?;
+        do_feature_matrix(sh, package, &config, cargo_args, &mut pkg_summary)?;
         do_no_std_check(sh, &package.dir, &mut pkg_summary)?;
 
         pkg_summaries.push(pkg_summary);
@@ -261,20 +268,20 @@ fn test_commit(
     Ok(pkg_summaries)
 }
 
-/// Run defual build and test along with examples.
+/// Run default build and test along with examples.
 fn do_test(
     sh: &Shell,
     config: &TestConfig,
-    release: bool,
+    cargo_args: &[String],
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Running default tests on {}", summary.name);
 
-    // Defualt build and test.
-    cargo_cmd(sh).arg("build").set_release(release).run_verbose()?;
-    cargo_cmd(sh).arg("test").set_release(release).run_verbose()?;
+    // Default build and test.
+    cargo_cmd(sh).arg("build").run_verbose()?;
+    cargo_cmd(sh).arg("test").args(cargo_args).run_verbose()?;
 
-    // Run examples.
+    // Run examples (without cargo_args - examples run with their configured features).
     for example in &config.examples {
         let parts: Vec<&str> = example.split(':').collect();
 
@@ -287,12 +294,7 @@ fn do_test(
                     name,
                     summary.name
                 );
-                cargo_cmd(sh)
-                    .arg("run")
-                    .arg("--example")
-                    .arg(name)
-                    .set_release(release)
-                    .run_verbose()?;
+                cargo_cmd(sh).arg("run").arg("--example").arg(name).run_verbose()?;
             }
             2 => {
                 let name = parts[0];
@@ -310,7 +312,6 @@ fn do_test(
                         .arg("--no-default-features")
                         .arg("--example")
                         .arg(name)
-                        .set_release(release)
                         .run_verbose()?;
                 } else {
                     // Format: "name:features" - run with specific features.
@@ -326,7 +327,6 @@ fn do_test(
                         .arg(name)
                         .arg("--features")
                         .arg(features)
-                        .set_release(release)
                         .run_verbose()?;
                 }
             }
@@ -355,20 +355,20 @@ fn do_feature_matrix(
     sh: &Shell,
     package: &Package,
     config: &TestConfig,
-    release: bool,
+    cargo_args: &[String],
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Running feature matrix tests in {}", package.name);
 
     // Test all features.
     rbmt_eprintln!("Testing all features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--all-features").set_release(release).run_verbose()?;
-    cargo_cmd(sh).arg("test").arg("--all-features").set_release(release).run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--all-features").run_verbose()?;
+    cargo_cmd(sh).arg("test").arg("--all-features").args(cargo_args).run_verbose()?;
 
     // Test no features.
     rbmt_eprintln!("Testing no features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--no-default-features").set_release(release).run_verbose()?;
-    cargo_cmd(sh).arg("test").arg("--no-default-features").set_release(release).run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--no-default-features").run_verbose()?;
+    cargo_cmd(sh).arg("test").arg("--no-default-features").args(cargo_args).run_verbose()?;
 
     // Test each feature in isolation, plus sampled subsets.
     let features: Vec<String> = discover_features(sh, package)?
@@ -382,13 +382,13 @@ fn do_feature_matrix(
             package.name,
             features
         );
-        sampled_feature_matrix(sh, &features, release, summary)?;
+        sampled_feature_matrix(sh, &features, cargo_args, summary)?;
     }
 
     // Test exact feature sets.
     for features in &config.exact_features {
         rbmt_eprintln!("Testing exact feature set in {}: {:?}", package.name, features);
-        test_features(sh, features, release)?;
+        test_features(sh, features, cargo_args)?;
         summary.exact_sets.push(features.clone());
     }
 
@@ -406,7 +406,7 @@ fn do_feature_matrix(
 fn sampled_feature_matrix(
     sh: &Shell,
     features: &[String],
-    release: bool,
+    cargo_args: &[String],
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // ceil(log2(n)) scales the number of random subsets with the feature count.
@@ -421,7 +421,7 @@ fn sampled_feature_matrix(
     // Test each feature individually.
     for feature in features {
         rbmt_eprintln!("Testing individual feature in {}: {}", summary.name, feature);
-        test_features(sh, &[feature], release)?;
+        test_features(sh, &[feature], cargo_args)?;
         summary.individual_features.push(feature.clone());
     }
 
@@ -445,7 +445,7 @@ fn sampled_feature_matrix(
             }
 
             rbmt_eprintln!("Testing sampled feature set in {}: {:?}", summary.name, subset);
-            test_features(sh, &subset, release)?;
+            test_features(sh, &subset, cargo_args)?;
             summary.sampled_subsets.push(subset.into_iter().cloned().collect());
         }
     }

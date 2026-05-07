@@ -65,6 +65,15 @@ The `test` command runs feature matrix testing for your package. Every run uncon
 
 The `--baseline <ref>` flag checks that every commit between `<ref>` and `HEAD` passes the test suite, ensuring the branch remains bisectable.
 
+Cargo test arguments can be passed after `--` and will be appended to the underlying `cargo test` commands.
+
+```bash
+cargo rbmt test -- --release
+cargo rbmt test -- --test-threads 4
+```
+
+> **NOTE:** Arguments are passed to `cargo test` only, not to `build` or example runs. The separate build step detects an implicit test code dependency. But builds always run with the default settings regardless of test arguments.
+
 ```toml
 [package.metadata.rbmt.test]
 # Examples to run with different feature configurations.

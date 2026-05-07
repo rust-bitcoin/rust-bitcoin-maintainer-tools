@@ -30,12 +30,10 @@ impl OutputMode {
     }
 }
 
-/// Extension trait for commands with conditional output and release support.
+/// Extension trait for commands with conditional output.
 pub trait CmdExt {
     /// Run command and show output only in Verbose mode, but always show on failure.
     fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    /// Conditionally append `--release` flag.
-    fn set_release(self, release: bool) -> Self;
 }
 
 impl CmdExt for Cmd<'_> {
@@ -60,14 +58,6 @@ impl CmdExt for Cmd<'_> {
         }
 
         Ok(())
-    }
-
-    fn set_release(self, release: bool) -> Self {
-        if release {
-            self.arg("--release")
-        } else {
-            self
-        }
     }
 }
 
