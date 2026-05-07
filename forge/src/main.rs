@@ -114,7 +114,7 @@ enum PrCommands {
         #[arg(short, long)]
         repo: Option<String>,
     },
-    /// Post an ACK comment on the currently checked out PR
+    /// Submit an approving ACK review on the currently checked out PR
     #[command(alias = "a")]
     Ack {
         /// Repository in format "owner/repo" (optional, uses current repo if not specified)
@@ -163,25 +163,97 @@ struct ListItem {
     title: String,
 }
 
+fn api_get<T: serde::de::DeserializeOwned>(api_url: &str, token: &str, path: &str) -> Result<T> {
+    let url = format!("{}{}", api_url, path);
+    let response = bitreq::get(&url)
+        .with_header("Authorization", format!("token {}", token))
+        .with_header("Accept", "*/*")
+        // Masquerade as curl because the Forgejo instance blocked requests marked differently.
+        .with_header("User-Agent", "curl/8.5.0")
+        .send()
+        .context("Failed to send request to Forgejo API")?;
+    if response.status_code != 200 {
+        anyhow::bail!("API request failed with status: {}", response.status_code);
+    }
+    response.json().context("Failed to parse API response")
+}
+
+fn api_post<B: Serialize>(api_url: &str, token: &str, path: &str, body: &B) -> Result<()> {
+    let url = format!("{}{}", api_url, path);
+    let body_json = serde_json::to_string(body).context("Failed to serialize request body")?;
+    let response = bitreq::post(&url)
+        .with_header("Authorization", format!("token {}", token))
+        .with_header("Accept", "*/*")
+        // Masquerade as curl because the Forgejo instance blocked requests marked differently.
+        .with_header("Content-Type", "application/json")
+        .with_header("User-Agent", "curl/8.5.0")
+        .with_body(body_json.as_str())
+        .send()
+        .context("Failed to send request to Forgejo API")?;
+    if response.status_code != 200 && response.status_code != 201 {
+        anyhow::bail!("API request failed with status: {}", response.status_code);
+    }
+    Ok(())
+}
+
+/// RAII guard that configures `git config --local url.<https-with-token>.insteadOf`
+/// for the configured host on construction, and removes the entries on drop.
+///
+/// Rewrites all three forms — `git@host:`, `ssh://git@host/`, and plain
+/// `https://host/` — to a tokenized `https://<token>@host/` URL. Lets `git`
+/// and `jj` (and any sub-command resolving URLs through git) transparently
+/// authenticate over HTTPS without permanently mutating repo config — even
+/// on early return or panic.
+struct AuthHttpsGuard {
+    key: String,
+    added: Vec<String>,
+}
+
+impl AuthHttpsGuard {
+    fn new(config: &Config) -> Result<Self> {
+        let https_url = format!("https://{}@{}/", config.token, config.https_host());
+        let key = format!("url.{}.insteadOf", https_url);
+        let mut guard = Self { key: key.clone(), added: Vec::new() };
+
+        for value in [
+            format!("git@{}:", config.ssh_url),
+            format!("ssh://git@{}/", config.ssh_url),
+            format!("https://{}/", config.https_host()),
+        ] {
+            let out = Command::new("git")
+                .args(["config", "--local", "--add", &key, &value])
+                .output()
+                .with_context(|| format!("Failed to configure git URL rewriting for {}", value))?;
+            if !out.status.success() {
+                // Drop will unset whatever made it in.
+                anyhow::bail!("git config failed: {}", String::from_utf8_lossy(&out.stderr));
+            }
+            guard.added.push(value);
+        }
+        Ok(guard)
+    }
+}
+
+impl Drop for AuthHttpsGuard {
+    fn drop(&mut self) {
+        for value in &self.added {
+            let _ = Command::new("git")
+                .args(["config", "--local", "--unset", &self.key, value])
+                .output();
+        }
+    }
+}
+
 fn list_prs(repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
-    let url = format!("{}/repos/{}/pulls?state=open&limit=100", config.api_url(), repo);
-
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    let prs: Vec<ListItem> = response.json().context("Failed to parse PRs response")?;
+    let prs: Vec<ListItem> = api_get(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/pulls?state=open&limit=100", repo),
+    )?;
 
     if prs.is_empty() {
         println!("No open pull requests found");
@@ -196,23 +268,18 @@ fn list_prs(repo: Option<String>) -> Result<()> {
 }
 
 fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
-    let url = format!("{}/repos/{}/pulls/{}", config.api_url(), repo, pr_number);
+    api_get(&config.api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
+}
 
-    // Masquerade as curl because the Forgejo instance blocked requests marked differently.
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
+fn fetch_pr_refs(repo: &str, refspecs: &[&str], config: &Config) -> Result<()> {
+    let url = format!("{}/{}.git", config.https_url, repo);
+    let mut args = vec!["fetch", &url];
+    args.extend_from_slice(refspecs);
+    let out = Command::new("git").args(&args).output().context("Failed to fetch PR refs")?;
+    if !out.status.success() {
+        anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&out.stderr));
     }
-
-    let pr: PullRequest = response.json().context("Failed to parse PR response")?;
-
-    Ok(pr)
+    Ok(())
 }
 
 fn get_preferred_remote() -> String {
@@ -276,6 +343,57 @@ fn get_current_repo(config: &Config) -> Result<String> {
     anyhow::bail!("Remote URL does not match configured hosts: {}", url)
 }
 
+/// Position the local branch `branch_name` at `FETCH_HEAD`, regardless of
+/// whether it already exists or is currently checked out.
+fn checkout_or_reset(branch_name: &str) -> Result<()> {
+    let current = get_current_branch()?;
+
+    if current == branch_name {
+        println!("Resetting current branch {} to FETCH_HEAD...", branch_name);
+        let output = Command::new("git")
+            .args(["reset", "--hard", "FETCH_HEAD"])
+            .output()
+            .context("Failed to reset branch")?;
+        if !output.status.success() {
+            anyhow::bail!("Failed to reset: {}", String::from_utf8_lossy(&output.stderr));
+        }
+        return Ok(());
+    }
+
+    let exists = Command::new("git")
+        .args(["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", branch_name)])
+        .output()
+        .is_ok_and(|o| o.status.success());
+
+    if exists {
+        println!("Checking out existing branch {} and resetting to FETCH_HEAD...", branch_name);
+        let output = Command::new("git")
+            .args(["checkout", branch_name])
+            .output()
+            .context("Failed to checkout PR branch")?;
+        if !output.status.success() {
+            anyhow::bail!("Failed to checkout: {}", String::from_utf8_lossy(&output.stderr));
+        }
+        let output = Command::new("git")
+            .args(["reset", "--hard", "FETCH_HEAD"])
+            .output()
+            .context("Failed to reset branch")?;
+        if !output.status.success() {
+            anyhow::bail!("Failed to reset: {}", String::from_utf8_lossy(&output.stderr));
+        }
+    } else {
+        println!("Creating branch {} from FETCH_HEAD...", branch_name);
+        let output = Command::new("git")
+            .args(["checkout", "-b", branch_name, "FETCH_HEAD"])
+            .output()
+            .context("Failed to create PR branch")?;
+        if !output.status.success() {
+            anyhow::bail!("Failed to checkout: {}", String::from_utf8_lossy(&output.stderr));
+        }
+    }
+    Ok(())
+}
+
 fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     // Check if working directory is clean
     let status_output = Command::new("git")
@@ -292,6 +410,7 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
 
     // Load config
     let config = load_config()?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get repository
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
@@ -305,67 +424,18 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     println!("From: {}/{}", pr.head.repo.full_name, pr.head.ref_name);
     println!("Into: {}/{}", pr.base.repo.full_name, pr.base.ref_name);
 
-    // Create a branch name for the PR
     let branch_name = format!("pr-{}", pr_number);
+    let refspec = format!("refs/pull/{}/head", pr_number);
 
-    // Fetch directly from the PR repository URL (works for both forks and same-repo PRs)
-    println!("Fetching from {}...", pr.head.repo.clone_url);
-    let output = Command::new("git")
-        .args(["fetch", &pr.head.repo.clone_url, &pr.head.ref_name])
-        .output()
-        .context("Failed to fetch from PR repository")?;
+    println!("Fetching {} from {}/{}...", refspec, config.https_url, repo);
+    fetch_pr_refs(&repo, &[&refspec], &config)?;
 
-    if !output.status.success() {
-        anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&output.stderr));
-    }
-
-    // Checkout the branch
-    println!("Checking out branch {}...", branch_name);
-
-    // First try to create a new branch from FETCH_HEAD
-    let output = Command::new("git")
-        .args(["checkout", "-b", &branch_name, "FETCH_HEAD"])
-        .output()
-        .context("Failed to checkout branch")?;
-
-    if !output.status.success() {
-        // Branch might already exist, try to switch to it
-        let output = Command::new("git")
-            .args(["checkout", &branch_name])
-            .output()
-            .context("Failed to checkout existing branch")?;
-
-        if !output.status.success() {
-            anyhow::bail!("Failed to checkout branch: {}", String::from_utf8_lossy(&output.stderr));
-        }
-
-        // Reset to FETCH_HEAD to ensure we're at the right commit
-        let output = Command::new("git")
-            .args(["reset", "--hard", "FETCH_HEAD"])
-            .output()
-            .context("Failed to reset branch")?;
-
-        if !output.status.success() {
-            anyhow::bail!("Failed to reset branch: {}", String::from_utf8_lossy(&output.stderr));
-        }
-    }
-
-    // Configure the branch to track the remote URL directly
-    let merge_ref = format!("refs/heads/{}", pr.head.ref_name);
-    Command::new("git")
-        .args(["config", &format!("branch.{}.remote", branch_name), &pr.head.repo.clone_url])
-        .output()
-        .context("Failed to set branch.remote config")?;
+    checkout_or_reset(&branch_name)?;
 
     Command::new("git")
         .args(["config", &format!("branch.{}.pushRemote", branch_name), &pr.head.repo.clone_url])
         .output()
         .context("Failed to set branch.pushRemote config")?;
-
-    Command::new("git")
-        .args(["config", &format!("branch.{}.merge", branch_name), &merge_ref])
-        .output()
-        .context("Failed to set branch.merge config")?;
 
     println!("Successfully checked out PR #{}", pr_number);
 
@@ -406,12 +476,33 @@ fn extract_pr_number_from_branch(branch: &str) -> Result<u64> {
     }
 }
 
+/// State of a Forgejo pull-request review. Only `Approved` is constructible
+/// today; unknown values from the API deserialize to `Other`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PrReviewState {
+    Approved,
+    #[serde(other)]
+    Other,
+}
+
 #[derive(Serialize)]
-struct CommentRequest {
+struct CreatePullReviewOptions {
     body: String,
+    commit_id: String,
+    event: PrReviewState,
 }
 
 #[derive(Deserialize, Debug)]
+struct PullReview {
+    body: String,
+    commit_id: Option<String>,
+    state: PrReviewState,
+    user: CommentUser,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct CommentUser {
     login: String,
 }
@@ -423,65 +514,46 @@ struct Comment {
 }
 
 fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
-    let url = format!("{}/repos/{}/issues/{}/comments", config.api_url(), repo, pr_number);
-
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    let comments: Vec<Comment> = response.json().context("Failed to parse comments response")?;
-
-    Ok(comments)
+    api_get(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/issues/{}/comments", repo, pr_number),
+    )
 }
 
-fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
-    let url = format!("{}/repos/{}/pulls/{}/reviews", config.api_url(), repo, pr_number);
-
-    let response = bitreq::get(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("User-Agent", "curl/8.5.0")
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
-    }
-
-    let reviews: Vec<Comment> = response.json().context("Failed to parse reviews response")?;
-
-    Ok(reviews)
+fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
+    api_get(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
+    )
 }
 
-fn post_pr_comment(repo: &str, pr_number: u64, comment: &str, config: &Config) -> Result<()> {
-    let url = format!("{}/repos/{}/issues/{}/comments", config.api_url(), repo, pr_number);
-
-    let request_body = CommentRequest { body: comment.to_string() };
-
-    let body_json =
-        serde_json::to_string(&request_body).context("Failed to serialize comment request")?;
-
-    let response = bitreq::post(&url)
-        .with_header("Authorization", format!("token {}", config.token))
-        .with_header("Accept", "*/*")
-        .with_header("Content-Type", "application/json")
-        .with_header("User-Agent", "curl/8.5.0")
-        .with_body(body_json.as_str())
-        .send()
-        .context("Failed to send request to Forgejo API")?;
-
-    if response.status_code != 201 && response.status_code != 200 {
-        anyhow::bail!("API request failed with status: {}", response.status_code);
+fn scrape_acks(body: &str, login: &str, head_abbrev: &str, acks: &mut Vec<(String, String)>) {
+    for line in body.lines() {
+        if line.contains("ACK")
+            && line.contains(head_abbrev)
+            && !line.starts_with('>')
+            && !line.starts_with("    ")
+        {
+            acks.push((login.to_string(), line.to_string()));
+            break;
+        }
     }
+}
 
-    Ok(())
+fn submit_pr_review(
+    repo: &str,
+    pr_number: u64,
+    body: &CreatePullReviewOptions,
+    config: &Config,
+) -> Result<()> {
+    api_post(
+        &config.api_url(),
+        &config.token,
+        &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
+        body,
+    )
 }
 
 fn ack_pr(repo: Option<String>) -> Result<()> {
@@ -504,24 +576,30 @@ fn ack_pr(repo: Option<String>) -> Result<()> {
     println!("Current commit: {}", commit_hash);
 
     // Format the ACK message
-    let comment = format!("ACK {}", commit_hash);
+    let body = format!("ACK {}", commit_hash);
 
-    // Check if this ACK already exists from this user
-    println!("Checking existing comments on PR #{}...", pr_number);
-    let existing_comments = get_pr_comments(&repo, pr_number, &config)?;
+    println!("Checking existing reviews on PR #{}...", pr_number);
+    let existing_reviews = get_pr_reviews(&repo, pr_number, &config)?;
 
-    for existing in &existing_comments {
-        if existing.user.login == config.username && existing.body.trim() == comment.trim() {
-            println!("PR already ACK'ed");
+    for r in &existing_reviews {
+        if r.user.login == config.username
+            && r.state == PrReviewState::Approved
+            && r.commit_id.as_deref() == Some(commit_hash.as_str())
+        {
+            println!("PR already approved for this commit");
             return Ok(());
         }
     }
 
-    // Post the comment
-    println!("Posting comment to PR #{}...", pr_number);
-    post_pr_comment(&repo, pr_number, &comment, &config)?;
+    println!("Submitting approving review on PR #{}...", pr_number);
+    submit_pr_review(
+        &repo,
+        pr_number,
+        &CreatePullReviewOptions { body, commit_id: commit_hash, event: PrReviewState::Approved },
+        &config,
+    )?;
 
-    println!("Successfully posted ACK comment!");
+    println!("Successfully submitted approving review!");
 
     Ok(())
 }
@@ -554,77 +632,112 @@ fn check_for_symlinks() -> Result<Vec<String>> {
     Ok(symlinks)
 }
 
-fn compute_tree_sha512() -> Result<String> {
-    use std::io::{BufRead, BufReader, Write};
+fn compute_tree_sha512(repo_root: &std::path::Path) -> Result<String> {
+    use std::io::{Read, Write};
     use std::process::Stdio;
 
     use sha2::{Digest, Sha512};
 
-    // Get all files in tree
+    // List all blobs, recursively. Mirrors tree_sha512sum()'s git ls-tree call.
     let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
         .args(["ls-tree", "--full-tree", "-r", "HEAD"])
         .output()
         .context("Failed to list git tree")?;
-
     if !output.status.success() {
-        anyhow::bail!("Failed to list git tree");
+        anyhow::bail!("git ls-tree failed: {}", String::from_utf8_lossy(&output.stderr));
     }
 
-    let mut files_and_blobs = Vec::new();
-    for line in String::from_utf8(output.stdout)?.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 3 && parts[1] == "blob" {
-            let blob_id = parts[2];
-            if let Some(tab_pos) = line.find('\t') {
-                let filename = &line[tab_pos + 1..];
-                files_and_blobs.push((filename.to_string(), blob_id.to_string()));
-            }
+    // Parse each line into (name_bytes, blob_sha). Keep names as raw bytes
+    // (matching Python's bytes behaviour) so byte-sort is identical.
+    let mut entries: Vec<(Vec<u8>, String)> = Vec::new();
+    for line in output.stdout.split(|&b| b == b'\n') {
+        if line.is_empty() {
+            continue;
         }
+        let tab =
+            line.iter().position(|&b| b == b'\t').context("Malformed ls-tree line: no tab")?;
+        let metadata =
+            std::str::from_utf8(&line[..tab]).context("Non-UTF-8 in ls-tree metadata")?;
+        let parts: Vec<&str> = metadata.split_whitespace().collect();
+        if parts.len() < 3 {
+            anyhow::bail!("Malformed ls-tree metadata: {}", metadata);
+        }
+        if parts[1] != "blob" {
+            anyhow::bail!("Unexpected non-blob entry: {}", metadata);
+        }
+        entries.push((line[tab + 1..].to_vec(), parts[2].to_string()));
     }
 
-    files_and_blobs.sort_by(|a, b| a.0.cmp(&b.0));
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Start git cat-file in batch mode
-    let mut cat_file = Command::new("git")
+    // Open git-cat-file --batch for streaming blob content.
+    let mut cat = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
         .args(["cat-file", "--batch"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .context("Failed to spawn git cat-file")?;
-
-    let mut stdin = cat_file.stdin.take().context("Failed to get stdin")?;
-    let stdout = cat_file.stdout.take().context("Failed to get stdout")?;
-    let reader = BufReader::new(stdout);
+    let mut cat_stdin = cat.stdin.take().context("Failed to take cat-file stdin")?;
+    let mut cat_stdout = cat.stdout.take().context("Failed to take cat-file stdout")?;
 
     let mut overall = Sha512::new();
+    let mut buf = vec![0u8; 65536];
+    let mut hdr = Vec::with_capacity(128);
 
-    let blob_ids: Vec<String> = files_and_blobs.iter().map(|(_, id)| id.clone()).collect();
-    std::thread::spawn(move || {
-        for blob_id in &blob_ids {
-            writeln!(stdin, "{}", blob_id).ok();
-        }
-    });
+    for (name, blob_sha) in &entries {
+        // Request blob.
+        writeln!(cat_stdin, "{}", blob_sha).context("Failed to write to cat-file")?;
+        cat_stdin.flush().context("Failed to flush cat-file stdin")?;
 
-    let mut lines = reader.lines();
-    for (filename, _) in &files_and_blobs {
-        // Read header line
-        if let Some(Ok(header)) = lines.next() {
-            let parts: Vec<&str> = header.split_whitespace().collect();
-            if parts.len() >= 3 && parts[1] == "blob" {
-                if let Ok(_size) = parts[2].parse::<usize>() {
-                    // Note: This is simplified - in production we'd read from stdout properly
-                    // For now, hash the filename as a placeholder
-                    let mut intern = Sha512::new();
-                    intern.update(filename.as_bytes());
-                    let dig = format!("{:x}", intern.finalize());
-
-                    overall.update(dig.as_bytes());
-                    overall.update(b"  ");
-                    overall.update(filename.as_bytes());
-                    overall.update(b"\n");
-                }
+        // Read header line up to '\n'.
+        hdr.clear();
+        let mut byte = [0u8; 1];
+        loop {
+            cat_stdout.read_exact(&mut byte).context("Premature EOF reading cat-file header")?;
+            if byte[0] == b'\n' {
+                break;
             }
+            hdr.push(byte[0]);
         }
+        let hdr_str = std::str::from_utf8(&hdr).context("Non-UTF-8 in cat-file header")?;
+        let hparts: Vec<&str> = hdr_str.split_whitespace().collect();
+        if hparts.len() < 3 || hparts[0] != blob_sha || hparts[1] != "blob" {
+            anyhow::bail!("Unexpected cat-file header: {}", hdr_str);
+        }
+        let size: usize = hparts[2].parse().context("Bad blob size in cat-file header")?;
+
+        // Hash exactly `size` blob bytes.
+        let mut intern = Sha512::new();
+        let mut remaining = size;
+        while remaining > 0 {
+            let want = remaining.min(buf.len());
+            cat_stdout.read_exact(&mut buf[..want]).context("Premature EOF reading blob")?;
+            intern.update(&buf[..want]);
+            remaining -= want;
+        }
+
+        // Consume the trailing LF that follows every blob.
+        cat_stdout.read_exact(&mut byte).context("Failed to read trailing LF after blob")?;
+        if byte[0] != b'\n' {
+            anyhow::bail!("Expected LF after blob data, got 0x{:02x}", byte[0]);
+        }
+
+        // Feed hex(inner) + "  " + name + "\n" into overall hash.
+        let dig = format!("{:x}", intern.finalize());
+        overall.update(dig.as_bytes());
+        overall.update(b"  ");
+        overall.update(name);
+        overall.update(b"\n");
+    }
+
+    drop(cat_stdin);
+    let status = cat.wait().context("Failed to wait for git cat-file")?;
+    if !status.success() {
+        anyhow::bail!("git cat-file exited non-zero");
     }
 
     Ok(format!("{:x}", overall.finalize()))
@@ -646,6 +759,7 @@ fn ask_user(prompt: &str) -> Result<String> {
 fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Result<()> {
     // Load config
     let config = load_config()?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get repository
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
@@ -684,18 +798,9 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 
     // Fetch PR branches
     println!("Fetching PR branches...");
-    let fetch_url = format!("{}/{}.git", config.https_url, repo);
     let refspec = format!("+refs/pull/{}/head:refs/heads/{}", pull_str, head_branch);
     let base_refspec = format!("+refs/heads/{}:refs/heads/{}", target_branch, base_branch);
-
-    let output = Command::new("git")
-        .args(["fetch", &fetch_url, &refspec, &base_refspec])
-        .output()
-        .context("Failed to fetch PR")?;
-
-    if !output.status.success() {
-        anyhow::bail!("Failed to fetch PR: {}", String::from_utf8_lossy(&output.stderr));
-    }
+    fetch_pr_refs(&repo, &[&refspec, &base_refspec], &config)?;
 
     // Get head commit
     let output = Command::new("git")
@@ -778,7 +883,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 
     // Compute tree hash
     println!("Computing tree hash...");
-    let first_sha512 = compute_tree_sha512()?;
+    let first_sha512 = compute_tree_sha512(std::path::Path::new("."))?;
     println!("Tree-SHA512: {}", first_sha512);
 
     // Show merge details
@@ -790,26 +895,17 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 
     // Fetch ACKs
     println!("\nFetching ACKs...");
-    let mut comments = get_pr_comments(&repo, pr_number, &config)?;
+    let comments = get_pr_comments(&repo, pr_number, &config)?;
     let reviews = get_pr_reviews(&repo, pr_number, &config)?;
-
-    // Combine comments and reviews
-    comments.extend(reviews);
 
     let head_abbrev = &head_commit[0..6];
     let mut acks: Vec<(String, String)> = Vec::new();
 
-    for comment in &comments {
-        for line in comment.body.lines() {
-            if line.contains("ACK")
-                && line.contains(head_abbrev)
-                && !line.starts_with('>')
-                && !line.starts_with("    ")
-            {
-                acks.push((comment.user.login.clone(), line.to_string()));
-                break;
-            }
-        }
+    for c in &comments {
+        scrape_acks(&c.body, &c.user.login, head_abbrev, &mut acks);
+    }
+    for r in &reviews {
+        scrape_acks(&r.body, &r.user.login, head_abbrev, &mut acks);
     }
 
     // Add ACKs to message
@@ -837,6 +933,29 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         .context("Failed to amend commit")?;
 
     // Interactive verification
+    // Show the merge commit author and require explicit confirmation.
+    // The Forgejo API does not expose enough information to validate the
+    // author automatically, so this requires a human check.
+    let author_out = Command::new("git")
+        .args(["log", "-1", "--format=%an <%ae>"])
+        .output()
+        .context("Failed to read merge commit author")?;
+    if !author_out.status.success() {
+        anyhow::bail!("Failed to read merge commit author");
+    }
+    let author = String::from_utf8(author_out.stdout)?.trim().to_string();
+    println!("\nMerge commit author: {}", author);
+    let reply = ask_user("Is this the correct author for your Forgejo account? [y/N]:")?;
+    if reply != "y" && reply != "Y" {
+        println!("Author rejected. Aborting merge.");
+        Command::new("git").args(["checkout", &target_branch]).output().ok();
+        Command::new("git").args(["branch", "-D", &head_branch]).output().ok();
+        Command::new("git").args(["branch", "-D", &base_branch]).output().ok();
+        Command::new("git").args(["branch", "-D", &local_merge_branch]).output().ok();
+        anyhow::bail!("Merge author not confirmed by user");
+    }
+
+    // Interactive shell for manual inspection
     println!("\nDropping you into a shell to test the merge.");
     println!("Run 'git diff HEAD~' to see changes.");
     println!("Type 'exit' when done.");
@@ -845,7 +964,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Command::new(shell).arg("-i").status().context("Failed to spawn shell")?;
 
     // Verify tree hash unchanged
-    let second_sha512 = compute_tree_sha512()?;
+    let second_sha512 = compute_tree_sha512(std::path::Path::new("."))?;
     if first_sha512 != second_sha512 {
         anyhow::bail!("ERROR: Tree hash changed unexpectedly");
     }
@@ -901,8 +1020,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Command::new("git").args(["branch", "-D", &base_branch]).output().ok();
     Command::new("git").args(["branch", "-D", &local_merge_branch]).output().ok();
 
-    // Construct HTTPS URL for pushing (to avoid SSH deploy key issues)
-    let push_url = format!("https://{}@{}/{}.git", config.token, config.https_host(), repo);
+    let push_url = format!("{}/{}.git", config.https_url, repo);
 
     // Ask about pushing
     loop {
@@ -954,10 +1072,10 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)] // Who cares, this file is mainly read and created by AI.
 fn fetch_all() -> Result<()> {
     // Load config
     let config = load_config()?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get all remotes
     let output =
@@ -969,7 +1087,6 @@ fn fetch_all() -> Result<()> {
 
     let remotes = String::from_utf8(output.stdout)?;
 
-    // For each remote, get its URL and convert to HTTPS if needed
     for remote in remotes.lines() {
         let remote = remote.trim();
         if remote.is_empty() {
@@ -978,64 +1095,8 @@ fn fetch_all() -> Result<()> {
 
         println!("Fetching from {}...", remote);
 
-        // Get the remote URL
-        let output = Command::new("git")
-            .args(["remote", "get-url", remote])
-            .output()
-            .context("Failed to get remote URL")?;
-
-        if !output.status.success() {
-            println!("Warning: Could not get URL for remote {}", remote);
-            continue;
-        }
-
-        let url = String::from_utf8(output.stdout)?.trim().to_string();
-
-        // Convert SSH URLs to HTTPS with token
-        let mut fetch_url = url.clone();
-
-        // Check for full SSH format: ssh://git@host/owner/repo
-        let full_ssh_prefix = format!("ssh://git@{}/", config.ssh_url);
-        if let Some(path) = url.strip_prefix(&full_ssh_prefix) {
-            let repo_path = path.strip_suffix(".git").unwrap_or(path);
-            fetch_url =
-                format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
-        } else if let Some(path) = url.strip_prefix(&format!("git@{}:", config.ssh_url)) {
-            // Check for short SSH format: git@host:owner/repo
-            let repo_path = path.strip_suffix(".git").unwrap_or(path);
-            fetch_url =
-                format!("https://{}@{}/{}.git", config.token, config.https_host(), repo_path);
-        } else {
-            // Check for HTTPS URLs on configured host
-            let https_prefix = format!("https://{}/", config.https_host());
-            if let Some(path) = url.strip_prefix(&https_prefix) {
-                let repo_path = path.strip_suffix(".git").unwrap_or(path);
-                // Already HTTPS, just add token if not present
-                if !url.contains('@') {
-                    fetch_url = format!(
-                        "https://{}@{}/{}.git",
-                        config.token,
-                        config.https_host(),
-                        repo_path
-                    );
-                }
-            }
-        }
-
-        // Temporarily override the remote URL to use HTTPS with token
-        let original_url = url.clone();
-        if fetch_url != original_url {
-            Command::new("git").args(["remote", "set-url", remote, &fetch_url]).output().ok();
-        }
-
-        // Fetch from the remote name (this updates remote-tracking branches)
         let output =
             Command::new("git").args(["fetch", remote]).output().context("Failed to fetch")?;
-
-        // Restore original URL if we changed it
-        if fetch_url != original_url {
-            Command::new("git").args(["remote", "set-url", remote, &original_url]).output().ok();
-        }
 
         if output.status.success() {
             println!("Successfully fetched from {}", remote);
@@ -1052,43 +1113,10 @@ fn fetch_all() -> Result<()> {
     if Command::new("jj").arg("--version").output().is_ok_and(|o| o.status.success()) {
         println!("\nRunning jj git fetch...");
 
-        // Set up git URL rewriting to convert SSH to HTTPS with token
-        let https_url = format!("https://{}@{}/", config.token, config.https_host());
-
-        // Configure URL rewriting for short SSH format (git@host:)
-        Command::new("git")
-            .args([
-                "config",
-                "--local",
-                "--add",
-                &format!("url.{}.insteadOf", https_url),
-                &format!("git@{}:", config.ssh_url),
-            ])
-            .output()
-            .ok();
-
-        // Configure URL rewriting for full SSH format (ssh://git@host/)
-        Command::new("git")
-            .args([
-                "config",
-                "--local",
-                "--add",
-                &format!("url.{}.insteadOf", https_url),
-                &format!("ssh://git@{}/", config.ssh_url),
-            ])
-            .output()
-            .ok();
-
         let output = Command::new("jj")
             .args(["git", "fetch"])
             .output()
             .context("Failed to run jj git fetch")?;
-
-        // Clean up URL rewriting config (remove all instances)
-        Command::new("git")
-            .args(["config", "--local", "--unset-all", &format!("url.{}.insteadOf", https_url)])
-            .output()
-            .ok();
 
         if output.status.success() {
             println!("jj git fetch completed successfully");
@@ -1110,33 +1138,7 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     }
 
     println!("Setting up HTTPS authentication for push...");
-
-    // Set up git URL rewriting to convert SSH to HTTPS with token
-    let https_url = format!("https://{}@{}/", config.token, config.https_host());
-
-    // Configure URL rewriting for short SSH format (git@host:)
-    Command::new("git")
-        .args([
-            "config",
-            "--local",
-            "--add",
-            &format!("url.{}.insteadOf", https_url),
-            &format!("git@{}:", config.ssh_url),
-        ])
-        .output()
-        .context("Failed to configure git URL rewriting")?;
-
-    // Configure URL rewriting for full SSH format (ssh://git@host/)
-    Command::new("git")
-        .args([
-            "config",
-            "--local",
-            "--add",
-            &format!("url.{}.insteadOf", https_url),
-            &format!("ssh://git@{}/", config.ssh_url),
-        ])
-        .output()
-        .context("Failed to configure git URL rewriting")?;
+    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Build jj command
     let mut args = vec!["git", "push"];
@@ -1148,12 +1150,6 @@ fn push_with_jj(current_only: bool) -> Result<()> {
     println!("Running jj git push{}...", if current_only { " -c @" } else { "" });
 
     let output = Command::new("jj").args(&args).output().context("Failed to run jj git push")?;
-
-    // Clean up URL rewriting config (remove all instances)
-    Command::new("git")
-        .args(["config", "--local", "--unset-all", &format!("url.{}.insteadOf", https_url)])
-        .output()
-        .ok();
 
     // Print stdout
     if !output.stdout.is_empty() {
@@ -1201,4 +1197,89 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+    use std::process::Command as Cmd;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::compute_tree_sha512;
+
+    /// RAII guard that creates a fresh temporary directory on construction
+    /// and removes it (recursively) on drop.
+    struct TempDirGuard {
+        path: PathBuf,
+    }
+
+    impl TempDirGuard {
+        fn new() -> std::io::Result<Self> {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path =
+                std::env::temp_dir().join(format!("forge-test-{}-{}", std::process::id(), n));
+            std::fs::create_dir(&path)?;
+            Ok(Self { path })
+        }
+
+        fn path(&self) -> &Path { self.path.as_path() }
+    }
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.path); }
+    }
+
+    /// Pinned vector: a repo with exactly two files:
+    ///   a.txt = "hello\n"
+    ///   b.txt = "world\n"
+    ///
+    /// Expected digest produced by github-merge.py's `tree_sha512sum()` algorithm.
+    #[test]
+    fn tree_sha512_matches_canonical() {
+        let dir = TempDirGuard::new().unwrap();
+        let root = dir.path();
+
+        let run =
+            |args: &[&str]| Cmd::new(args[0]).args(&args[1..]).current_dir(root).output().unwrap();
+        run(&["git", "init"]);
+        run(&["git", "config", "user.email", "test@test.com"]);
+        run(&["git", "config", "user.name", "Test"]);
+        std::fs::write(root.join("a.txt"), b"hello\n").unwrap();
+        std::fs::write(root.join("b.txt"), b"world\n").unwrap();
+        run(&["git", "add", "."]);
+        run(&["git", "commit", "-m", "init"]);
+
+        let digest = compute_tree_sha512(root).unwrap();
+
+        // Pinned by computing tree_sha512sum() from first principles on
+        // this exact tree (a.txt="hello\n", b.txt="world\n"):
+        //   inner_a = SHA512("hello\n").hexdigest()
+        //   inner_b = SHA512("world\n").hexdigest()
+        //   overall = SHA512((inner_a + "  a.txt\n") + (inner_b + "  b.txt\n"))
+        assert_eq!(
+            digest,
+            "0879634a7a0b2a60c156a6eaf0301db4afcf209b58d01dc28a817edcd7226bb\
+             f9864299559fff718d1c88998ca1d9a1768e7b1b053149a7276bc86cf127782de"
+        );
+    }
+
+    #[test]
+    fn pr_review_state_serde() {
+        use super::PrReviewState;
+        assert_eq!(serde_json::to_string(&PrReviewState::Approved).unwrap(), "\"APPROVED\"");
+        assert_eq!(
+            serde_json::from_str::<PrReviewState>("\"APPROVED\"").unwrap(),
+            PrReviewState::Approved
+        );
+        assert_eq!(
+            serde_json::from_str::<PrReviewState>("\"PENDING\"").unwrap(),
+            PrReviewState::Other
+        );
+        assert_eq!(
+            serde_json::from_str::<PrReviewState>("\"COMMENT\"").unwrap(),
+            PrReviewState::Other
+        );
+        assert_eq!(serde_json::from_str::<PrReviewState>("\"\"").unwrap(), PrReviewState::Other);
+    }
 }
