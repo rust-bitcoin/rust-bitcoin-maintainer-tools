@@ -202,6 +202,19 @@ Compares the current API against a baseline git reference (tag, branch, or commi
 
 Items marked with `#[doc(hidden)]` are *excluded from API snapshots and breaking change detection*. `#[doc(hidden)]` is an escape hatch to allow API changes without triggering breaking change warnings in CI. While hiding documentation doesn't change the actual types or signatures, it signals that the item is not part of the public API contract and may be modified or removed without warning.
 
+## Generate
+
+The `generate` command detects changes to generated files by running the file generation script, which is assumed to be at `<package-root>/generate-files.sh`, and running a diff. If the file generation script is not present or a diff is present after file generation, the caller will receive an error. 
+
+```bash
+# For a single package
+cargo rbmt generate -p fuzz
+
+# For multiple packages
+cargo rbmt generate -p fuzz -p crypto
+
+```
+
 ## Toolchains
 
 The `toolchains` command installs the three required toolchains for `cargo-rbmt` commands, `nightly`, `stable`, and `MSRV`. `nightly` and `stable` Toolchain versions are read from the root manifest `Cargo.toml` of a repository. The `MSRV` is read from all the package manifests in a workspace. Workspaces must declare a single consistent MSRV across all packages. Workspaces with conflicting `rust-version` fields are not supported.

@@ -8,6 +8,7 @@ mod api;
 mod bench;
 mod docs;
 mod fmt;
+mod generate;
 mod git;
 mod integration;
 mod lint;
@@ -137,6 +138,8 @@ enum Commands {
     },
     /// Print version and build information.
     Version,
+    /// Generate files and check for changes.
+    Generate,
 }
 
 fn main() {
@@ -146,7 +149,6 @@ fn main() {
         .enumerate()
         .filter(|(i, arg)| !(*i == 1 && arg == "rbmt"))
         .map(|(_, arg)| arg);
-
     let cli = Cli::parse_from(args);
     let sh = Shell::new().unwrap();
 
@@ -226,6 +228,11 @@ fn main() {
         Commands::Tools { update, tools } =>
             if let Err(e) = tools::run(&sh, update, &tools) {
                 eprintln!("Error managing tools: {}", e);
+                process::exit(1);
+            },
+        Commands::Generate =>
+            if let Err(e) = generate::run(&sh, &cli.packages) {
+                eprintln!("Error running file generation: {}", e);
                 process::exit(1);
             },
     }
