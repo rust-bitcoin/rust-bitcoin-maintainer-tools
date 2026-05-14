@@ -6,7 +6,7 @@ use std::fs;
 
 use xshell::Shell;
 
-use crate::environment::{get_workspace_packages, Package, ProgressGuard};
+use crate::environment::{get_workspace_packages, CmdExt, Package, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Format (or check the formatting of) all packages in the workspace.
@@ -35,7 +35,7 @@ pub fn run(sh: &Shell, check: bool, packages: &[String]) -> Result<(), Box<dyn s
         cmd = cmd.arg("--check");
     }
 
-    cmd.run()?;
+    cmd.run_verbose()?;
 
     if check {
         rbmt_eprintln!("Formatting check passed");
