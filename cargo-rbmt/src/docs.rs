@@ -4,7 +4,7 @@
 
 use xshell::Shell;
 
-use crate::environment::{cargo_cmd, get_workspace_packages, ProgressGuard};
+use crate::environment::{cargo_cmd, get_workspace_packages, CmdExt, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -35,7 +35,7 @@ pub fn run(
         cmd = cmd.arg("--open");
     }
 
-    cmd.env("RUSTDOCFLAGS", "-D warnings").run()?;
+    cmd.env("RUSTDOCFLAGS", "-D warnings").run_verbose()?;
 
     rbmt_eprintln!("Docs built successfully.");
     Ok(())
@@ -68,7 +68,8 @@ pub fn run_docsrs(
         cmd = cmd.arg("--open");
     }
 
-    cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links").run()?;
+    cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links")
+        .run_verbose()?;
 
     rbmt_eprintln!("Docs built successfully.");
     Ok(())

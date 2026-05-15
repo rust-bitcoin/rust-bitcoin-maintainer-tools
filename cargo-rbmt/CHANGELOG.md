@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Capture failure output in `docs`, `docsrs`, and `fmt` commands.
 * Enforce toolchain in `integration` package.
 * Dedupe lines in API file output.
 * [BREAKING] Refactor the `test` command interface to allow any cargo commands to be passed to all the underlying `cargo test` commands.
