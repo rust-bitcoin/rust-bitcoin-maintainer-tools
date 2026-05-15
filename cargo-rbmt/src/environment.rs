@@ -265,7 +265,8 @@ pub fn get_workspace_packages(
 ///
 /// For single-package repositories with no explicit `[workspace]` table, Cargo
 /// creates an implicit workspace and `workspace_root` resolves to the package
-/// directory itself.
+/// directory itself. This is also the behavior of subpackages which are excluded
+/// from a workspace or not in a workspace at all.
 pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;

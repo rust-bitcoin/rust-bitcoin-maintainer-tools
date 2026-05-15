@@ -10,6 +10,7 @@ use xshell::Shell;
 use crate::environment::{
     cargo_cmd, discover_features, get_workspace_packages, Package, PackageManifest, ProgressGuard,
 };
+use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
 #[derive(Debug, Deserialize, Default)]
@@ -59,7 +60,7 @@ fn get_package_id(sh: &Shell, dir: &Path) -> Result<String, Box<dyn std::error::
     Ok(id.trim().to_string())
 }
 
-/// Run integration tests for all crates with integration test packages.
+/// Run integration tests for all packages that contain an integration tests subpackage.
 ///
 /// # Arguments
 ///
@@ -84,6 +85,8 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
         rbmt_eprintln!("Running integration tests for {}", package.name);
 
         let _dir = sh.push_dir(&integration_dir);
+        // The integration package must defines its own [package.metadata.rbmt.toolchains].
+        prepare_toolchain(sh, Toolchain::Stable)?;
 
         let integration_package = Package {
             name: config.package_name().to_string(),

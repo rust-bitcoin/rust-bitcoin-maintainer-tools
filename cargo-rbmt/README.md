@@ -107,7 +107,9 @@ When a package declares `#![no_std]` in its library source, `cargo-rbmt test` au
 
 ## Integration
 
-The `integration` command is designed to work with the [`corepc`](https://github.com/rust-bitcoin/corepc) integration testing framework, which provides Bitcoin Core binaries and testing infrastructure.
+The `integration` command runs tests in isolated integration sub-packages designed to work with the [`corepc`](https://github.com/rust-bitcoin/corepc) testing framework, which provides Bitcoin Core binaries and testing infrastructure. Integration sub-packages should define its own `[package.metadata.rbmt.toolchains.stable]` to lock a stable version.
+
+Integration sub-packages should be *standalone*, not members of a workspace. This ensures test infrastructure dependencies don't influence workspace dependency resolution which could change the minimum versions for tests.
 
 ```toml
 [package.metadata.rbmt.integration]
