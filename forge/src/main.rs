@@ -105,9 +105,9 @@ enum PrCommands {
         #[arg(short, long)]
         repo: Option<String>,
     },
-    /// Checkout a pull request locally
-    #[command(alias = "c")]
-    Checkout {
+    /// Review a pull request locally
+    #[command(alias = "r")]
+    Review {
         /// Pull request number
         pr_number: u64,
         /// Repository in format "owner/repo" (optional, uses current repo if not specified)
@@ -394,7 +394,7 @@ fn checkout_or_reset(branch_name: &str) -> Result<()> {
     Ok(())
 }
 
-fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
+fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     // Check if working directory is clean
     let status_output = Command::new("git")
         .args(["status", "--porcelain"])
@@ -437,7 +437,7 @@ fn checkout_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
         .output()
         .context("Failed to set branch.pushRemote config")?;
 
-    println!("Successfully checked out PR #{}", pr_number);
+    println!("PR #{} is ready for review", pr_number);
 
     Ok(())
 }
@@ -1178,8 +1178,8 @@ fn main() -> Result<()> {
             PrCommands::List { repo } => {
                 list_prs(repo)?;
             }
-            PrCommands::Checkout { pr_number, repo } => {
-                checkout_pr(pr_number, repo)?;
+            PrCommands::Review { pr_number, repo } => {
+                review_pr(pr_number, repo)?;
             }
             PrCommands::Ack { repo } => {
                 ack_pr(repo)?;
