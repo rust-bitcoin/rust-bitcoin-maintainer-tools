@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-15
+
+* New `generate` command ensures files are generated.
 * Capture failure output in `docs`, `docsrs`, and `fmt` commands.
 * Enforce toolchain in `integration` package.
 * Dedupe lines in API file output.
@@ -36,7 +39,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.1...HEAD
-[0.2.1]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...cargo-rbmt-0.2.1
-[0.2.0]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...cargo-rbmt-0.2.0
-[0.1.0]: https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/releases/tag/cargo-rbmt-0.1.0
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.3.0...HEAD
+[0.3.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.1...cargo-rbmt-0.3.0
+[0.2.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...cargo-rbmt-0.2.1
+[0.2.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...cargo-rbmt-0.2.0
+[0.1.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/releases/tag/cargo-rbmt-0.1.0
