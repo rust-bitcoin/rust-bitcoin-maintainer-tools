@@ -4,7 +4,7 @@
 
 use xshell::Shell;
 
-use crate::environment::{cargo_cmd, get_workspace_packages, OutputMode, ProgressGuard};
+use crate::environment::{cargo_cmd, get_workspace_packages, CmdExt, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -22,15 +22,8 @@ pub fn run(
 
     for package in packages {
         rbmt_eprintln!("Running bench tests in: {}", package.dir.display());
-
-        // Use pushd pattern to change and restore directory.
-        let _dir = sh.push_dir(&package.dir);
-
-        // Capture output and show in stdout for verbose mode.
-        let output = cargo_cmd(sh).arg("bench").env("RUSTFLAGS", "--cfg=bench").read()?;
-        if matches!(OutputMode::from_env(), OutputMode::Verbose) {
-            println!("{}", output);
-        }
+        let _dir_guard = sh.push_dir(&package.dir);
+        cargo_cmd(sh).arg("bench").run_verbose()?;
     }
 
     rbmt_eprintln!("Benches complete.");

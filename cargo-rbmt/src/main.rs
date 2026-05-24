@@ -78,9 +78,6 @@ enum Commands {
         /// Toolchain to use: stable, nightly, or msrv.
         #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
         toolchain: Toolchain,
-        /// Disable debug assertions in compiled code.
-        #[arg(long)]
-        no_debug_assertions: bool,
         /// Test every commit between the given baseline ref and HEAD to verify bisectability.
         #[arg(long)]
         baseline: Option<String>,
@@ -185,12 +182,11 @@ fn main() {
                 eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             },
-        Commands::Test { toolchain, no_debug_assertions, baseline, cargo_args } =>
+        Commands::Test { toolchain, baseline, cargo_args } =>
             if let Err(e) = test::run(
                 &sh,
                 cli.lockfile,
                 toolchain,
-                !no_debug_assertions,
                 baseline.as_deref(),
                 &cli.packages,
                 &cargo_args,

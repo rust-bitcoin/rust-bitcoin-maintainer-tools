@@ -182,7 +182,6 @@ fn test_features(
 /// * `sh` - The shell environment.
 /// * `lockfile` - Which lockfile variant to use.
 /// * `toolchain` - Which toolchain to use.
-/// * `debug_assertions` - Whether to enable debug assertions.
 /// * `baseline` - Optional baseline ref for testing multiple commits.
 /// * `packages` - Packages to test (empty = all).
 /// * `cargo_args` - Additional arguments to pass to cargo test commands.
@@ -190,19 +189,12 @@ pub fn run(
     sh: &Shell,
     lockfile: LockFile,
     toolchain: Toolchain,
-    debug_assertions: bool,
     baseline: Option<&str>,
     packages: &[String],
     cargo_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
-
-    // Configure RUSTFLAGS for all tests.
-    let _rustflags_guard = sh.push_env(
-        "RUSTFLAGS",
-        if debug_assertions { "-C debug-assertions=on" } else { "-C debug-assertions=off" },
-    );
 
     if let Some(baseline) = baseline {
         let commits = git::list_commits(sh, baseline)?;
