@@ -140,10 +140,14 @@ cargo rbmt prerelease --force
 The `run` command executes arbitrary cargo commands with the specified toolchain and lockfile.
 
 ```bash
-cargo rbmt --lock-file minimal --toolchain nightly run -- <CARGO_COMMAND> [ARGS...]
+cargo rbmt run --lock-file minimal --toolchain nightly -- <CARGO_COMMAND> [ARGS...]
 ```
 
-The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass everything after it to cargo.
+The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass everything after it to cargo. For example, here is how to run benchmarks with the nightly toolchain.
+
+```bash
+cargo rbmt run --toolchain nightly -- bench
+```
 
 ## Lock Files
 
@@ -204,7 +208,7 @@ Items marked with `#[doc(hidden)]` are *excluded from API snapshots and breaking
 
 ## Generate
 
-The `generate` command detects changes to generated files by running the file generation script, which is assumed to be at `<package-root>/generate-files.sh`, and running a diff. If the file generation script is not present or a diff is present after file generation, the caller will receive an error. 
+The `generate` command detects changes to generated files by running the file generation script, which is assumed to be at `<package-root>/generate-files.sh`, and running a diff. If the file generation script is not present or a diff is present after file generation, the caller will receive an error.
 
 ```bash
 # For a single package
