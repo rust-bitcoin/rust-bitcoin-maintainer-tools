@@ -159,6 +159,7 @@ fn test_features(
         .arg("--no-default-features")
         .arg("--features")
         .arg(&features_str)
+        .args(cargo_args)
         .run_verbose()?;
 
     cargo_cmd(sh)
@@ -184,7 +185,7 @@ fn test_features(
 /// * `toolchain` - Which toolchain to use.
 /// * `baseline` - Optional baseline ref for testing multiple commits.
 /// * `packages` - Packages to test (empty = all).
-/// * `cargo_args` - Additional arguments to pass to cargo test commands.
+/// * `cargo_args` - Additional arguments to pass to cargo build and test commands.
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
@@ -270,7 +271,7 @@ fn do_test(
     rbmt_eprintln!("Running default tests on {}", summary.name);
 
     // Default build and test.
-    cargo_cmd(sh).arg("build").run_verbose()?;
+    cargo_cmd(sh).arg("build").args(cargo_args).run_verbose()?;
     cargo_cmd(sh).arg("test").args(cargo_args).run_verbose()?;
 
     // Run examples (without cargo_args - examples run with their configured features).
@@ -354,12 +355,12 @@ fn do_feature_matrix(
 
     // Test all features.
     rbmt_eprintln!("Testing all features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--all-features").run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--all-features").args(cargo_args).run_verbose()?;
     cargo_cmd(sh).arg("test").arg("--all-features").args(cargo_args).run_verbose()?;
 
     // Test no features.
     rbmt_eprintln!("Testing no features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--no-default-features").run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--no-default-features").args(cargo_args).run_verbose()?;
     cargo_cmd(sh).arg("test").arg("--no-default-features").args(cargo_args).run_verbose()?;
 
     // Test each feature in isolation, plus sampled subsets.
