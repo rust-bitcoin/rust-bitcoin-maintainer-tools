@@ -5,7 +5,6 @@
 mod environment;
 
 mod api;
-mod bench;
 mod docs;
 mod fmt;
 mod generate;
@@ -71,8 +70,6 @@ enum Commands {
         #[arg(long)]
         open: bool,
     },
-    /// Run benchmark tests for all crates.
-    Bench,
     /// Run tests with specified toolchain.
     Test {
         /// Toolchain to use: stable, nightly, or msrv.
@@ -175,11 +172,6 @@ fn main() {
         Commands::Docsrs { open } =>
             if let Err(e) = docs::run_docsrs(&sh, cli.lockfile, &cli.packages, open) {
                 eprintln!("Error building docs.rs docs: {}", e);
-                process::exit(1);
-            },
-        Commands::Bench =>
-            if let Err(e) = bench::run(&sh, cli.lockfile, &cli.packages) {
-                eprintln!("Error running bench tests: {}", e);
                 process::exit(1);
             },
         Commands::Test { toolchain, baseline, cargo_args } =>

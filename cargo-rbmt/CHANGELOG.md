@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* [BREAKING] Drop the `bench` command in favor of just running `run -- bench`.
 * [BREAKING] Remove the debug assertions flag from `test`, users should set `RUSTFLAGS` directly.
 
 ## [0.3.0] - 2026-05-15
