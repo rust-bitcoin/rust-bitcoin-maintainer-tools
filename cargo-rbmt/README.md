@@ -65,14 +65,19 @@ The `test` command runs feature matrix testing for your package. Every run uncon
 
 The `--baseline <ref>` flag checks that every commit between `<ref>` and `HEAD` passes the test suite, ensuring the branch remains bisectable.
 
-Cargo test arguments can be passed after `--` and will be appended to the underlying `cargo test` commands.
+Arguments after `--` are passed to both build and test commands.
 
 ```bash
-cargo rbmt test -- --release
-cargo rbmt test -- --test-threads 4
+cargo rbmt test -- -Z build-std --target x86_64-unknown-linux-gnu
 ```
 
-> **NOTE:** Arguments are passed to `cargo test` only, not to `build` or example runs. The separate build step detects an implicit test code dependency. But builds always run with the default settings regardless of test arguments.
+For test-specific options use environment variables. There are many different layers under the hood, so might take some searching. For example, setting thread counts in tests uses the `RUST_TEST_THREADS` environment variable.
+
+```bash
+RUST_TEST_THREADS=4 cargo rbmt test
+```
+
+> **NOTE:** The separate build step detects implicit test code dependencies. Example runs use default settings and ignore all arguments.
 
 ```toml
 [package.metadata.rbmt.test]

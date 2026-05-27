@@ -78,7 +78,7 @@ enum Commands {
         /// Test every commit between the given baseline ref and HEAD to verify bisectability.
         #[arg(long)]
         baseline: Option<String>,
-        /// Cargo test arguments (everything after `--`).
+        /// Cargo arguments (everything after `--`).
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         cargo_args: Vec<String>,
     },

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Tweak how build and test args are passed down in `test`.
 * [BREAKING] Drop the `bench` command in favor of just running `run -- bench`.
 * [BREAKING] Remove the debug assertions flag from `test`, users should set `RUSTFLAGS` directly.
 
