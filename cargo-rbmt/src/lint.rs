@@ -153,7 +153,7 @@ fn check_duplicate_deps(
         // since they are not exposed to downstream consumers.
         let output = rbmt_cmd!(
             sh,
-            "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
+            "cargo --locked tree --target=all --all-features --duplicates --edges no-build --edges no-dev --prefix depth"
         )
         .ignore_status()
         .read()?;
@@ -214,7 +214,7 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
     let package_names: HashSet<&str> = package_info.iter().map(|pkg| pkg.name.as_str()).collect();
     let output = rbmt_cmd!(
         sh,
-        "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
+        "cargo --locked tree --target=all --all-features --duplicates --edges no-build --edges no-dev --prefix depth"
     )
     .ignore_status()
     .read()?;
