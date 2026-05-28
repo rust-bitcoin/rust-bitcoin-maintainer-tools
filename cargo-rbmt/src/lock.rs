@@ -95,7 +95,20 @@ impl LockFile {
         match self {
             Self::Minimal | Self::Recent => {
                 let workspace_root = get_workspace_root(sh)?;
-                fs::copy(workspace_root.join(self.filename()), workspace_root.join(CARGO_LOCK))?;
+                let source = workspace_root.join(self.filename());
+                let dest = workspace_root.join(CARGO_LOCK);
+
+                fs::copy(&source, &dest).map_err(|e| -> Box<dyn std::error::Error> {
+                    format!(
+                        "Failed to restore {} lockfile (workspace: {:?}, from: {:?}, to: {:?}): {}",
+                        self.filename(),
+                        workspace_root,
+                        source,
+                        dest,
+                        e
+                    )
+                    .into()
+                })?;
                 Ok(())
             }
             Self::Existing => {
