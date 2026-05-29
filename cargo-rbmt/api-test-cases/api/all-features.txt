@@ -1,0 +1,277 @@
+pub mod api_test_cases
+pub mod api_test_cases::associated_types
+pub struct api_test_cases::associated_types::Foo
+impl api_test_cases::associated_types::Container for api_test_cases::associated_types::Foo
+pub type api_test_cases::associated_types::Foo::Error = std::io::error::Error
+pub type api_test_cases::associated_types::Foo::Item = alloc::string::String
+impl core::marker::Freeze for api_test_cases::associated_types::Foo
+impl core::marker::Send for api_test_cases::associated_types::Foo
+impl core::marker::Sync for api_test_cases::associated_types::Foo
+impl core::marker::Unpin for api_test_cases::associated_types::Foo
+impl core::marker::UnsafeUnpin for api_test_cases::associated_types::Foo
+impl core::panic::unwind_safe::RefUnwindSafe for api_test_cases::associated_types::Foo
+impl core::panic::unwind_safe::UnwindSafe for api_test_cases::associated_types::Foo
+impl<T, U> core::convert::Into<U> for api_test_cases::associated_types::Foo where U: core::convert::From<T>
+pub fn api_test_cases::associated_types::Foo::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::associated_types::Foo where U: core::convert::Into<T>
+pub type api_test_cases::associated_types::Foo::Error = core::convert::Infallible
+pub fn api_test_cases::associated_types::Foo::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::associated_types::Foo where U: core::convert::TryFrom<T>
+pub type api_test_cases::associated_types::Foo::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::associated_types::Foo::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::associated_types::Foo where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::associated_types::Foo::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::associated_types::Foo where T: ?core::marker::Sized
+pub fn api_test_cases::associated_types::Foo::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::associated_types::Foo where T: ?core::marker::Sized
+pub fn api_test_cases::associated_types::Foo::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::associated_types::Foo
+pub fn api_test_cases::associated_types::Foo::from(t: T) -> T
+pub trait api_test_cases::associated_types::Container
+pub type api_test_cases::associated_types::Container::Error
+pub type api_test_cases::associated_types::Container::Item
+pub mod api_test_cases::blanket_trait_bounds
+pub struct api_test_cases::blanket_trait_bounds::Value<V>
+impl<V: core::clone::Clone> api_test_cases::blanket_trait_bounds::Handler for api_test_cases::blanket_trait_bounds::Value<V>
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::handle(&self)
+impl<V> core::marker::Freeze for api_test_cases::blanket_trait_bounds::Value<V>
+impl<V> core::marker::Send for api_test_cases::blanket_trait_bounds::Value<V> where V: core::marker::Send
+impl<V> core::marker::Sync for api_test_cases::blanket_trait_bounds::Value<V> where V: core::marker::Sync
+impl<V> core::marker::Unpin for api_test_cases::blanket_trait_bounds::Value<V> where V: core::marker::Unpin
+impl<V> core::marker::UnsafeUnpin for api_test_cases::blanket_trait_bounds::Value<V>
+impl<V> core::panic::unwind_safe::RefUnwindSafe for api_test_cases::blanket_trait_bounds::Value<V> where V: core::panic::unwind_safe::RefUnwindSafe
+impl<V> core::panic::unwind_safe::UnwindSafe for api_test_cases::blanket_trait_bounds::Value<V> where V: core::panic::unwind_safe::UnwindSafe
+impl<T, U> core::convert::Into<U> for api_test_cases::blanket_trait_bounds::Value<V> where U: core::convert::From<T>
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::blanket_trait_bounds::Value<V> where U: core::convert::Into<T>
+pub type api_test_cases::blanket_trait_bounds::Value<V>::Error = core::convert::Infallible
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::blanket_trait_bounds::Value<V> where U: core::convert::TryFrom<T>
+pub type api_test_cases::blanket_trait_bounds::Value<V>::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::blanket_trait_bounds::Value<V> where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::blanket_trait_bounds::Value<V> where T: ?core::marker::Sized
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::blanket_trait_bounds::Value<V> where T: ?core::marker::Sized
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::blanket_trait_bounds::Value<V>
+pub fn api_test_cases::blanket_trait_bounds::Value<V>::from(t: T) -> T
+pub trait api_test_cases::blanket_trait_bounds::Handler
+pub fn api_test_cases::blanket_trait_bounds::Handler::handle(&self)
+pub mod api_test_cases::generic_specialized_impls
+pub struct api_test_cases::generic_specialized_impls::CustomMarker
+impl core::marker::Freeze for api_test_cases::generic_specialized_impls::CustomMarker
+impl core::marker::Send for api_test_cases::generic_specialized_impls::CustomMarker
+impl core::marker::Sync for api_test_cases::generic_specialized_impls::CustomMarker
+impl core::marker::Unpin for api_test_cases::generic_specialized_impls::CustomMarker
+impl core::marker::UnsafeUnpin for api_test_cases::generic_specialized_impls::CustomMarker
+impl core::panic::unwind_safe::RefUnwindSafe for api_test_cases::generic_specialized_impls::CustomMarker
+impl core::panic::unwind_safe::UnwindSafe for api_test_cases::generic_specialized_impls::CustomMarker
+impl<T, U> core::convert::Into<U> for api_test_cases::generic_specialized_impls::CustomMarker where U: core::convert::From<T>
+pub fn api_test_cases::generic_specialized_impls::CustomMarker::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::generic_specialized_impls::CustomMarker where U: core::convert::Into<T>
+pub type api_test_cases::generic_specialized_impls::CustomMarker::Error = core::convert::Infallible
+pub fn api_test_cases::generic_specialized_impls::CustomMarker::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::generic_specialized_impls::CustomMarker where U: core::convert::TryFrom<T>
+pub type api_test_cases::generic_specialized_impls::CustomMarker::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::generic_specialized_impls::CustomMarker::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::generic_specialized_impls::CustomMarker where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::CustomMarker::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::generic_specialized_impls::CustomMarker where T: ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::CustomMarker::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::generic_specialized_impls::CustomMarker where T: ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::CustomMarker::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::generic_specialized_impls::CustomMarker
+pub fn api_test_cases::generic_specialized_impls::CustomMarker::from(t: T) -> T
+pub struct api_test_cases::generic_specialized_impls::DefaultMarker
+impl core::marker::Freeze for api_test_cases::generic_specialized_impls::DefaultMarker
+impl core::marker::Send for api_test_cases::generic_specialized_impls::DefaultMarker
+impl core::marker::Sync for api_test_cases::generic_specialized_impls::DefaultMarker
+impl core::marker::Unpin for api_test_cases::generic_specialized_impls::DefaultMarker
+impl core::marker::UnsafeUnpin for api_test_cases::generic_specialized_impls::DefaultMarker
+impl core::panic::unwind_safe::RefUnwindSafe for api_test_cases::generic_specialized_impls::DefaultMarker
+impl core::panic::unwind_safe::UnwindSafe for api_test_cases::generic_specialized_impls::DefaultMarker
+impl<T, U> core::convert::Into<U> for api_test_cases::generic_specialized_impls::DefaultMarker where U: core::convert::From<T>
+pub fn api_test_cases::generic_specialized_impls::DefaultMarker::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::generic_specialized_impls::DefaultMarker where U: core::convert::Into<T>
+pub type api_test_cases::generic_specialized_impls::DefaultMarker::Error = core::convert::Infallible
+pub fn api_test_cases::generic_specialized_impls::DefaultMarker::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::generic_specialized_impls::DefaultMarker where U: core::convert::TryFrom<T>
+pub type api_test_cases::generic_specialized_impls::DefaultMarker::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::generic_specialized_impls::DefaultMarker::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::generic_specialized_impls::DefaultMarker where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::DefaultMarker::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::generic_specialized_impls::DefaultMarker where T: ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::DefaultMarker::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::generic_specialized_impls::DefaultMarker where T: ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::DefaultMarker::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::generic_specialized_impls::DefaultMarker
+pub fn api_test_cases::generic_specialized_impls::DefaultMarker::from(t: T) -> T
+pub struct api_test_cases::generic_specialized_impls::Value<V>
+impl api_test_cases::generic_specialized_impls::Value<api_test_cases::generic_specialized_impls::CustomMarker>
+pub fn api_test_cases::generic_specialized_impls::Value<api_test_cases::generic_specialized_impls::CustomMarker>::custom_value() -> Self
+impl api_test_cases::generic_specialized_impls::Value<api_test_cases::generic_specialized_impls::DefaultMarker>
+pub fn api_test_cases::generic_specialized_impls::Value<api_test_cases::generic_specialized_impls::DefaultMarker>::default_value() -> Self
+impl<V> api_test_cases::generic_specialized_impls::Value<V>
+pub fn api_test_cases::generic_specialized_impls::Value<V>::get(&self)
+impl<V> core::marker::Freeze for api_test_cases::generic_specialized_impls::Value<V>
+impl<V> core::marker::Send for api_test_cases::generic_specialized_impls::Value<V> where V: core::marker::Send
+impl<V> core::marker::Sync for api_test_cases::generic_specialized_impls::Value<V> where V: core::marker::Sync
+impl<V> core::marker::Unpin for api_test_cases::generic_specialized_impls::Value<V> where V: core::marker::Unpin
+impl<V> core::marker::UnsafeUnpin for api_test_cases::generic_specialized_impls::Value<V>
+impl<V> core::panic::unwind_safe::RefUnwindSafe for api_test_cases::generic_specialized_impls::Value<V> where V: core::panic::unwind_safe::RefUnwindSafe
+impl<V> core::panic::unwind_safe::UnwindSafe for api_test_cases::generic_specialized_impls::Value<V> where V: core::panic::unwind_safe::UnwindSafe
+impl<T, U> core::convert::Into<U> for api_test_cases::generic_specialized_impls::Value<V> where U: core::convert::From<T>
+pub fn api_test_cases::generic_specialized_impls::Value<V>::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::generic_specialized_impls::Value<V> where U: core::convert::Into<T>
+pub type api_test_cases::generic_specialized_impls::Value<V>::Error = core::convert::Infallible
+pub fn api_test_cases::generic_specialized_impls::Value<V>::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::generic_specialized_impls::Value<V> where U: core::convert::TryFrom<T>
+pub type api_test_cases::generic_specialized_impls::Value<V>::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::generic_specialized_impls::Value<V>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::generic_specialized_impls::Value<V> where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::Value<V>::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::generic_specialized_impls::Value<V> where T: ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::Value<V>::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::generic_specialized_impls::Value<V> where T: ?core::marker::Sized
+pub fn api_test_cases::generic_specialized_impls::Value<V>::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::generic_specialized_impls::Value<V>
+pub fn api_test_cases::generic_specialized_impls::Value<V>::from(t: T) -> T
+pub mod api_test_cases::multiple_from_impls
+pub struct api_test_cases::multiple_from_impls::CustomMarker
+impl core::convert::From<api_test_cases::multiple_from_impls::CustomMarker> for api_test_cases::multiple_from_impls::Value<api_test_cases::multiple_from_impls::CustomMarker>
+pub fn api_test_cases::multiple_from_impls::Value<api_test_cases::multiple_from_impls::CustomMarker>::from(_: api_test_cases::multiple_from_impls::CustomMarker) -> Self
+impl core::marker::Freeze for api_test_cases::multiple_from_impls::CustomMarker
+impl core::marker::Send for api_test_cases::multiple_from_impls::CustomMarker
+impl core::marker::Sync for api_test_cases::multiple_from_impls::CustomMarker
+impl core::marker::Unpin for api_test_cases::multiple_from_impls::CustomMarker
+impl core::marker::UnsafeUnpin for api_test_cases::multiple_from_impls::CustomMarker
+impl core::panic::unwind_safe::RefUnwindSafe for api_test_cases::multiple_from_impls::CustomMarker
+impl core::panic::unwind_safe::UnwindSafe for api_test_cases::multiple_from_impls::CustomMarker
+impl<T, U> core::convert::Into<U> for api_test_cases::multiple_from_impls::CustomMarker where U: core::convert::From<T>
+pub fn api_test_cases::multiple_from_impls::CustomMarker::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::multiple_from_impls::CustomMarker where U: core::convert::Into<T>
+pub type api_test_cases::multiple_from_impls::CustomMarker::Error = core::convert::Infallible
+pub fn api_test_cases::multiple_from_impls::CustomMarker::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::multiple_from_impls::CustomMarker where U: core::convert::TryFrom<T>
+pub type api_test_cases::multiple_from_impls::CustomMarker::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::multiple_from_impls::CustomMarker::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::multiple_from_impls::CustomMarker where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::CustomMarker::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::multiple_from_impls::CustomMarker where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::CustomMarker::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::multiple_from_impls::CustomMarker where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::CustomMarker::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::multiple_from_impls::CustomMarker
+pub fn api_test_cases::multiple_from_impls::CustomMarker::from(t: T) -> T
+pub struct api_test_cases::multiple_from_impls::DefaultMarker
+impl core::convert::From<api_test_cases::multiple_from_impls::DefaultMarker> for api_test_cases::multiple_from_impls::Value<api_test_cases::multiple_from_impls::DefaultMarker>
+pub fn api_test_cases::multiple_from_impls::Value<api_test_cases::multiple_from_impls::DefaultMarker>::from(_: api_test_cases::multiple_from_impls::DefaultMarker) -> Self
+impl core::marker::Freeze for api_test_cases::multiple_from_impls::DefaultMarker
+impl core::marker::Send for api_test_cases::multiple_from_impls::DefaultMarker
+impl core::marker::Sync for api_test_cases::multiple_from_impls::DefaultMarker
+impl core::marker::Unpin for api_test_cases::multiple_from_impls::DefaultMarker
+impl core::marker::UnsafeUnpin for api_test_cases::multiple_from_impls::DefaultMarker
+impl core::panic::unwind_safe::RefUnwindSafe for api_test_cases::multiple_from_impls::DefaultMarker
+impl core::panic::unwind_safe::UnwindSafe for api_test_cases::multiple_from_impls::DefaultMarker
+impl<T, U> core::convert::Into<U> for api_test_cases::multiple_from_impls::DefaultMarker where U: core::convert::From<T>
+pub fn api_test_cases::multiple_from_impls::DefaultMarker::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::multiple_from_impls::DefaultMarker where U: core::convert::Into<T>
+pub type api_test_cases::multiple_from_impls::DefaultMarker::Error = core::convert::Infallible
+pub fn api_test_cases::multiple_from_impls::DefaultMarker::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::multiple_from_impls::DefaultMarker where U: core::convert::TryFrom<T>
+pub type api_test_cases::multiple_from_impls::DefaultMarker::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::multiple_from_impls::DefaultMarker::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::multiple_from_impls::DefaultMarker where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::DefaultMarker::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::multiple_from_impls::DefaultMarker where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::DefaultMarker::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::multiple_from_impls::DefaultMarker where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::DefaultMarker::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::multiple_from_impls::DefaultMarker
+pub fn api_test_cases::multiple_from_impls::DefaultMarker::from(t: T) -> T
+pub struct api_test_cases::multiple_from_impls::Value<V>
+impl<V> core::marker::Freeze for api_test_cases::multiple_from_impls::Value<V>
+impl<V> core::marker::Send for api_test_cases::multiple_from_impls::Value<V> where V: core::marker::Send
+impl<V> core::marker::Sync for api_test_cases::multiple_from_impls::Value<V> where V: core::marker::Sync
+impl<V> core::marker::Unpin for api_test_cases::multiple_from_impls::Value<V> where V: core::marker::Unpin
+impl<V> core::marker::UnsafeUnpin for api_test_cases::multiple_from_impls::Value<V>
+impl<V> core::panic::unwind_safe::RefUnwindSafe for api_test_cases::multiple_from_impls::Value<V> where V: core::panic::unwind_safe::RefUnwindSafe
+impl<V> core::panic::unwind_safe::UnwindSafe for api_test_cases::multiple_from_impls::Value<V> where V: core::panic::unwind_safe::UnwindSafe
+impl<T, U> core::convert::Into<U> for api_test_cases::multiple_from_impls::Value<V> where U: core::convert::From<T>
+pub fn api_test_cases::multiple_from_impls::Value<V>::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::multiple_from_impls::Value<V> where U: core::convert::Into<T>
+pub type api_test_cases::multiple_from_impls::Value<V>::Error = core::convert::Infallible
+pub fn api_test_cases::multiple_from_impls::Value<V>::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::multiple_from_impls::Value<V> where U: core::convert::TryFrom<T>
+pub type api_test_cases::multiple_from_impls::Value<V>::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::multiple_from_impls::Value<V>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::multiple_from_impls::Value<V> where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::Value<V>::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::multiple_from_impls::Value<V> where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::Value<V>::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::multiple_from_impls::Value<V> where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_from_impls::Value<V>::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::multiple_from_impls::Value<V>
+pub fn api_test_cases::multiple_from_impls::Value<V>::from(t: T) -> T
+pub mod api_test_cases::multiple_trait_impls
+pub struct api_test_cases::multiple_trait_impls::Foo
+impl api_test_cases::multiple_trait_impls::Bar for api_test_cases::multiple_trait_impls::Foo
+pub fn api_test_cases::multiple_trait_impls::Foo::do_it()
+impl api_test_cases::multiple_trait_impls::Baz for api_test_cases::multiple_trait_impls::Foo
+impl core::marker::Freeze for api_test_cases::multiple_trait_impls::Foo
+impl core::marker::Send for api_test_cases::multiple_trait_impls::Foo
+impl core::marker::Sync for api_test_cases::multiple_trait_impls::Foo
+impl core::marker::Unpin for api_test_cases::multiple_trait_impls::Foo
+impl core::marker::UnsafeUnpin for api_test_cases::multiple_trait_impls::Foo
+impl core::panic::unwind_safe::RefUnwindSafe for api_test_cases::multiple_trait_impls::Foo
+impl core::panic::unwind_safe::UnwindSafe for api_test_cases::multiple_trait_impls::Foo
+impl<T, U> core::convert::Into<U> for api_test_cases::multiple_trait_impls::Foo where U: core::convert::From<T>
+pub fn api_test_cases::multiple_trait_impls::Foo::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::multiple_trait_impls::Foo where U: core::convert::Into<T>
+pub type api_test_cases::multiple_trait_impls::Foo::Error = core::convert::Infallible
+pub fn api_test_cases::multiple_trait_impls::Foo::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::multiple_trait_impls::Foo where U: core::convert::TryFrom<T>
+pub type api_test_cases::multiple_trait_impls::Foo::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::multiple_trait_impls::Foo::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::multiple_trait_impls::Foo where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::multiple_trait_impls::Foo::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::multiple_trait_impls::Foo where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_trait_impls::Foo::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::multiple_trait_impls::Foo where T: ?core::marker::Sized
+pub fn api_test_cases::multiple_trait_impls::Foo::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::multiple_trait_impls::Foo
+pub fn api_test_cases::multiple_trait_impls::Foo::from(t: T) -> T
+pub trait api_test_cases::multiple_trait_impls::Bar
+pub fn api_test_cases::multiple_trait_impls::Bar::do_it()
+pub trait api_test_cases::multiple_trait_impls::Baz
+pub fn api_test_cases::multiple_trait_impls::Baz::do_it()
+pub mod api_test_cases::trait_default_methods
+pub struct api_test_cases::trait_default_methods::Foo
+impl api_test_cases::trait_default_methods::Bar for api_test_cases::trait_default_methods::Foo
+impl core::marker::Freeze for api_test_cases::trait_default_methods::Foo
+impl core::marker::Send for api_test_cases::trait_default_methods::Foo
+impl core::marker::Sync for api_test_cases::trait_default_methods::Foo
+impl core::marker::Unpin for api_test_cases::trait_default_methods::Foo
+impl core::marker::UnsafeUnpin for api_test_cases::trait_default_methods::Foo
+impl core::panic::unwind_safe::RefUnwindSafe for api_test_cases::trait_default_methods::Foo
+impl core::panic::unwind_safe::UnwindSafe for api_test_cases::trait_default_methods::Foo
+impl<T, U> core::convert::Into<U> for api_test_cases::trait_default_methods::Foo where U: core::convert::From<T>
+pub fn api_test_cases::trait_default_methods::Foo::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for api_test_cases::trait_default_methods::Foo where U: core::convert::Into<T>
+pub type api_test_cases::trait_default_methods::Foo::Error = core::convert::Infallible
+pub fn api_test_cases::trait_default_methods::Foo::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for api_test_cases::trait_default_methods::Foo where U: core::convert::TryFrom<T>
+pub type api_test_cases::trait_default_methods::Foo::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn api_test_cases::trait_default_methods::Foo::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for api_test_cases::trait_default_methods::Foo where T: 'static + ?core::marker::Sized
+pub fn api_test_cases::trait_default_methods::Foo::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for api_test_cases::trait_default_methods::Foo where T: ?core::marker::Sized
+pub fn api_test_cases::trait_default_methods::Foo::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for api_test_cases::trait_default_methods::Foo where T: ?core::marker::Sized
+pub fn api_test_cases::trait_default_methods::Foo::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for api_test_cases::trait_default_methods::Foo
+pub fn api_test_cases::trait_default_methods::Foo::from(t: T) -> T
+pub trait api_test_cases::trait_default_methods::Bar
+pub fn api_test_cases::trait_default_methods::Bar::do_it()
