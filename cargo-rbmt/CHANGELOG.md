@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* `api` output files no longer de-dupe equivalent lines, instead they add relevant context to each line (e.g. add the trait impl).
 * Add a `sample_strategy` configuration to the `test` command in order to allow testing all possible feature sets.
 * Add the `Cargo-maximum.lock` lockfile version for maximum dependency version testing.
 * Tweak how build and test args are passed down in `test`.
@@ -32,7 +33,7 @@
 * More robust lockfile management when using the baseline feature of `test`.
 * Support older MSRVs (e.g. 1.56.0) for lockfile management.
 
-## [0.1.0] - 2026-03-20
+## 0.1.0 - 2026-03-20
 
 Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer workflows. This matches the functionality of the legacy ci shell scripts and codifies a few common job patterns.
 
@@ -50,4 +51,3 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 [0.3.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.1...cargo-rbmt-0.3.0
 [0.2.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...cargo-rbmt-0.2.1
 [0.2.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...cargo-rbmt-0.2.0
-[0.1.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/releases/tag/cargo-rbmt-0.1.0

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -170,25 +170,35 @@ fn get_package_apis(
     Ok(apis)
 }
 
-/// Deduplicate items in an API.
+/// Format API with context per-item.
 ///
-/// A single `impl Trait for Type` can be "named" multiple ways in rustdoc JSON. When
-/// `public_api` renders these to text, the identical method signatures appear as
-/// duplicates even though they refer to the same single impl.
-///
-/// For example, the `Decode` trait defines a default `decoder()` method. When `LockTime`
-/// implements `Decode`, rustdoc generates entries for both the trait's default and the impl's
-/// method, resulting in duplicate `decoder()` lines in the output. From the public API
-/// perspective, `LockTime::decoder()` is just one method. This function removes exact duplicate
-/// items (by string representation) to show the actual callable surface without noise from
-/// rustdoc's duplicate trait default entries.
-fn deduplicate_display(api: &public_api::PublicApi) -> String {
-    let lines: Vec<String> = api.items().map(std::string::ToString::to_string).collect();
-    let mut seen = HashSet::new();
-    let unique_lines: Vec<String> =
-        lines.into_iter().filter(|line| seen.insert(line.clone())).collect();
+/// Uses `parent_id` relationships from rustdoc to annotate items with their context.
+fn format_api(api: &public_api::PublicApi) -> String {
+    let items: Vec<_> = api.items().collect();
+    let mut lines = Vec::new();
 
-    unique_lines.join("\n")
+    // Build a map of id to item for lookups.
+    let id_to_item: HashMap<_, _> = items.iter().map(|item| (item.id(), item)).collect();
+
+    for item in &items {
+        let mut item_str = item.to_string();
+
+        // If this item has a parent, possibly add more context to the item.
+        if let Some(parent_id) = item.parent_id() {
+            if let Some(parent_item) = id_to_item.get(&parent_id) {
+                // Annotate if parent is a trait impl (has "for" keyword).
+                if parent_item.tokens().any(
+                    |token| matches!(token, public_api::tokens::Token::Keyword(kw) if kw == "for"),
+                ) {
+                    item_str = format!("  {} [impl: {}]", item_str, parent_item);
+                }
+            }
+        }
+
+        lines.push(item_str);
+    }
+
+    lines.join("\n")
 }
 
 /// Check API files for all packages.
@@ -219,7 +229,7 @@ fn check_apis(
 
         for (config, public_api) in &apis {
             let output_file = package_api_dir.join(config.filename());
-            let api_display = deduplicate_display(public_api);
+            let api_display = format_api(public_api);
             fs::write(&output_file, api_display)?;
         }
 
