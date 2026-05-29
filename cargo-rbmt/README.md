@@ -145,7 +145,7 @@ cargo rbmt prerelease --force
 The `run` command executes arbitrary cargo commands with the specified toolchain and lockfile.
 
 ```bash
-cargo rbmt run --lock-file minimal --toolchain nightly -- <CARGO_COMMAND> [ARGS...]
+cargo rbmt run --lockfile minimal --toolchain nightly -- <CARGO_COMMAND> [ARGS...]
 ```
 
 The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass everything after it to cargo. For example, here is how to run benchmarks with the nightly toolchain.
@@ -161,7 +161,7 @@ To ensure your package works with the full range of declared dependency versions
 * `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints.
 * `Cargo-recent.lock` - Recent/updated versions of dependencies.
 
-The `lock` command generates and maintains these files for you. You can then use `--lock-file` with any command to test against either version set.
+The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against either version set.
 
 ```bash
 cargo rbmt lock
@@ -173,17 +173,17 @@ cargo rbmt lock
 
 ```bash
 # Test with minimal versions.
-cargo rbmt --lock-file minimal test stable
+cargo rbmt --lockfile minimal test stable
 
 # Test with recent versions.
-cargo rbmt --lock-file recent test stable
+cargo rbmt --lockfile recent test stable
 
 # Works with any command.
-cargo rbmt --lock-file minimal lint
-cargo rbmt --lock-file minimal docs
+cargo rbmt --lockfile minimal lint
+cargo rbmt --lockfile minimal docs
 ```
 
-When you specify `--lock-file`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
+When you specify `--lockfile`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
 
 ## API
 

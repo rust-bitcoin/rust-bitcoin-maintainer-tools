@@ -31,7 +31,13 @@ use xshell::Shell;
 #[command(about = "Rust Bitcoin Maintainer Tools", long_about = None)]
 struct Cli {
     /// Lock file to use for dependencies.
-    #[arg(long = "lock-file", global = true, value_enum, default_value_t = LockFile::Recent)]
+    #[arg(
+        long = "lockfile",
+        alias = "lock-file",
+        global = true,
+        value_enum,
+        default_value_t = LockFile::Recent
+    )]
     lockfile: LockFile,
 
     /// Filter which packages are operated on in the workspace. Can be a package's manifest name or directory.
