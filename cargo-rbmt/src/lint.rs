@@ -142,6 +142,7 @@ fn check_duplicate_deps(
     rbmt_eprintln!("Checking for duplicate dependencies...");
 
     let mut found_duplicates = false;
+    let mut found_stale_allowed_duplicate = false;
 
     for package in packages {
         let config = LintConfig::load(&package.dir)?;
@@ -153,7 +154,7 @@ fn check_duplicate_deps(
         // since they are not exposed to downstream consumers.
         let output = rbmt_cmd!(
             sh,
-            "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
+            "cargo --locked tree --target=all --all-features --duplicates --edges no-build --edges no-dev --prefix depth"
         )
         .ignore_status()
         .read()?;
@@ -173,10 +174,24 @@ fn check_duplicate_deps(
                 }
             }
         }
+        let stale = tree.stale_allowed_duplicates();
+        if !stale.is_empty() {
+            found_stale_allowed_duplicate = true;
+            println!(
+                "Warning: Found stale entries in `allowed_duplicates` in package '{}':",
+                package.name
+            );
+            for name in stale {
+                eprintln!("  {}", name);
+            }
+        }
     }
 
     if found_duplicates {
         return Err("Dependency tree contains duplicates".into());
+    }
+    if found_stale_allowed_duplicate {
+        return Err("Stale entries in `allowed_duplicates` found".into());
     }
 
     rbmt_eprintln!("No duplicate dependencies found");
@@ -214,7 +229,7 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
     let package_names: HashSet<&str> = package_info.iter().map(|pkg| pkg.name.as_str()).collect();
     let output = rbmt_cmd!(
         sh,
-        "cargo --locked tree --target=all --all-features --duplicates --edges no-dev --prefix depth"
+        "cargo --locked tree --target=all --all-features --duplicates --edges no-build --edges no-dev --prefix depth"
     )
     .ignore_status()
     .read()?;
@@ -285,6 +300,9 @@ struct DuplicateTree {
     /// }
     /// ```
     inner: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
+    /// Entries from `allowed_duplicates` that did not appear as actual duplicates
+    /// in the tree. These are stale and should be removed from the allowlist.
+    stale_allowed: Vec<String>,
 }
 
 impl DuplicateTree {
@@ -293,13 +311,17 @@ impl DuplicateTree {
         let mut inner: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> = BTreeMap::new();
         // Current duplicate version being parsed.
         let mut current_duplicate: Option<(String, String)> = None;
+        // Track which allowed entries actually appeared as duplicates in the tree.
+        let mut seen_allowed_duplicate: HashSet<String> = HashSet::new();
 
         for line in output.lines() {
             let Some(dep) = Dependency::parse(line) else { continue };
 
             if dep.depth == 0 {
-                // Skip crates that are explicitly allowed to have duplicate versions.
+                // Skip crates that are explicitly allowed to have duplicate versions,
+                // but record that they were actually seen as duplicates.
                 if allowed_duplicates.iter().any(|a| a == &dep.name) {
+                    seen_allowed_duplicate.insert(dep.name.clone());
                     current_duplicate = None;
                     continue;
                 }
@@ -319,11 +341,21 @@ impl DuplicateTree {
             }
         }
 
-        Self { inner }
+        // Any allowed entry never seen at depth-0 is no longer duplicated and should be removed.
+        let stale_allowed = allowed_duplicates
+            .iter()
+            .filter(|a| !seen_allowed_duplicate.contains(*a))
+            .cloned()
+            .collect();
+
+        Self { inner, stale_allowed }
     }
 
     /// All duplicate crates found in the tree.
     fn duplicates(&self) -> &BTreeMap<String, BTreeMap<String, BTreeSet<String>>> { &self.inner }
+
+    /// Entries from `allowed_duplicates` that are no longer actually duplicated in the tree.
+    fn stale_allowed_duplicates(&self) -> &[String] { &self.stale_allowed }
 
     /// Returns cross-package duplicates, crates with different versions pulled in by
     /// different workspace members.
@@ -600,5 +632,49 @@ mod tests {
         let dupes = tree.duplicates();
         assert!(!dupes.contains_key("bitcoin_hashes"), "allowed duplicate should be filtered");
         assert!(dupes.contains_key("hex-conservative"), "non-allowed duplicate should be reported");
+    }
+
+    #[test]
+    fn stale_allowed_duplicates_reported() {
+        let output = "\
+0hex-conservative v0.1.2
+1pkg1 v0.1.0
+
+0hex-conservative v0.2.2
+1pkg2 v0.1.0
+";
+        // bitcoin_hashes is in the allowlist but not present in the tree at all.
+        let allowed = vec!["bitcoin_hashes".to_string(), "hex-conservative".to_string()];
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2"].into(), &allowed);
+        let stale = tree.stale_allowed_duplicates();
+        assert_eq!(stale, &["bitcoin_hashes".to_string()]);
+        assert!(!stale.contains(&"hex-conservative".to_string()));
+    }
+
+    #[test]
+    fn no_stale_allowed_duplicates_when_all_present() {
+        let output = "\
+0bitcoin_hashes v0.13.0
+1pkg1 v0.1.0
+
+0bitcoin_hashes v0.14.1
+1pkg2 v0.1.0
+";
+        let allowed = vec!["bitcoin_hashes".to_string()];
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2"].into(), &allowed);
+        assert!(tree.stale_allowed_duplicates().is_empty());
+    }
+
+    #[test]
+    fn empty_allowlist_has_no_stale_entries() {
+        let output = "\
+0foo v0.1.0
+1pkg1 v0.1.0
+
+0foo v0.2.0
+1pkg2 v0.1.0
+";
+        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2"].into(), &[]);
+        assert!(tree.stale_allowed_duplicates().is_empty());
     }
 }
