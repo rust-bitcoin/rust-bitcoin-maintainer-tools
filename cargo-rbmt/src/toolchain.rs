@@ -21,7 +21,12 @@ use std::path::Path;
 use toml_edit::DocumentMut;
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, WorkspaceManifest};
+use crate::environment::{get_workspace_root, CmdExt, WorkspaceManifest};
+
+/// Fixed components installed on every toolchain.
+const COMPONENTS: &str = "rust-src,clippy,rustfmt";
+/// Fixed target installed on every toolchain (for no-std cross-compilation testing).
+const TARGET: &str = "thumbv7m-none-eabi";
 
 /// Where the toolchain pins were found in the root `Cargo.toml`.
 ///
@@ -247,6 +252,31 @@ pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn st
     Ok(())
 }
 
+/// Install a single toolchain with the fixed components and target using `rustup`.
+pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Installing toolchain {}", toolchain);
+
+    // --no-self-update keeps rustup from updating itself, not related to toolchains.
+    rbmt_cmd!(
+        sh,
+        "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
+    )
+    // An unstable fallback feature which makes updating toolchains more robust
+    // when working inside containers (the usual for CI actions). Should not
+    // have any effect elsewhere.
+    .env("RUSTUP_PERMIT_COPY_RENAME", "true")
+    .run_verbose()?;
+    Ok(())
+}
+
+/// Reinstall a toolchain by uninstalling and then installing fresh using `rustup`.
+/// Used as a fallback when the normal install fails (e.g., due to overlayfs issues in containers).
+pub fn reinstall_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Uninstalling toolchain {}", toolchain);
+    rbmt_cmd!(sh, "rustup toolchain uninstall {toolchain}").ignore_stdout().run()?;
+    install_toolchain(sh, toolchain)
+}
+
 /// Auto-select via rustup if available, but always verify.
 ///
 /// Combines [`maybe_set_rustup_toolchain`] and [`check_toolchain`] into a single
@@ -260,32 +290,37 @@ pub fn prepare_toolchain(
     sh: &Shell,
     required: Toolchain,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    maybe_set_rustup_toolchain(sh, required);
+    maybe_set_rustup_toolchain(sh, required)?;
     check_toolchain(sh, required)
 }
 
 /// Set `RUSTUP_TOOLCHAIN` on the [`Shell`] to the pinned toolchain version if
 /// rustup is available.
 ///
-/// Reads the pinned toolchain from `[workspace.metadata.rbmt.toolchains]` or
-/// `[package.metadata.rbmt.toolchains]` and sets it via `sh.set_var`, which only
-/// affects child processes spawned through this shell instance and does not mutate
-/// the process environment seen by `std::env::var`.
-///
 /// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup already set
 /// `RUSTUP_TOOLCHAIN` in the process environment before this binary ran. We deliberately
 /// overwrite it with the pinned version because `Cargo.toml` is the authoritative source of
 /// truth for which toolchain each task requires. Falls back silently when rustup is not
 /// available (e.g. Nix) or when no version is configured.
-fn maybe_set_rustup_toolchain(sh: &Shell, required: Toolchain) {
+fn maybe_set_rustup_toolchain(
+    sh: &Shell,
+    required: Toolchain,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Only attempt if rustup is available.
     if rbmt_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
-        return;
+        return Ok(());
     }
 
     if let Ok(toolchain) = required.read_version(sh) {
+        if let Err(e) = install_toolchain(sh, &toolchain) {
+            rbmt_eprintln!("Install failed, retrying with reinstall: {}", e);
+            reinstall_toolchain(sh, &toolchain)?;
+        }
+        // Activate it for this process.
         sh.set_var(RUSTUP_TOOLCHAIN, toolchain);
     }
+
+    Ok(())
 }
 
 /// Extract the single MSRV shared across the workspace.
