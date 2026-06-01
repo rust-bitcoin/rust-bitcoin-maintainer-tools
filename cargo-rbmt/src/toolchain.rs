@@ -249,6 +249,7 @@ pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn st
         }
     }
 
+    rbmt_eprintln!("The current toolchain is: {}", current);
     Ok(())
 }
 
