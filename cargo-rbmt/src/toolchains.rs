@@ -2,7 +2,7 @@
 
 use xshell::Shell;
 
-use crate::environment::ProgressGuard;
+use crate::environment::{CmdExt, ProgressGuard};
 use crate::toolchain::Toolchain;
 
 /// Fixed components installed on every toolchain.
@@ -151,12 +151,7 @@ fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::err
     // when working inside containers (the usual for CI actions). Should not
     // have any effect elsewhere.
     .env("RUSTUP_PERMIT_COPY_RENAME", "true")
-    // Always suppress stdout so that only the `export` statements printed by
-    // [`run`] reach stdout. This matters because the caller does
-    // `eval "$(cargo rbmt toolchains)"`, and any stray rustup stdout would be
-    // passed to `eval`.
-    .ignore_stdout()
-    .run()?;
+    .run_verbose()?;
     Ok(())
 }
 
