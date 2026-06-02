@@ -13,6 +13,52 @@ use crate::environment::{
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
+/// Custom error type for lint failures with detailed information.
+#[derive(Debug)]
+enum LintError {
+    /// Duplicate dependencies found in package dependency tree.
+    DuplicateDependencies(Vec<(String, String)>), // (package_name, tree_output)
+    /// Stale entries in `allowed_duplicates` configuration.
+    StaleAllowedDuplicates(Vec<(String, Vec<String>)>), // (package_name, stale_entries)
+    /// Deprecated MSRV settings found in clippy.toml files.
+    DeprecatedClippyMsrv(Vec<String>), // file_paths
+}
+
+impl std::fmt::Display for LintError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateDependencies(duplicates) => {
+                write!(f, "Error: Found duplicate dependencies")?;
+                for (pkg_name, output) in duplicates {
+                    write!(f, "\n  {}: {}", pkg_name, output)?;
+                }
+                Ok(())
+            }
+            Self::StaleAllowedDuplicates(stale_entries) => {
+                write!(f, "Stale entries in `allowed_duplicates` found")?;
+                for (pkg_name, entries) in stale_entries {
+                    for entry in entries {
+                        write!(f, "\n  {}: {}", pkg_name, entry)?;
+                    }
+                }
+                Ok(())
+            }
+            Self::DeprecatedClippyMsrv(files) => {
+                write!(
+                    f,
+                    "Found MSRV in clippy.toml, use Cargo.toml package.rust-version instead"
+                )?;
+                for file in files {
+                    write!(f, "\n  {}", file)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for LintError {}
+
 /// Lint-specific configuration, read from `[package.metadata.rbmt.lint]` in `Cargo.toml`.
 #[derive(Debug, serde::Deserialize, Default)]
 #[serde(default)]
@@ -141,8 +187,8 @@ fn check_duplicate_deps(
 ) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Checking for duplicate dependencies...");
 
-    let mut found_duplicates = false;
-    let mut found_stale_allowed_duplicate = false;
+    let mut duplicate_deps: Vec<(String, String)> = Vec::new();
+    let mut stale_entries: Vec<(String, Vec<String>)> = Vec::new();
 
     for package in packages {
         let config = LintConfig::load(&package.dir)?;
@@ -165,33 +211,18 @@ fn check_duplicate_deps(
             &config.allowed_duplicates,
         );
         if !tree.duplicates().is_empty() {
-            found_duplicates = true;
-            println!("{}", output);
-            println!("Error: Found duplicate dependencies in package '{}'!", package.name);
-            for (name, versions) in tree.duplicates() {
-                for version in versions.keys() {
-                    eprintln!("  {} {}", name, version);
-                }
-            }
+            duplicate_deps.push((package.name.clone(), output));
         }
-        let stale = tree.stale_allowed_duplicates();
-        if !stale.is_empty() {
-            found_stale_allowed_duplicate = true;
-            println!(
-                "Warning: Found stale entries in `allowed_duplicates` in package '{}':",
-                package.name
-            );
-            for name in stale {
-                eprintln!("  {}", name);
-            }
+        if !tree.stale_allowed_duplicates().is_empty() {
+            stale_entries.push((package.name.clone(), tree.stale_allowed_duplicates().to_vec()));
         }
     }
 
-    if found_duplicates {
-        return Err("Dependency tree contains duplicates".into());
+    if !duplicate_deps.is_empty() {
+        return Err(Box::new(LintError::DuplicateDependencies(duplicate_deps)));
     }
-    if found_stale_allowed_duplicate {
-        return Err("Stale entries in `allowed_duplicates` found".into());
+    if !stale_entries.is_empty() {
+        return Err(Box::new(LintError::StaleAllowedDuplicates(stale_entries)));
     }
 
     rbmt_eprintln!("No duplicate dependencies found");
@@ -490,13 +521,7 @@ fn check_clippy_toml_msrv(
     }
 
     if !problematic_files.is_empty() {
-        println!(
-            "\nError: Found MSRV in clippy.toml, use Cargo.toml package.rust-version instead:"
-        );
-        for file in &problematic_files {
-            println!("  {}", file);
-        }
-        return Err("MSRV should be specified in Cargo.toml, not clippy.toml".into());
+        return Err(Box::new(LintError::DeprecatedClippyMsrv(problematic_files)));
     }
 
     rbmt_eprintln!("No deprecated clippy.toml MSRV settings found");
