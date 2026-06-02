@@ -2,14 +2,8 @@
 
 use xshell::Shell;
 
-use crate::environment::{CmdExt, ProgressGuard};
-use crate::toolchain::Toolchain;
-
-/// Fixed components installed on every toolchain.
-const COMPONENTS: &str = "rust-src,clippy,rustfmt";
-
-/// Fixed target installed on every toolchain (for no-std cross-compilation testing).
-const TARGET: &str = "thumbv7m-none-eabi";
+use crate::environment::ProgressGuard;
+use crate::toolchain::{install_toolchain, reinstall_toolchain, Toolchain};
 
 /// Status string for toolchains that are not configured.
 const NOT_CONFIGURED: &str = "(not configured)";
@@ -136,29 +130,4 @@ fn resolve_stable_version(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
         .ok_or("Could not parse version from `rustc +stable --version` output")?;
 
     Ok(version.to_string())
-}
-
-/// Install a single toolchain with the fixed components and target.
-fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Installing toolchain {}", toolchain);
-
-    // --no-self-update keeps rustup from updating itself, not related to toolchains.
-    rbmt_cmd!(
-        sh,
-        "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
-    )
-    // An unstable fallback feature which makes updating toolchains more robust
-    // when working inside containers (the usual for CI actions). Should not
-    // have any effect elsewhere.
-    .env("RUSTUP_PERMIT_COPY_RENAME", "true")
-    .run_verbose()?;
-    Ok(())
-}
-
-/// Reinstall a toolchain by uninstalling and then installing fresh.
-/// Used as a fallback when the normal install fails (e.g., due to overlayfs issues in containers).
-fn reinstall_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Uninstalling toolchain {}", toolchain);
-    rbmt_cmd!(sh, "rustup toolchain uninstall {toolchain}").ignore_stdout().run()?;
-    install_toolchain(sh, toolchain)
 }
