@@ -88,7 +88,8 @@ impl Default for ProgressGuard {
 impl Drop for ProgressGuard {
     fn drop(&mut self) {
         if !self.disabled && OutputMode::from_env() == OutputMode::Progress {
-            eprintln!();
+            // Re-enable line wrapping and move to new line to clean up progress output.
+            eprintln!("\x1b[?7h");
         }
     }
 }
@@ -156,8 +157,9 @@ macro_rules! rbmt_eprintln {
                     .iter()
                     .fold(0usize, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize));
                 let symbol = $crate::environment::PROGRESS_SYMBOLS[hash % $crate::environment::PROGRESS_SYMBOLS.len()];
+                // Disable line wrapping to prevent long messages from wrapping and breaking carriage return.
                 // Use carriage return to overwrite the same line, and ANSI escape to clear to EOL.
-                eprint!("\r[{}] {}\x1b[K", symbol, msg);
+                eprint!("\x1b[?7l\r[{}] {}\x1b[K", symbol, msg);
             }
             $crate::environment::OutputMode::Quiet => {}
         }
