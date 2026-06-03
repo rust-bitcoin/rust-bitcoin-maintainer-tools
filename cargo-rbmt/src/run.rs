@@ -4,7 +4,7 @@
 
 use xshell::Shell;
 
-use crate::environment::{cargo_cmd, ProgressGuard};
+use crate::environment::{cargo_cmd, CmdExt, ProgressGuard};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -26,10 +26,6 @@ pub fn run(
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running cargo command with {:?} deps and {:?} toolchain", lockfile, toolchain);
-    let mut cmd = cargo_cmd(sh);
-    for arg in cargo_args {
-        cmd = cmd.arg(arg);
-    }
-    cmd.run()?;
+    cargo_cmd(sh).args(cargo_args).run_verbose()?;
     Ok(())
 }
