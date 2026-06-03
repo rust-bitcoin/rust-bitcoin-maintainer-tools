@@ -9,7 +9,9 @@ use std::path::Path;
 use serde::Deserialize;
 use xshell::Shell;
 
-use crate::environment::{get_target_dir, get_workspace_packages, PackageManifest, ProgressGuard};
+use crate::environment::{
+    cargo_cmd, get_target_dir, get_workspace_packages, CmdExt, PackageManifest, ProgressGuard,
+};
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -157,14 +159,14 @@ fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 /// or don't resolve correctly.
 fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     prepare_toolchain(sh, Toolchain::Nightly)?;
-    rbmt_cmd!(sh, "cargo publish --dry-run").run()?;
+    cargo_cmd(sh).arg("publish").arg("--dry-run").run_verbose()?;
     let package_dir = get_publish_dir(sh)?;
 
     let _dir = sh.push_dir(&package_dir);
     rbmt_eprintln!("Testing publish package: {}", package_dir);
     // Re-derive dependencies since it is what an end user will see.
     LockFile::Minimal.derive(sh)?;
-    rbmt_cmd!(sh, "cargo test --all-features --all-targets --locked").run()?;
+    cargo_cmd(sh).arg("test").arg("--all-features").arg("--all-targets").run_verbose()?;
 
     rbmt_eprintln!("Publish tests passed");
     Ok(())
