@@ -22,7 +22,7 @@ mod tools;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use lock::LockFile;
+use lock::{GeneratableLockFile, LockFile};
 use toolchain::Toolchain;
 use xshell::Shell;
 
@@ -90,8 +90,12 @@ enum Commands {
     },
     /// Run bitcoin core integration tests.
     Integration,
-    /// Update Cargo-minimal.lock and Cargo-recent.lock files.
-    Lock,
+    /// Update lock files for dependency version testing.
+    Lock {
+        /// Lock file types to generate.
+        #[arg(long, value_delimiter = ',', default_values = ["minimal", "recent"])]
+        lockfiles: Vec<GeneratableLockFile>,
+    },
     /// Run arbitrary cargo commands with toolchain and lockfile management.
     Run {
         /// Toolchain to use: stable, nightly, or msrv.
@@ -197,8 +201,8 @@ fn main() {
                 eprintln!("Error running integration tests: {}", e);
                 process::exit(1);
             },
-        Commands::Lock =>
-            if let Err(e) = lock::run(&sh) {
+        Commands::Lock { lockfiles } =>
+            if let Err(e) = lock::run(&sh, &lockfiles) {
                 eprintln!("Error updating lock files: {}", e);
                 process::exit(1);
             },

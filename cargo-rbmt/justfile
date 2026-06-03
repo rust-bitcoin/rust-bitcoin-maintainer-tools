@@ -31,5 +31,5 @@ _default:
 # Run tests.
 @test: (rbmt "test")
 
-# Update Cargo-minimal.lock and Cargo-recent.lock files.
-@lock: (rbmt "lock")
+# Update lock files.
+@lock: (rbmt "lock" "--lockfiles=recent,minimal,maximum")

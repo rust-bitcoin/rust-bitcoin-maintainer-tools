@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Add the `Cargo-maximum.lock` lockfile version for maximum dependency version testing.
 * Tweak how build and test args are passed down in `test`.
 * Rename the `--lock-file` flag to `--lockfile` to match cargo conventions (e.g. the unstable `--lockfile-path flag`). Still has an alias for backwards compatibility.
 * [BREAKING] Drop the `bench` command in favor of just running `run -- bench`.

@@ -156,34 +156,29 @@ cargo rbmt run --toolchain nightly -- bench
 
 ## Lock Files
 
-To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` requires two lock files in your repository.
+To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` can generate lock files for different version scenarios.
 
-* `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints.
-* `Cargo-recent.lock` - Recent/updated versions of dependencies.
+* `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints. Verifies that direct dependency versions aren't being bumped by transitive dependencies.
+* `Cargo-maximum.lock` - Maximum versions that satisfy your dependency constraints. Verifies new updates do not break.
+* `Cargo-recent.lock` - Recent versions start out the same as maximum, but are conservatively updated. Versions are only increased if needed due to new dependency constraints.
 
-The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against either version set.
+The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against any version set.
 
 ```bash
+# Generate minimal and recent (default for backward compatibility).
 cargo rbmt lock
-```
-
-1. Verify that direct dependency versions aren't being bumped by transitive dependencies.
-2. Generate `Cargo-minimal.lock` with minimal versions across the entire dependency tree.
-3. Update `Cargo-recent.lock` with conservatively updated dependencies.
-
-```bash
-# Test with minimal versions.
-cargo rbmt --lockfile minimal test stable
-
-# Test with recent versions.
-cargo rbmt --lockfile recent test stable
-
-# Works with any command.
-cargo rbmt --lockfile minimal lint
-cargo rbmt --lockfile minimal docs
+# Generate all three lock files.
+cargo rbmt lock --lockfiles minimal,maximum,recent
 ```
 
 When you specify `--lockfile`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
+
+```bash
+# Test with minimal versions.
+cargo rbmt --lockfile minimal test
+# Test with maximum versions.
+cargo rbmt --lockfile maximum test
+```
 
 ## API
 
