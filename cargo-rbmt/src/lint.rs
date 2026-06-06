@@ -13,6 +13,69 @@ use crate::environment::{
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
+/// Cargo tree arguments for duplicate dependency detection.
+const CARGO_TREE_ARGS: &[&str] = &[
+    "tree",
+    "--target=all",
+    "--all-features",
+    "--duplicates",
+    // Keeps full tree so we can analyze internal workspace memberships.
+    "--no-dedupe",
+    // Filter out dependencies which are not exposed to external consumers.
+    "--edges",
+    "no-build",
+    "--edges",
+    "no-dev",
+    "--prefix",
+    "depth",
+];
+
+/// Custom error type for lint failures with detailed information.
+#[derive(Debug)]
+enum LintError {
+    /// Duplicate dependencies found in package dependency tree.
+    DuplicateDependencies(Vec<(String, String)>), // (package_name, tree_output)
+    /// Stale entries in `allowed_duplicates` configuration.
+    StaleAllowedDuplicates(Vec<(String, Vec<String>)>), // (package_name, stale_entries)
+    /// Deprecated MSRV settings found in clippy.toml files.
+    DeprecatedClippyMsrv(Vec<String>), // file_paths
+}
+
+impl std::fmt::Display for LintError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateDependencies(duplicates) => {
+                write!(f, "Error: Found duplicate dependencies")?;
+                for (pkg_name, output) in duplicates {
+                    write!(f, "\n  {}: {}", pkg_name, output)?;
+                }
+                Ok(())
+            }
+            Self::StaleAllowedDuplicates(stale_entries) => {
+                write!(f, "Stale entries in `allowed_duplicates` found")?;
+                for (pkg_name, entries) in stale_entries {
+                    for entry in entries {
+                        write!(f, "\n  {}: {}", pkg_name, entry)?;
+                    }
+                }
+                Ok(())
+            }
+            Self::DeprecatedClippyMsrv(files) => {
+                write!(
+                    f,
+                    "Found MSRV in clippy.toml, use Cargo.toml package.rust-version instead"
+                )?;
+                for file in files {
+                    write!(f, "\n  {}", file)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for LintError {}
+
 /// Lint-specific configuration, read from `[package.metadata.rbmt.lint]` in `Cargo.toml`.
 #[derive(Debug, serde::Deserialize, Default)]
 #[serde(default)]
@@ -141,8 +204,8 @@ fn check_duplicate_deps(
 ) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Checking for duplicate dependencies...");
 
-    let mut found_duplicates = false;
-    let mut found_stale_allowed_duplicate = false;
+    let mut duplicate_deps: Vec<(String, String)> = Vec::new();
+    let mut stale_entries: Vec<(String, Vec<String>)> = Vec::new();
 
     for package in packages {
         let config = LintConfig::load(&package.dir)?;
@@ -152,46 +215,22 @@ fn check_duplicate_deps(
 
         // Run cargo tree to find duplicates for this package, exclude dev dependencies
         // since they are not exposed to downstream consumers.
-        let output = rbmt_cmd!(
-            sh,
-            "cargo --locked tree --target=all --all-features --duplicates --edges no-build --edges no-dev --prefix depth"
-        )
-        .ignore_status()
-        .read()?;
+        let output = cargo_cmd(sh).args(CARGO_TREE_ARGS).ignore_status().read()?;
 
-        let tree = DuplicateTree::parse(
-            &output,
-            &[package.name.as_str()].into(),
-            &config.allowed_duplicates,
-        );
+        let tree = DuplicateTree::parse(&output, &config.allowed_duplicates);
         if !tree.duplicates().is_empty() {
-            found_duplicates = true;
-            println!("{}", output);
-            println!("Error: Found duplicate dependencies in package '{}'!", package.name);
-            for (name, versions) in tree.duplicates() {
-                for version in versions.keys() {
-                    eprintln!("  {} {}", name, version);
-                }
-            }
+            duplicate_deps.push((package.name.clone(), output));
         }
-        let stale = tree.stale_allowed_duplicates();
-        if !stale.is_empty() {
-            found_stale_allowed_duplicate = true;
-            println!(
-                "Warning: Found stale entries in `allowed_duplicates` in package '{}':",
-                package.name
-            );
-            for name in stale {
-                eprintln!("  {}", name);
-            }
+        if !tree.stale_allowed_duplicates().is_empty() {
+            stale_entries.push((package.name.clone(), tree.stale_allowed_duplicates().to_vec()));
         }
     }
 
-    if found_duplicates {
-        return Err("Dependency tree contains duplicates".into());
+    if !duplicate_deps.is_empty() {
+        return Err(Box::new(LintError::DuplicateDependencies(duplicate_deps)));
     }
-    if found_stale_allowed_duplicate {
-        return Err("Stale entries in `allowed_duplicates` found".into());
+    if !stale_entries.is_empty() {
+        return Err(Box::new(LintError::StaleAllowedDuplicates(stale_entries)));
     }
 
     rbmt_eprintln!("No duplicate dependencies found");
@@ -226,27 +265,20 @@ fn check_cross_package_duplicate_deps(sh: &Shell) -> Result<(), Box<dyn std::err
 
     rbmt_eprintln!("Checking for cross-package duplicate dependencies...");
 
-    let package_names: HashSet<&str> = package_info.iter().map(|pkg| pkg.name.as_str()).collect();
-    let output = rbmt_cmd!(
-        sh,
-        "cargo --locked tree --target=all --all-features --duplicates --edges no-build --edges no-dev --prefix depth"
-    )
-    .ignore_status()
-    .read()?;
+    // Run on all workspace members with the `--workspace` flag.
+    let output = cargo_cmd(sh).args(CARGO_TREE_ARGS).arg("--workspace").ignore_status().read()?;
 
-    let tree = DuplicateTree::parse(&output, &package_names, &[]);
+    let tree = DuplicateTree::parse(&output, &[]);
     let cross_package_dupes = tree.cross_package_duplicates();
     // Currently logging a warning instead of hard failure until we gain confidence in the check.
     if !cross_package_dupes.is_empty() {
-        println!("Warning: found duplicate dependencies spanning multiple workspace members.");
-        println!("         These may cause duplicates in consumers that depend on multiple packages from this workspace.");
+        rbmt_eprintln!("Found {} cross-package duplicate dependencies", cross_package_dupes.len());
         for (crate_name, versions) in &cross_package_dupes {
             for (version, members) in *versions {
                 let members: Vec<&str> = members.iter().map(String::as_str).collect();
-                println!("  {} {}: {}", crate_name, version, members.join(", "));
+                rbmt_eprintln!("  {} {}: {}", crate_name, version, members.join(", "));
             }
         }
-        println!("Consider aligning dependency versions across workspace members.");
     }
 
     rbmt_eprintln!("No cross-package duplicate dependencies found");
@@ -262,6 +294,8 @@ struct Dependency {
     name: String,
     /// Version of the crate.
     version: String,
+    /// Whether this crate is a workspace member.
+    is_workspace_member: bool,
 }
 
 impl Dependency {
@@ -286,7 +320,11 @@ impl Dependency {
         let name = tokens.next()?.to_string();
         let version = tokens.next()?.to_string();
 
-        Some(Self { depth, name, version })
+        // Workspace members have paths like (/path/to/crate).
+        // External crates have URLs like (https://...) or special markers like (proc-macro).
+        let is_workspace_member = tokens.any(|t| t.starts_with("(/"));
+
+        Some(Self { depth, name, version, is_workspace_member })
     }
 }
 
@@ -307,7 +345,7 @@ struct DuplicateTree {
 
 impl DuplicateTree {
     /// Parse the raw output of `cargo tree --duplicates --prefix depth`.
-    fn parse(output: &str, member_packages: &HashSet<&str>, allowed_duplicates: &[String]) -> Self {
+    fn parse(output: &str, allowed_duplicates: &[String]) -> Self {
         let mut inner: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> = BTreeMap::new();
         // Current duplicate version being parsed.
         let mut current_duplicate: Option<(String, String)> = None;
@@ -330,8 +368,8 @@ impl DuplicateTree {
                 current_duplicate = Some((dep.name, dep.version));
             } else if let Some((ref name, ref version)) = current_duplicate {
                 // Any line beneath depth-0 traces the path by which this version is included.
-                // Check whether its crate name is a workspace member.
-                if member_packages.contains(dep.name.as_str()) {
+                // Only track workspace members (those with actual paths, not external crates).
+                if dep.is_workspace_member {
                     if let Some(members) =
                         inner.get_mut(name).and_then(|versions| versions.get_mut(version))
                     {
@@ -490,13 +528,7 @@ fn check_clippy_toml_msrv(
     }
 
     if !problematic_files.is_empty() {
-        println!(
-            "\nError: Found MSRV in clippy.toml, use Cargo.toml package.rust-version instead:"
-        );
-        for file in &problematic_files {
-            println!("  {}", file);
-        }
-        return Err("MSRV should be specified in Cargo.toml, not clippy.toml".into());
+        return Err(Box::new(LintError::DeprecatedClippyMsrv(problematic_files)));
     }
 
     rbmt_eprintln!("No deprecated clippy.toml MSRV settings found");
@@ -515,20 +547,20 @@ mod tests {
         // it is also reported as a cross-package duplicate.
         let output = "\
 0bitcoin_hashes v0.13.0
-1pkg1 v0.1.0
+1pkg1 v0.1.0 (/path/to/pkg1)
 
 0bitcoin_hashes v0.14.1
-1pkg2 v0.1.0
+1pkg2 v0.1.0 (/path/to/pkg2)
 
 0hex-conservative v0.1.2
 1bitcoin_hashes v0.13.0 (*)
-2pkg1 v0.1.0
+2pkg1 v0.1.0 (/path/to/pkg1)
 
 0hex-conservative v0.2.2
 1bitcoin_hashes v0.14.1 (*)
-2pkg2 v0.1.0
+2pkg2 v0.1.0 (/path/to/pkg2)
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
+        let tree = DuplicateTree::parse(output, &[]);
         let dupes = tree.cross_package_duplicates();
         assert!(dupes.contains_key("bitcoin_hashes"));
         assert!(dupes.contains_key("hex-conservative"));
@@ -549,7 +581,7 @@ mod tests {
 1some-lib v2.0.0
 2pkg2 v0.1.0
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
+        let tree = DuplicateTree::parse(output, &[]);
         let dupes = tree.cross_package_duplicates();
         assert!(dupes.contains_key("hex-conservative"));
         assert!(dupes["hex-conservative"].contains_key("v0.1.2"));
@@ -560,12 +592,12 @@ mod tests {
     fn cross_package_single_package_not_reported() {
         let output = "\
 0foo v0.1.0
-1pkg1 v0.1.0
+1pkg1 v0.1.0 (/path/to/pkg1)
 
 0foo v0.2.0
-1pkg1 v0.1.0
+1pkg1 v0.1.0 (/path/to/pkg1)
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
+        let tree = DuplicateTree::parse(output, &[]);
         assert!(tree.cross_package_duplicates().is_empty());
     }
 
@@ -573,18 +605,18 @@ mod tests {
     fn cross_package_dedupe_output() {
         let output = "\
 0bitcoin_hashes v0.13.0
-1pkg1 v0.1.0
+1pkg1 v0.1.0 (/path/to/pkg1)
 
 0bitcoin_hashes v0.14.1
-1pkg2 v0.1.0
+1pkg2 v0.1.0 (/path/to/pkg2)
 
 0bitcoin_hashes v0.13.0
-1pkg1 v0.1.0
+1pkg1 v0.1.0 (/path/to/pkg1)
 
 0bitcoin_hashes v0.14.1
-1pkg2 v0.1.0
+1pkg2 v0.1.0 (/path/to/pkg2)
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
+        let tree = DuplicateTree::parse(output, &[]);
         let dupes = tree.cross_package_duplicates();
         assert_eq!(dupes.len(), 1);
         assert_eq!(dupes["bitcoin_hashes"]["v0.13.0"], BTreeSet::from(["pkg1".to_string()]));
@@ -595,20 +627,20 @@ mod tests {
     fn cross_package_shared_packages_across_all_dupes() {
         let output = "\
 0foo v0.1.0
-1pkg1 v0.1.0
-1pkg2 v0.1.0
+1pkg1 v0.1.0 (/path/to/pkg1)
+1pkg2 v0.1.0 (/path/to/pkg2)
 
 0foo v0.2.0
-1pkg1 v0.1.0
-1pkg2 v0.1.0
+1pkg1 v0.1.0 (/path/to/pkg1)
+1pkg2 v0.1.0 (/path/to/pkg2)
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &[]);
+        let tree = DuplicateTree::parse(output, &[]);
         assert!(tree.cross_package_duplicates().is_empty());
     }
 
     #[test]
     fn cross_package_empty_output_no_dupes() {
-        let tree = DuplicateTree::parse("", &["pkg1", "pkg2", "pkg3"].into(), &[]);
+        let tree = DuplicateTree::parse("", &[]);
         assert!(tree.cross_package_duplicates().is_empty());
     }
 
@@ -628,7 +660,7 @@ mod tests {
 1pkg2 v0.1.0
 ";
         let allowed = vec!["bitcoin_hashes".to_string()];
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2", "pkg3"].into(), &allowed);
+        let tree = DuplicateTree::parse(output, &allowed);
         let dupes = tree.duplicates();
         assert!(!dupes.contains_key("bitcoin_hashes"), "allowed duplicate should be filtered");
         assert!(dupes.contains_key("hex-conservative"), "non-allowed duplicate should be reported");
@@ -645,7 +677,7 @@ mod tests {
 ";
         // bitcoin_hashes is in the allowlist but not present in the tree at all.
         let allowed = vec!["bitcoin_hashes".to_string(), "hex-conservative".to_string()];
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2"].into(), &allowed);
+        let tree = DuplicateTree::parse(output, &allowed);
         let stale = tree.stale_allowed_duplicates();
         assert_eq!(stale, &["bitcoin_hashes".to_string()]);
         assert!(!stale.contains(&"hex-conservative".to_string()));
@@ -661,7 +693,7 @@ mod tests {
 1pkg2 v0.1.0
 ";
         let allowed = vec!["bitcoin_hashes".to_string()];
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2"].into(), &allowed);
+        let tree = DuplicateTree::parse(output, &allowed);
         assert!(tree.stale_allowed_duplicates().is_empty());
     }
 
@@ -674,7 +706,7 @@ mod tests {
 0foo v0.2.0
 1pkg2 v0.1.0
 ";
-        let tree = DuplicateTree::parse(output, &["pkg1", "pkg2"].into(), &[]);
+        let tree = DuplicateTree::parse(output, &[]);
         assert!(tree.stale_allowed_duplicates().is_empty());
     }
 }
