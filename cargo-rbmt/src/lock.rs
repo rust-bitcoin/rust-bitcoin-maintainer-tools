@@ -61,6 +61,8 @@ impl Drop for LockFileGuard {
 pub enum LockFile {
     /// Uses minimal versions that satisfy dependency constraints.
     Minimal,
+    /// Uses maximum versions that satisfy dependency constraints.
+    Maximum,
     /// Uses recent/updated versions of dependencies.
     #[default]
     Recent,
@@ -68,11 +70,34 @@ pub enum LockFile {
     Existing,
 }
 
+/// Lock file types that can be generated via CLI (excludes `Existing`).
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+pub enum GeneratableLockFile {
+    /// Uses minimal versions that satisfy dependency constraints.
+    Minimal,
+    /// Uses maximum versions that satisfy dependency constraints.
+    Maximum,
+    /// Uses recent/updated versions of dependencies.
+    #[default]
+    Recent,
+}
+
+impl From<GeneratableLockFile> for LockFile {
+    fn from(lockfile: GeneratableLockFile) -> Self {
+        match lockfile {
+            GeneratableLockFile::Minimal => Self::Minimal,
+            GeneratableLockFile::Maximum => Self::Maximum,
+            GeneratableLockFile::Recent => Self::Recent,
+        }
+    }
+}
+
 impl LockFile {
     /// Get the filename for this lock file type.
     pub fn filename(self) -> &'static str {
         match self {
             Self::Minimal => "Cargo-minimal.lock",
+            Self::Maximum => "Cargo-maximum.lock",
             Self::Recent => "Cargo-recent.lock",
             Self::Existing => CARGO_LOCK,
         }
@@ -82,6 +107,7 @@ impl LockFile {
     pub fn derive(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
             Self::Minimal => derive_minimal_lockfile(sh),
+            Self::Maximum => derive_maximum_lockfile(sh),
             Self::Recent => update_recent_lockfile(sh),
             Self::Existing => {
                 // No-op, use existing Cargo.lock.
@@ -93,7 +119,7 @@ impl LockFile {
     /// Restore a previously derived lockfile to Cargo.lock.
     fn restore(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         match self {
-            Self::Minimal | Self::Recent => {
+            Self::Minimal | Self::Maximum | Self::Recent => {
                 let workspace_root = get_workspace_root(sh)?;
                 let source = workspace_root.join(self.filename());
                 let dest = workspace_root.join(CARGO_LOCK);
@@ -130,17 +156,26 @@ impl LockFile {
     }
 }
 
-/// Update Cargo-minimal.lock and Cargo-recent.lock files.
+/// Update lock files for dependency version testing.
 ///
 /// * `Cargo-minimal.lock` - Uses minimal versions that satisfy dependency constraints.
+/// * `Cargo-maximum.lock` - Uses maximum versions that satisfy dependency constraints.
 /// * `Cargo-recent.lock` - Uses recent/updated versions of dependencies.
 ///
 /// This helps catch cases where you've specified a minimum version that's too high,
-/// or where your code relies on features from newer versions than declared.
+/// where your code relies on features from newer versions than declared, or where
+/// your code breaks with newer versions of dependencies.
 ///
 /// The original Cargo.lock is preserved and restored after generation in case
 /// it is being tracked for publication.
-pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+///
+/// # Arguments
+///
+/// * `lockfiles` - Lock file types to generate (minimal, maximum, recent).
+pub fn run(
+    sh: &Shell,
+    lockfiles: &[GeneratableLockFile],
+) -> Result<(), Box<dyn std::error::Error>> {
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
@@ -148,10 +183,10 @@ pub fn run(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Updating lock files in: {}", workspace_root.display());
 
     // Create guard to back up and ensure restoration, even on error.
-    let _guard = LockFileGuard::new(sh)?;
-
-    LockFile::Minimal.derive(sh)?;
-    LockFile::Recent.derive(sh)?;
+    let _lockfile_guard = LockFileGuard::new(sh)?;
+    for &lockfile in lockfiles {
+        LockFile::from(lockfile).derive(sh)?;
+    }
 
     rbmt_eprintln!("Lock files updated successfully");
     Ok(())
@@ -188,6 +223,24 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
 
     // Save a copy to Cargo-minimal.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Minimal)?;
+
+    Ok(())
+}
+
+/// Derive a maximum versions lockfile.
+///
+/// This generates a lockfile using the highest versions of all dependencies
+/// that still satisfy the constraints specified in Cargo.toml. This helps
+/// catch compatibility issues with newer versions of dependencies.
+fn derive_maximum_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Generating maximum versions lockfile...");
+
+    // Remove existing lock file and generate a fresh one with maximum compatible versions.
+    remove_lock_file(sh)?;
+    rbmt_cmd!(sh, "cargo generate-lockfile").run()?;
+
+    // Save a copy to Cargo-maximum.lock for workspace tracking.
+    copy_lock_file(sh, LockFile::Maximum)?;
 
     Ok(())
 }
