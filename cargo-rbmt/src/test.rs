@@ -30,10 +30,8 @@ struct PackageSummary {
     examples: Vec<String>,
     /// Individual auto-discovered features tested in isolation.
     individual_features: Vec<String>,
-    /// Random commit-seeded feature subsets that were tested.
-    sampled_subsets: Vec<Vec<String>>,
-    /// Exact feature sets from `exact_features` config that were tested.
-    exact_sets: Vec<Vec<String>>,
+    /// Feature subsets which were tested.
+    feature_subsets: Vec<Vec<String>>,
     /// Whether the no-std cross-compilation check was run.
     no_std_checked: bool,
 }
@@ -59,8 +57,7 @@ impl fmt::Display for PackageSummary {
         let rows: &[(&str, String)] = &[
             ("Examples", fmt_list(&self.examples)),
             ("Individual features", fmt_list(&self.individual_features)),
-            ("Sampled subsets", fmt_sets(&self.sampled_subsets)),
-            ("Exact sets", fmt_sets(&self.exact_sets)),
+            ("Feature subsets", fmt_sets(&self.feature_subsets)),
             ("No-std check", if self.no_std_checked { "ran" } else { "skipped" }.to_string()),
         ];
 
@@ -382,7 +379,7 @@ fn do_feature_matrix(
     for features in &config.exact_features {
         rbmt_eprintln!("Testing exact feature set in {}: {:?}", package.name, features);
         test_features(sh, features, cargo_args)?;
-        summary.exact_sets.push(features.clone());
+        summary.feature_subsets.push(features.clone());
     }
 
     Ok(())
@@ -439,7 +436,7 @@ fn sampled_feature_matrix(
 
             rbmt_eprintln!("Testing sampled feature set in {}: {:?}", summary.name, subset);
             test_features(sh, &subset, cargo_args)?;
-            summary.sampled_subsets.push(subset.into_iter().cloned().collect());
+            summary.feature_subsets.push(subset.into_iter().cloned().collect());
         }
     }
 
