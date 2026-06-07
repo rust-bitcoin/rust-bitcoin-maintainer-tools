@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Add a `sample_strategy` configuration to the `test` command in order to allow testing all possible feature sets.
 * Add the `Cargo-maximum.lock` lockfile version for maximum dependency version testing.
 * Tweak how build and test args are passed down in `test`.
 * Rename the `--lock-file` flag to `--lockfile` to match cargo conventions (e.g. the unstable `--lockfile-path flag`). Still has an alias for backwards compatibility.

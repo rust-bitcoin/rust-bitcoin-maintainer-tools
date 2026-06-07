@@ -104,6 +104,9 @@ exact_features = [
     ["rand", "std"],          # Assuming rand has a weak dependency on std, test interaction when enabled.
     ["serde", "rand", "std"], # Test both with weak dependency interaction.
 ]
+
+# Run tests on all possible feature subsets instead of the default handful per-commit.
+sample_strategy = "all"
 ```
 
 ### no_std

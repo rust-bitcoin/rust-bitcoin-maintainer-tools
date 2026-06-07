@@ -21,6 +21,104 @@ use crate::git;
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
+/// Strategy for sampling feature combinations during testing.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SampleStrategy {
+    /// Use logarithmic sampling `ceil(log2(n))` random subsets per commit.
+    #[default]
+    Log,
+    /// Test all possible feature combinations (excluding none, individual, and all).
+    All,
+}
+
+impl SampleStrategy {
+    /// Generate feature subsets according to this sampling strategy.
+    ///
+    /// Returns a vector of feature subsets to test. The exact subsets depend on the strategy.
+    ///
+    /// * **Log**: Generates `ceil(log2(n))` random subsets based on the current commit ID.
+    ///   If no commit ID is available, returns an empty vector.
+    /// * **All**: Generates all (~`2^n`) possible combinations. Excludes empty, individual, and
+    ///   full set which are tested elsewhere.
+    fn generate_subsets(self, features: &[String], commit: Option<String>) -> Vec<Vec<String>> {
+        match self {
+            Self::Log => generate_log_sampled_subsets(features, commit),
+            Self::All => generate_all_subsets(features),
+        }
+    }
+}
+
+/// Generate logarithmic sampled feature subsets.
+///
+/// Generates `ceil(log2(n))` random feature subsets where `n` is the number of features.
+/// The subsets are selected based on the commit ID, so are deterministic for a given commit.
+///
+/// If no commit ID is available, returns an empty vector.
+fn generate_log_sampled_subsets(features: &[String], commit: Option<String>) -> Vec<Vec<String>> {
+    let Some(commit) = commit else {
+        return Vec::new();
+    };
+
+    let n = features.len() as u32;
+    let max_index = if n == 0 { 0 } else { n.ilog2() + u32::from(!n.is_power_of_two()) };
+
+    let mut subsets = Vec::new();
+
+    for index in 0..max_index {
+        let subset: Vec<String> = features
+            .iter()
+            .filter(|f| {
+                let mut hasher = DefaultHasher::new();
+                commit.hash(&mut hasher);
+                index.hash(&mut hasher);
+                f.hash(&mut hasher);
+                hasher.finish() & 1 == 1
+            })
+            .cloned()
+            .collect();
+
+        if !subset.is_empty() {
+            subsets.push(subset);
+        }
+    }
+
+    subsets
+}
+
+/// Generate all possible feature subsets.
+///
+/// Generates all possible combinations of 2 or more features (excluding empty, individual,
+/// and full set). Individual feature combinations are tested separately by
+/// `sampled_feature_matrix`.
+fn generate_all_subsets(features: &[String]) -> Vec<Vec<String>> {
+    if features.len() < 2 {
+        return Vec::new();
+    }
+
+    let mut subsets = Vec::new();
+
+    // Iterate through all bitmask combinations from 1 (because 0 is empty set) to `2^n - 2`
+    // (because `2^n - 1` is all features).
+    for mask in 1usize..=(1 << features.len()) - 2 {
+        // Skip if only one bit is set (individual feature).
+        if mask.is_power_of_two() {
+            continue;
+        }
+
+        // Collect features corresponding to set bits in the mask.
+        let mut subset = Vec::new();
+        for (idx, feature) in features.iter().enumerate() {
+            if (mask >> idx) & 1 == 1 {
+                subset.push(feature.clone());
+            }
+        }
+        subsets.push(subset);
+    }
+
+    subsets
+}
+
 /// Summary of everything tested for a single package.
 #[derive(Debug, Default)]
 struct PackageSummary {
@@ -123,6 +221,21 @@ struct TestConfig {
 
     /// Exact feature combinations to always test.
     exact_features: Vec<Vec<String>>,
+
+    /// Strategy for sampling feature combinations during testing.
+    ///
+    /// Options:
+    /// * `"log"` - Logarithmic sampling (default) `ceil(log2(n))` random subsets per commit.
+    /// * `"all"` - Test all combinations: 2^n - 2 subsets (excluding none, individual, and all).
+    ///
+    /// # Examples
+    ///
+    /// ```toml
+    /// [package.metadata.rbmt.test]
+    /// sample_strategy = "all"
+    /// ```
+    #[serde(default)]
+    sample_strategy: SampleStrategy,
 }
 
 impl TestConfig {
@@ -372,7 +485,7 @@ fn do_feature_matrix(
             package.name,
             features
         );
-        sampled_feature_matrix(sh, &features, cargo_args, summary)?;
+        sampled_feature_matrix(sh, &features, config.sample_strategy, cargo_args, summary)?;
     }
 
     // Test exact feature sets.
@@ -385,29 +498,14 @@ fn do_feature_matrix(
     Ok(())
 }
 
-/// Test auto-discovered features with per-commit random sampling.
-///
-/// Runs each feature individually (always), plus `ceil(log2(n))` random feature subsets
-/// where `n` is the number of features. The subsets are selected based on the commit ID,
-/// so are deterministic for a given commit.
-///
-/// *Warning!* When no commit ID is available (not in a git repo), only the individual
-/// feature runs are performed.
+/// Test auto-discovered features with configurable sampling strategy.
 fn sampled_feature_matrix(
     sh: &Shell,
     features: &[String],
+    strategy: SampleStrategy,
     cargo_args: &[String],
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // ceil(log2(n)) scales the number of random subsets with the feature count.
-    fn num_subsets(n: usize) -> u32 {
-        if n <= 1 {
-            0
-        } else {
-            n.ilog2() + u32::from(!n.is_power_of_two())
-        }
-    }
-
     // Test each feature individually.
     for feature in features {
         rbmt_eprintln!("Testing individual feature in {}: {}", summary.name, feature);
@@ -415,29 +513,12 @@ fn sampled_feature_matrix(
         summary.individual_features.push(feature.clone());
     }
 
-    // Test random feature subsets, scaling with feature count.
-    if let Some(commit) = git_commit_id(sh) {
-        for subset_index in 0..num_subsets(features.len()) {
-            let subset: Vec<&String> = features
-                .iter()
-                // Uses the low bit of a hash the [seed + feature name] to determine membership.
-                .filter(|f| {
-                    let mut hasher = DefaultHasher::new();
-                    commit.hash(&mut hasher);
-                    subset_index.hash(&mut hasher);
-                    f.hash(&mut hasher);
-                    hasher.finish() & 1 == 1
-                })
-                .collect();
-
-            if subset.is_empty() {
-                continue;
-            }
-
-            rbmt_eprintln!("Testing sampled feature set in {}: {:?}", summary.name, subset);
-            test_features(sh, &subset, cargo_args)?;
-            summary.feature_subsets.push(subset.into_iter().cloned().collect());
-        }
+    // Generate and test feature subsets according to strategy.
+    let commit = git_commit_id(sh);
+    for subset in strategy.generate_subsets(features, commit) {
+        rbmt_eprintln!("Testing feature set in {}: {:?}", summary.name, subset);
+        test_features(sh, &subset, cargo_args)?;
+        summary.feature_subsets.push(subset);
     }
 
     Ok(())
