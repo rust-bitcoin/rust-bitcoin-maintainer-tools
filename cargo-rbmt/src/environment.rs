@@ -76,7 +76,8 @@ impl ProgressGuard {
     pub fn disable(&mut self) {
         self.disabled = true;
         if OutputMode::from_env() == OutputMode::Progress {
-            eprintln!();
+            // Re-enable line wrapping and move to new line to clean up progress output.
+            eprintln!("\x1b[?7h");
         }
     }
 }
@@ -87,9 +88,8 @@ impl Default for ProgressGuard {
 
 impl Drop for ProgressGuard {
     fn drop(&mut self) {
-        if !self.disabled && OutputMode::from_env() == OutputMode::Progress {
-            // Re-enable line wrapping and move to new line to clean up progress output.
-            eprintln!("\x1b[?7h");
+        if !self.disabled {
+            self.disable();
         }
     }
 }
