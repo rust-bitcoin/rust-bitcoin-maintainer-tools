@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use clap::ValueEnum;
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, ProgressGuard};
+use crate::environment::{get_workspace_root, CmdExt, ProgressGuard};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// The standard Cargo lockfile name.
@@ -212,14 +212,14 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
     // as in, they are not being bumped up by transitive dependency constraints.
     rbmt_eprintln!("Checking direct minimal versions...");
     remove_lock_file(sh)?;
-    rbmt_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run_with_capture()?;
 
     // Now that our own direct dependency versions can be trusted, check
     // against the lowest versions of the dependency tree which still
     // satisfy constraints.
     rbmt_eprintln!("Generating minimal versions lockfile...");
     remove_lock_file(sh)?;
-    rbmt_cmd!(sh, "cargo check --all-features -Z minimal-versions").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features -Z minimal-versions").run_with_capture()?;
 
     // Save a copy to Cargo-minimal.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Minimal)?;
@@ -237,7 +237,7 @@ fn derive_maximum_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
 
     // Remove existing lock file and generate a fresh one with maximum compatible versions.
     remove_lock_file(sh)?;
-    rbmt_cmd!(sh, "cargo generate-lockfile").run()?;
+    rbmt_cmd!(sh, "cargo generate-lockfile").run_with_capture()?;
 
     // Save a copy to Cargo-maximum.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Maximum)?;
@@ -258,7 +258,7 @@ fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> 
     // If it doesn't exist cargo check will create a fresh one.
     remove_lock_file(sh)?;
     let _ = LockFile::Recent.restore(sh);
-    rbmt_cmd!(sh, "cargo check --all-features").run()?;
+    rbmt_cmd!(sh, "cargo check --all-features").run_with_capture()?;
 
     // Save a copy to Cargo-recent.lock for workspace tracking.
     copy_lock_file(sh, LockFile::Recent)?;

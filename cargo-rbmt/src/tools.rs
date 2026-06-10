@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, ProgressGuard, WorkspaceManifest};
+use crate::environment::{get_workspace_root, CmdExt, ProgressGuard, WorkspaceManifest};
 
 /// Where the tool pins were found in the root `Cargo.toml`.
 ///
@@ -128,14 +128,14 @@ fn installed_version(
 /// Install a single tool at a pinned version using `cargo install`.
 fn install_tool(sh: &Shell, name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing {}@{}", name, version);
-    rbmt_cmd!(sh, "cargo install {name} --version {version} --locked").run()?;
+    rbmt_cmd!(sh, "cargo install {name} --version {version} --locked").run_with_capture()?;
     Ok(())
 }
 
 /// Install a single tool at the latest version and return the resolved version.
 fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing {} (latest)", name);
-    rbmt_cmd!(sh, "cargo install {name}").run()?;
+    rbmt_cmd!(sh, "cargo install {name}").run_with_capture()?;
 
     installed_version(sh, name)?
         .ok_or_else(|| format!("{} not found in `cargo install --list` after install", name).into())
