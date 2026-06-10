@@ -42,6 +42,20 @@ jobs:
           rbmt-path: cargo-rbmt
       - run: cargo rbmt prerelease --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
 
+  dogfood-api:
+    runs-on: debian-trixie
+    permissions: {}
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+        with:
+          persist-credentials: false
+      - uses: ./actions/setup-rbmt
+        with:
+          rbmt-path: cargo-rbmt
+      - name: Setup api-test-cases toolchains and check API
+        working-directory: cargo-rbmt/api-test-cases
+        run: cargo rbmt toolchains && cargo rbmt api --lockfile existing
+
   dogfood-tests:
     runs-on: debian-trixie
     permissions: {}

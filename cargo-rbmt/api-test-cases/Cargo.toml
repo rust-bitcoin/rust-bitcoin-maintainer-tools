@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "api-test-cases"
+version = "0.1.0"
+edition = "2021"
+publish = false
+exclude = ["api"]
+
+[package.metadata.rbmt]
+api = { enabled = true }
+toolchains = { nightly = "nightly-2026-05-04" }
