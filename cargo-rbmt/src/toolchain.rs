@@ -207,14 +207,49 @@ impl Toolchain {
     }
 }
 
-/// Check if the current toolchain matches the requirement of current crate.
-///
-/// # Errors
-///
-/// * Cannot determine current toolchain version.
-/// * Current toolchain doesn't match requirement.
-/// * For MSRV: cannot read rust-version from Cargo.toml.
-pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn std::error::Error>> {
+/// Install a single toolchain with the fixed components and target using `rustup`.
+pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Installing toolchain {}", toolchain);
+
+    // --no-self-update keeps rustup from updating itself, not related to toolchains.
+    rbmt_cmd!(
+        sh,
+        "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
+    )
+    // An unstable fallback feature which makes updating toolchains more robust
+    // when working inside containers (the usual for CI actions). Should not
+    // have any effect elsewhere.
+    .env("RUSTUP_PERMIT_COPY_RENAME", "true")
+    .run_verbose()?;
+    Ok(())
+}
+
+/// Reinstall a toolchain by uninstalling and then installing fresh using `rustup`.
+/// Used as a fallback when the normal install fails (e.g., due to overlayfs issues in containers).
+pub fn reinstall_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Uninstalling toolchain {}", toolchain);
+    rbmt_cmd!(sh, "rustup toolchain uninstall {toolchain}").ignore_stdout().run()?;
+    install_toolchain(sh, toolchain)
+}
+
+/// Auto-select via rustup if available, but always verify.
+pub fn prepare_toolchain(
+    sh: &Shell,
+    required: Toolchain,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Only attempt to set rustup if available.
+    if rbmt_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
+        // Fall through to verification with current toolchain.
+    } else if let Ok(toolchain) = required.read_version(sh) {
+        if let Err(e) = install_toolchain(sh, &toolchain) {
+            rbmt_eprintln!("Install failed, retrying with reinstall: {}", e);
+            reinstall_toolchain(sh, &toolchain)?;
+        }
+        // Activate it for this process.
+        sh.set_var(RUSTUP_TOOLCHAIN, toolchain);
+    }
+
+    // Verify the correct toolchain is active.
     let current = rbmt_cmd!(sh, "rustc --version").read()?;
 
     match required {
@@ -250,77 +285,6 @@ pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn st
     }
 
     rbmt_eprintln!("The current toolchain is: {}", current);
-    Ok(())
-}
-
-/// Install a single toolchain with the fixed components and target using `rustup`.
-pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Installing toolchain {}", toolchain);
-
-    // --no-self-update keeps rustup from updating itself, not related to toolchains.
-    rbmt_cmd!(
-        sh,
-        "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
-    )
-    // An unstable fallback feature which makes updating toolchains more robust
-    // when working inside containers (the usual for CI actions). Should not
-    // have any effect elsewhere.
-    .env("RUSTUP_PERMIT_COPY_RENAME", "true")
-    .run_verbose()?;
-    Ok(())
-}
-
-/// Reinstall a toolchain by uninstalling and then installing fresh using `rustup`.
-/// Used as a fallback when the normal install fails (e.g., due to overlayfs issues in containers).
-pub fn reinstall_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Uninstalling toolchain {}", toolchain);
-    rbmt_cmd!(sh, "rustup toolchain uninstall {toolchain}").ignore_stdout().run()?;
-    install_toolchain(sh, toolchain)
-}
-
-/// Auto-select via rustup if available, but always verify.
-///
-/// Combines [`maybe_set_rustup_toolchain`] and [`check_toolchain`] into a single
-/// call for the common case where both should always run together.
-///
-/// # Errors
-///
-/// Returns an error if the active toolchain does not match `required` after
-/// auto-selection. See [`check_toolchain`] for details.
-pub fn prepare_toolchain(
-    sh: &Shell,
-    required: Toolchain,
-) -> Result<(), Box<dyn std::error::Error>> {
-    maybe_set_rustup_toolchain(sh, required)?;
-    check_toolchain(sh, required)
-}
-
-/// Set `RUSTUP_TOOLCHAIN` on the [`Shell`] to the pinned toolchain version if
-/// rustup is available.
-///
-/// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup already set
-/// `RUSTUP_TOOLCHAIN` in the process environment before this binary ran. We deliberately
-/// overwrite it with the pinned version because `Cargo.toml` is the authoritative source of
-/// truth for which toolchain each task requires. Falls back silently when rustup is not
-/// available (e.g. Nix) or when no version is configured.
-fn maybe_set_rustup_toolchain(
-    sh: &Shell,
-    required: Toolchain,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Only attempt if rustup is available.
-    if rbmt_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
-        return Ok(());
-    }
-
-    if let Ok(toolchain) = required.read_version(sh) {
-        if let Err(e) = install_toolchain(sh, &toolchain) {
-            rbmt_eprintln!("Install failed, retrying with reinstall: {}", e);
-            reinstall_toolchain(sh, &toolchain)?;
-        }
-        // Activate it for this process.
-        sh.set_var(RUSTUP_TOOLCHAIN, toolchain);
-    }
-
     Ok(())
 }
 
