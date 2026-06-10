@@ -196,7 +196,7 @@ pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std:
     // when working inside containers (the usual for CI actions). Should not
     // have any effect elsewhere.
     .env("RUSTUP_PERMIT_COPY_RENAME", "true")
-    .run_verbose()?;
+    .run_with_capture()?;
     Ok(())
 }
 

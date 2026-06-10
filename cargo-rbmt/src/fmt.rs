@@ -35,7 +35,7 @@ pub fn run(sh: &Shell, check: bool, packages: &[String]) -> Result<(), Box<dyn s
         cmd = cmd.arg("--check");
     }
 
-    cmd.run_verbose()?;
+    cmd.run_with_capture()?;
 
     if check {
         rbmt_eprintln!("Formatting check passed");

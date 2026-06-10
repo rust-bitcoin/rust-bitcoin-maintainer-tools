@@ -26,6 +26,6 @@ pub fn run(
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running cargo command with {:?} deps and {:?} toolchain", lockfile, toolchain);
-    cargo_cmd(sh).args(cargo_args).run_verbose()?;
+    cargo_cmd(sh).args(cargo_args).run_with_capture()?;
     Ok(())
 }

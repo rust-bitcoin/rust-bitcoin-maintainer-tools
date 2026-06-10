@@ -268,7 +268,7 @@ fn test_features(
         .arg("--features")
         .arg(&features_str)
         .args(cargo_args)
-        .run_verbose()?;
+        .run_with_capture()?;
 
     cargo_cmd(sh)
         .arg("test")
@@ -276,7 +276,7 @@ fn test_features(
         .arg("--features")
         .arg(&features_str)
         .args(cargo_args)
-        .run_verbose()?;
+        .run_with_capture()?;
     Ok(())
 }
 
@@ -389,7 +389,7 @@ fn do_examples(
                     .arg("--no-default-features")
                     .arg("--example")
                     .arg(name)
-                    .run_verbose()?;
+                    .run_with_capture()?;
             }
             2 => {
                 let name = parts[0];
@@ -408,7 +408,7 @@ fn do_examples(
                     .arg(name)
                     .arg("--features")
                     .arg(features)
-                    .run_verbose()?;
+                    .run_with_capture()?;
             }
             _ => {
                 return Err(format!(
@@ -442,13 +442,13 @@ fn do_feature_matrix(
 
     // Test all features.
     rbmt_eprintln!("Testing all features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--all-features").args(cargo_args).run_verbose()?;
-    cargo_cmd(sh).arg("test").arg("--all-features").args(cargo_args).run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--all-features").args(cargo_args).run_with_capture()?;
+    cargo_cmd(sh).arg("test").arg("--all-features").args(cargo_args).run_with_capture()?;
 
     // Test no features.
     rbmt_eprintln!("Testing no features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--no-default-features").args(cargo_args).run_verbose()?;
-    cargo_cmd(sh).arg("test").arg("--no-default-features").args(cargo_args).run_verbose()?;
+    cargo_cmd(sh).arg("build").arg("--no-default-features").args(cargo_args).run_with_capture()?;
+    cargo_cmd(sh).arg("test").arg("--no-default-features").args(cargo_args).run_with_capture()?;
 
     // Test each feature in isolation, plus sampled subsets.
     let features: Vec<String> = discover_features(sh, package)?
@@ -550,7 +550,8 @@ fn do_no_std_check(
         summary.name,
         NO_STD_TARGET
     );
-    rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features").run_verbose()?;
+    rbmt_cmd!(sh, "cargo build --target {NO_STD_TARGET} --no-default-features")
+        .run_with_capture()?;
     summary.no_std_checked = true;
     Ok(())
 }

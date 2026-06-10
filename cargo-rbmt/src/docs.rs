@@ -35,7 +35,7 @@ pub fn run(
         cmd = cmd.arg("--open");
     }
 
-    cmd.env("RUSTDOCFLAGS", "-D warnings").run_verbose()?;
+    cmd.env("RUSTDOCFLAGS", "-D warnings").run_with_capture()?;
 
     rbmt_eprintln!("Docs built successfully.");
     Ok(())
@@ -69,7 +69,7 @@ pub fn run_docsrs(
     }
 
     cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links")
-        .run_verbose()?;
+        .run_with_capture()?;
 
     rbmt_eprintln!("Docs built successfully.");
     Ok(())

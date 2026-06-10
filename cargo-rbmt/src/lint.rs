@@ -136,7 +136,7 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         .arg("--all-features")
         .arg("--keep-going")
         .args(&["--", "-D", "warnings"])
-        .run_verbose()?;
+        .run_with_capture()?;
 
     // Run clippy on workspace without features.
     cargo_cmd(sh)
@@ -145,7 +145,7 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         .arg("--all-targets")
         .arg("--keep-going")
         .args(&["--", "-D", "warnings"])
-        .run_verbose()?;
+        .run_with_capture()?;
 
     Ok(())
 }
@@ -176,7 +176,7 @@ fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::er
             .arg("--no-default-features")
             .arg("--keep-going")
             .args(&["--", "-D", "warnings"])
-            .run_verbose()?;
+            .run_with_capture()?;
     }
 
     Ok(())

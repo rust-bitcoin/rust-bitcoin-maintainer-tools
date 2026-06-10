@@ -32,12 +32,13 @@ impl OutputMode {
 
 /// Extension trait for commands with conditional output.
 pub trait CmdExt {
-    /// Run command and show output only in Verbose mode, but always show on failure.
-    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    /// If running in `progress` or `quiet` mode, capture output and display on failure
+    /// for easier diagnoses for the caller.
+    fn run_with_capture(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 impl CmdExt for Cmd<'_> {
-    fn run_verbose(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn run_with_capture(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // In verbose mode, just run the command normally.
         if matches!(OutputMode::from_env(), OutputMode::Verbose) {
             return Ok(self.run()?);
