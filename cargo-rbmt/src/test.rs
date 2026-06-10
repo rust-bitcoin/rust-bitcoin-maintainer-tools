@@ -197,8 +197,7 @@ struct TestConfig {
     /// Examples to run with different feature configurations.
     ///
     /// Supported formats:
-    /// * `"name"` - runs with default features.
-    /// * `"name:-"` - runs with no-default-features.
+    /// * `"name"` - runs with no features.
     /// * `"name:feature1 feature2"` - runs with specific features.
     ///
     /// # Examples
@@ -207,7 +206,6 @@ struct TestConfig {
     /// [package.metadata.rbmt.test]
     /// examples = [
     ///     "bip32",
-    ///     "bip32:-",
     ///     "bip32:serde rand"
     /// ]
     /// ```
@@ -361,7 +359,7 @@ fn test_commit(
 
         let mut pkg_summary = PackageSummary { name: package.name.clone(), ..Default::default() };
 
-        do_test(sh, &config, cargo_args, &mut pkg_summary)?;
+        do_examples(sh, &config, &mut pkg_summary)?;
         do_feature_matrix(sh, package, &config, cargo_args, &mut pkg_summary)?;
         do_no_std_check(sh, &package.dir, &mut pkg_summary)?;
 
@@ -371,71 +369,50 @@ fn test_commit(
     Ok(pkg_summaries)
 }
 
-/// Run default build and test along with examples.
-fn do_test(
+/// Run examples.
+fn do_examples(
     sh: &Shell,
     config: &TestConfig,
-    cargo_args: &[String],
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Running default tests on {}", summary.name);
+    rbmt_eprintln!("Running examples in {}", summary.name);
 
-    // Default build and test.
-    cargo_cmd(sh).arg("build").args(cargo_args).run_verbose()?;
-    cargo_cmd(sh).arg("test").args(cargo_args).run_verbose()?;
-
-    // Run examples (without cargo_args - examples run with their configured features).
     for example in &config.examples {
         let parts: Vec<&str> = example.split(':').collect();
 
         match parts.len() {
             1 => {
-                // Format: "name" - run with default features.
                 let name = parts[0];
-                rbmt_eprintln!(
-                    "Running example {} with default features in {}",
-                    name,
-                    summary.name
-                );
-                cargo_cmd(sh).arg("run").arg("--example").arg(name).run_verbose()?;
+                rbmt_eprintln!("Running example {} with no features in {}", name, summary.name);
+                cargo_cmd(sh)
+                    .arg("run")
+                    .arg("--no-default-features")
+                    .arg("--example")
+                    .arg(name)
+                    .run_verbose()?;
             }
             2 => {
                 let name = parts[0];
                 let features = parts[1];
 
-                if features == "-" {
-                    // Format: "name:-" - run with no-default-features.
-                    rbmt_eprintln!(
-                        "Running example {} with no default features in {}",
-                        name,
-                        summary.name
-                    );
-                    cargo_cmd(sh)
-                        .arg("run")
-                        .arg("--no-default-features")
-                        .arg("--example")
-                        .arg(name)
-                        .run_verbose()?;
-                } else {
-                    // Format: "name:features" - run with specific features.
-                    rbmt_eprintln!(
-                        "Running example {} with features {} in {}",
-                        name,
-                        features,
-                        summary.name
-                    );
-                    cargo_cmd(sh)
-                        .arg("run")
-                        .arg("--example")
-                        .arg(name)
-                        .arg("--features")
-                        .arg(features)
-                        .run_verbose()?;
-                }
+                rbmt_eprintln!(
+                    "Running example {} with features {} in {}",
+                    name,
+                    features,
+                    summary.name
+                );
+                cargo_cmd(sh)
+                    .arg("run")
+                    .arg("--no-default-features")
+                    .arg("--example")
+                    .arg(name)
+                    .arg("--features")
+                    .arg(features)
+                    .run_verbose()?;
             }
             _ => {
                 return Err(format!(
-                    "Invalid example format: {}, expected 'name', 'name:-', or 'name:features'",
+                    "Invalid example format: {}, expected 'name' or 'name:features'",
                     example
                 )
                 .into());
