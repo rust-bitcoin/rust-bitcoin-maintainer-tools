@@ -40,16 +40,6 @@ enum ToolchainsLocation {
     Package,
 }
 
-impl ToolchainsLocation {
-    /// Returns the TOML key path for error messages.
-    fn table_name(&self) -> &'static str {
-        match self {
-            Self::Workspace => "[workspace.metadata.rbmt.toolchains]",
-            Self::Package => "[package.metadata.rbmt.toolchains]",
-        }
-    }
-}
-
 /// The pinned toolchain versions and where they were found.
 struct ToolchainsConfigData {
     nightly: Option<String>,
@@ -97,33 +87,19 @@ pub enum Toolchain {
 }
 
 impl Toolchain {
-    /// Read the pinned version for this toolchain.
-    ///
-    /// Reads from either `[workspace.metadata.rbmt.toolchains]` or
-    /// `[package.metadata.rbmt.toolchains]` (with workspace taking precedence).
-    pub fn read_version(self, sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-        let config = Self::read_toolchains_config(sh)?;
-
-        match self {
-            Self::Nightly => config.nightly.ok_or_else(|| {
-                format!("No pinned nightly toolchain found in {}", config.location.table_name())
-                    .into()
-            }),
-            Self::Stable => config.stable.ok_or_else(|| {
-                format!("No pinned stable toolchain found in {}", config.location.table_name())
-                    .into()
-            }),
-            Self::Msrv => get_workspace_msrv(sh),
-        }
-    }
-
     /// Try to read the pinned version for this toolchain, returning `None` if not configured.
     ///
     /// For nightly and stable, returns `None` if not in `[workspace.metadata.rbmt.toolchains]`
     /// or `[package.metadata.rbmt.toolchains]`. For MSRV, returns `None` if no `rust-version`
     /// is found in any workspace package.
     pub fn try_read_version(self, sh: &Shell) -> Option<std::string::String> {
-        let config = Self::read_toolchains_config(sh).ok();
+        let config = match Self::read_toolchains_config(sh) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                rbmt_eprintln!("Warning: Could not read toolchains config: {}", e);
+                None
+            }
+        };
 
         match self {
             Self::Nightly => config.and_then(|c| c.nightly),
