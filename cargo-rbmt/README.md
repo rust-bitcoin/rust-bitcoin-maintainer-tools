@@ -84,12 +84,10 @@ RUST_TEST_THREADS=4 cargo rbmt test
 # Examples to run with different feature configurations.
 #
 # Supported formats:
-# * "name" - runs with default features.
-# * "name:-" - runs with no-default-features.
+# * "name" - runs with no default features.
 # * "name:feature1 feature2" - runs with specific features.
 examples = [
-    "bip32",              # Default features
-    "bip32:-",            # No default features
+    "bip32",              # No default features
     "bip32:serde rand",   # Specific features
 ]
 
