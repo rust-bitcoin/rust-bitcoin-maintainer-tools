@@ -40,16 +40,6 @@ enum ToolchainsLocation {
     Package,
 }
 
-impl ToolchainsLocation {
-    /// Returns the TOML key path for error messages.
-    fn table_name(&self) -> &'static str {
-        match self {
-            Self::Workspace => "[workspace.metadata.rbmt.toolchains]",
-            Self::Package => "[package.metadata.rbmt.toolchains]",
-        }
-    }
-}
-
 /// The pinned toolchain versions and where they were found.
 struct ToolchainsConfigData {
     nightly: Option<String>,
@@ -97,33 +87,19 @@ pub enum Toolchain {
 }
 
 impl Toolchain {
-    /// Read the pinned version for this toolchain.
-    ///
-    /// Reads from either `[workspace.metadata.rbmt.toolchains]` or
-    /// `[package.metadata.rbmt.toolchains]` (with workspace taking precedence).
-    pub fn read_version(self, sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
-        let config = Self::read_toolchains_config(sh)?;
-
-        match self {
-            Self::Nightly => config.nightly.ok_or_else(|| {
-                format!("No pinned nightly toolchain found in {}", config.location.table_name())
-                    .into()
-            }),
-            Self::Stable => config.stable.ok_or_else(|| {
-                format!("No pinned stable toolchain found in {}", config.location.table_name())
-                    .into()
-            }),
-            Self::Msrv => get_workspace_msrv(sh),
-        }
-    }
-
     /// Try to read the pinned version for this toolchain, returning `None` if not configured.
     ///
     /// For nightly and stable, returns `None` if not in `[workspace.metadata.rbmt.toolchains]`
     /// or `[package.metadata.rbmt.toolchains]`. For MSRV, returns `None` if no `rust-version`
     /// is found in any workspace package.
     pub fn try_read_version(self, sh: &Shell) -> Option<std::string::String> {
-        let config = Self::read_toolchains_config(sh).ok();
+        let config = match Self::read_toolchains_config(sh) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                rbmt_eprintln!("Warning: Could not read toolchains config: {}", e);
+                None
+            }
+        };
 
         match self {
             Self::Nightly => config.and_then(|c| c.nightly),
@@ -207,52 +183,6 @@ impl Toolchain {
     }
 }
 
-/// Check if the current toolchain matches the requirement of current crate.
-///
-/// # Errors
-///
-/// * Cannot determine current toolchain version.
-/// * Current toolchain doesn't match requirement.
-/// * For MSRV: cannot read rust-version from Cargo.toml.
-pub fn check_toolchain(sh: &Shell, required: Toolchain) -> Result<(), Box<dyn std::error::Error>> {
-    let current = rbmt_cmd!(sh, "rustc --version").read()?;
-
-    match required {
-        Toolchain::Nightly =>
-            if !current.contains("nightly") {
-                return Err(format!("Need a nightly compiler; have {}", current).into());
-            },
-        Toolchain::Stable =>
-            if current.contains("nightly") || current.contains("beta") {
-                return Err(format!("Need a stable compiler; have {}", current).into());
-            },
-        Toolchain::Msrv => {
-            let manifest_path = sh.current_dir().join("Cargo.toml");
-
-            if !manifest_path.exists() {
-                return Err("Not in a crate directory (no Cargo.toml found)".into());
-            }
-
-            let msrv_version = get_msrv_from_manifest(sh, &manifest_path)?;
-            let current_version =
-                extract_version(&current).ok_or("Could not parse rustc version")?;
-
-            if current_version != msrv_version {
-                return Err(format!(
-                    "Need Rust {} for MSRV testing in {}; have {}",
-                    msrv_version,
-                    manifest_path.display(),
-                    current_version
-                )
-                .into());
-            }
-        }
-    }
-
-    rbmt_eprintln!("The current toolchain is: {}", current);
-    Ok(())
-}
-
 /// Install a single toolchain with the fixed components and target using `rustup`.
 pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing toolchain {}", toolchain);
@@ -278,49 +208,81 @@ pub fn reinstall_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn st
     install_toolchain(sh, toolchain)
 }
 
-/// Auto-select via rustup if available, but always verify.
-///
-/// Combines [`maybe_set_rustup_toolchain`] and [`check_toolchain`] into a single
-/// call for the common case where both should always run together.
-///
-/// # Errors
-///
-/// Returns an error if the active toolchain does not match `required` after
-/// auto-selection. See [`check_toolchain`] for details.
+/// Ensures a [`Toolchain`] is ready for use (see [`prepare_toolchain_with_override`]).
 pub fn prepare_toolchain(
     sh: &Shell,
     required: Toolchain,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    maybe_set_rustup_toolchain(sh, required)?;
-    check_toolchain(sh, required)
+    prepare_toolchain_with_override(sh, required, None)
 }
 
-/// Set `RUSTUP_TOOLCHAIN` on the [`Shell`] to the pinned toolchain version if
-/// rustup is available.
+/// Ensures a [`Toolchain`] is ready for use.
 ///
-/// If the caller passed `+toolchain` (e.g. `cargo +nightly rbmt lint`), rustup already set
-/// `RUSTUP_TOOLCHAIN` in the process environment before this binary ran. We deliberately
-/// overwrite it with the pinned version because `Cargo.toml` is the authoritative source of
-/// truth for which toolchain each task requires. Falls back silently when rustup is not
-/// available (e.g. Nix) or when no version is configured.
-fn maybe_set_rustup_toolchain(
+/// Installs the given class of toolchain defined in the manifest if `rustup` is available. For
+/// example, if a package defines a given nightly version.
+///
+/// If `msrv_override` is provided, uses that specific MSRV version instead of what is defined in
+/// the manifest configuration. Only valid when `required` is [`Toolchain::Msrv`].
+///
+/// # Errors
+///
+/// Returns an error if the active toolchain does not match `required`, if install fails.
+pub fn prepare_toolchain_with_override(
     sh: &Shell,
     required: Toolchain,
+    msrv_override: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Only attempt if rustup is available.
-    if rbmt_cmd!(sh, "rustup --version").ignore_stderr().read().is_err() {
-        return Ok(());
-    }
-
-    if let Ok(toolchain) = required.read_version(sh) {
-        if let Err(e) = install_toolchain(sh, &toolchain) {
-            rbmt_eprintln!("Install failed, retrying with reinstall: {}", e);
-            reinstall_toolchain(sh, &toolchain)?;
+    // Install the toolchain if we have a version and rustup is available.
+    // MSRV override only applies when MSRV is required.
+    if let Some(version) = &msrv_override
+        .filter(|_| matches!(required, Toolchain::Msrv))
+        .map(std::string::ToString::to_string)
+        .or_else(|| required.try_read_version(sh))
+    {
+        if rbmt_cmd!(sh, "rustup --version").ignore_stderr().read().is_ok() {
+            if let Err(e) = install_toolchain(sh, version) {
+                rbmt_eprintln!("Install failed, retrying with reinstall: {}", e);
+                reinstall_toolchain(sh, version)?;
+            }
+            sh.set_var(RUSTUP_TOOLCHAIN, version.clone());
         }
-        // Activate it for this process.
-        sh.set_var(RUSTUP_TOOLCHAIN, toolchain);
     }
 
+    // Verify the correct class of toolchain is active.
+    let active_toolchain = rbmt_cmd!(sh, "rustc --version").read()?;
+    match required {
+        Toolchain::Nightly =>
+            if !active_toolchain.contains("nightly") {
+                return Err(format!("Need a nightly compiler; have {}", active_toolchain).into());
+            },
+        Toolchain::Stable =>
+            if active_toolchain.contains("nightly") || active_toolchain.contains("beta") {
+                return Err(format!("Need a stable compiler; have {}", active_toolchain).into());
+            },
+        Toolchain::Msrv => {
+            let active_version =
+                extract_version(&active_toolchain).ok_or("Could not parse rustc version")?;
+
+            let msrv_version = if let Some(override_version) = msrv_override {
+                rbmt_eprintln!("Using MSRV override: {}", override_version);
+                override_version.to_string()
+            } else {
+                let manifest_path = sh.current_dir().join("Cargo.toml");
+                if !manifest_path.exists() {
+                    return Err("Not in a crate directory (no Cargo.toml found)".into());
+                }
+                get_msrv_from_manifest(sh, &manifest_path)?
+            };
+
+            if active_version != msrv_version {
+                return Err(
+                    format!("Need Rust {} but have {}", msrv_version, active_version).into()
+                );
+            }
+        }
+    }
+
+    rbmt_eprintln!("The current toolchain is: {}", active_toolchain);
     Ok(())
 }
 
