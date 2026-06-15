@@ -505,7 +505,7 @@ fn do_examples(
 ///
 /// 1. All features (unconditional)
 /// 2. No features (unconditional)
-/// 3. Auto-discovered features individually + sampled subsets per commit (unconditional)
+/// 3. Auto-discovered features individually + subsets per commit (unconditional)
 /// 4. Exact feature sets (when configured)
 fn do_feature_matrix(
     sh: &Shell,
@@ -525,7 +525,7 @@ fn do_feature_matrix(
     rbmt_eprintln!("Testing no features in {}", package.name);
     test_features(sh, toolchain, Some(&[]), cargo_args, &config.msrv_overrides)?;
 
-    // Test each feature in isolation, plus sampled subsets.
+    // Test each discovered feature in isolation, plus subsets.
     let features: Vec<String> = discover_features(sh, package)?
         .into_iter()
         .filter(|f| !config.exclude_features.contains(f))
@@ -537,7 +537,7 @@ fn do_feature_matrix(
             package.name,
             features
         );
-        sampled_feature_matrix(
+        discovered_feature_matrix(
             sh,
             toolchain,
             &features,
@@ -565,7 +565,7 @@ fn do_feature_matrix(
 }
 
 /// Test auto-discovered features with configurable sampling strategy.
-fn sampled_feature_matrix(
+fn discovered_feature_matrix(
     sh: &Shell,
     toolchain: Toolchain,
     features: &[String],
