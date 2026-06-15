@@ -8,7 +8,8 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    cargo_cmd, discover_features, get_workspace_packages, Package, PackageManifest, ProgressGuard,
+    cargo_cmd, discover_features, get_workspace_packages, CmdExt, Package, PackageManifest,
+    ProgressGuard,
 };
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -123,7 +124,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
         // Run tests for each version.
         for version in &versions_to_test {
             rbmt_eprintln!("  Testing with version: {}", version);
-            cargo_cmd(sh).arg("test").arg("--features").arg(version).run()?;
+            cargo_cmd(sh).arg("test").arg("--features").arg(version).run_with_capture()?;
         }
     }
 

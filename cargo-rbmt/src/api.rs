@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use xshell::Shell;
 
 use crate::environment::{
-    get_target_dir, get_workspace_packages, get_workspace_root, Manifest, Package, PackageManifest,
-    ProgressGuard,
+    get_target_dir, get_workspace_packages, get_workspace_root, CmdExt, Manifest, Package,
+    PackageManifest, ProgressGuard,
 };
 use crate::lock::LockFile;
 use crate::{git, toolchain};
@@ -152,7 +152,7 @@ fn get_package_apis(
             cmd = cmd.arg(arg);
         }
         cmd = cmd.args(&["--", "-Z", "unstable-options", "--output-format", "json"]);
-        cmd.env("RUSTDOCFLAGS", RUSTDOCFLAGS_ALLOW_BROKEN_LINKS).run()?;
+        cmd.env("RUSTDOCFLAGS", RUSTDOCFLAGS_ALLOW_BROKEN_LINKS).run_with_capture()?;
 
         // Change back to workspace root and parse JSON.
         sh.change_dir(&workspace_root);
