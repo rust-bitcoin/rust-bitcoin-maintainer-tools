@@ -9,7 +9,7 @@ categories = ["development-tools::cargo-plugins"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.85.0"
-exclude = ["api-test-cases"]
+exclude = ["api-test-cases", "msrv-test-cases"]
 
 [[bin]]
 name = "cargo-rbmt"
