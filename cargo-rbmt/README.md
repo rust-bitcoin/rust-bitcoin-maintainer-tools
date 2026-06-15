@@ -105,6 +105,9 @@ exact_features = [
 
 # Run tests on all possible feature subsets instead of the default handful per-commit.
 sample_strategy = "all"
+
+# Feature-specific MSRV overrides.
+msrv_overrides = { "serde" = "1.75.0" }
 ```
 
 ### no_std

@@ -6,6 +6,7 @@
 //! and catch any issues involving `cfg(test)` somehow gating required code.
 
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
@@ -19,7 +20,44 @@ use crate::environment::{
 };
 use crate::git;
 use crate::lock::LockFile;
-use crate::toolchain::{prepare_toolchain, Toolchain};
+use crate::toolchain::{prepare_toolchain_with_override, Toolchain};
+
+/// Feature to MSRV version mappings for override during testing.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct MsrvOverrides(std::collections::HashMap<String, String>);
+
+impl MsrvOverrides {
+    /// Find an MSRV override for the given features.
+    ///
+    /// Returns the override version if any feature in the set has an override, `None` otherwise.
+    /// Returns an error if multiple features have conflicting MSRV overrides.
+    ///
+    /// # Arguments
+    ///
+    /// * `features` - `None` checks all configured overrides, `Some(features)` checks overrides
+    ///   for those specific features.
+    fn get(&self, features: Option<&[String]>) -> Result<Option<&str>, Box<dyn std::error::Error>> {
+        let overrides: HashSet<_> = match features {
+            None => {
+                // Get all configured overrides.
+                self.0.values().map(std::string::String::as_str).collect()
+            }
+            Some(feature_list) => {
+                // Get overrides for specific features.
+                feature_list
+                    .iter()
+                    .filter_map(|f| self.0.get(f).map(std::string::String::as_str))
+                    .collect()
+            }
+        };
+
+        match overrides.len() {
+            0 => Ok(None),
+            1 => Ok(overrides.into_iter().next()),
+            _ => Err(format!("Conflicting MSRV overrides: {:?}", overrides).into()),
+        }
+    }
+}
 
 /// Strategy for sampling feature combinations during testing.
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -234,6 +272,20 @@ struct TestConfig {
     /// ```
     #[serde(default)]
     sample_strategy: SampleStrategy,
+
+    /// Feature-specific MSRV overrides.
+    ///
+    /// If a feature is enabled during testing, use this MSRV instead of the default.
+    /// Useful when certain features require a minimum Rust version higher than the package MSRV.
+    ///
+    /// # Examples
+    ///
+    /// ```toml
+    /// [package.metadata.rbmt.test]
+    /// msrv_overrides = { "some-feature" = "1.75.0", "another-feature" = "1.75.0" }
+    /// ```
+    #[serde(default)]
+    msrv_overrides: MsrvOverrides,
 }
 
 impl TestConfig {
@@ -255,28 +307,46 @@ impl TestConfig {
 }
 
 /// Build and test with the given features and cargo test arguments.
+///
+/// If any feature has an MSRV override configured, uses that MSRV instead of the default.
+///
+/// # Arguments
+///
+/// * `feature_selection` - `None` means `--all-features`, `Some([])` means `--no-default-features`
+///   with no features, `Some(["feat1", ...])` means `--no-default-features --features feat1 ...`
 fn test_features(
     sh: &Shell,
-    features: &[impl AsRef<str>],
+    toolchain: Toolchain,
+    feature_selection: Option<&[String]>,
     cargo_args: &[String],
+    msrv_overrides: &MsrvOverrides,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let features_str = features.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
+    // Check for MSRV override.
+    let msrv_override = msrv_overrides.get(feature_selection)?;
+    prepare_toolchain_with_override(sh, toolchain, msrv_override)?;
 
-    cargo_cmd(sh)
-        .arg("build")
-        .arg("--no-default-features")
-        .arg("--features")
-        .arg(&features_str)
-        .args(cargo_args)
-        .run_with_capture()?;
+    match feature_selection {
+        None => {
+            // Test all features.
+            cargo_cmd(sh).arg("build").arg("--all-features").args(cargo_args).run_with_capture()?;
+            cargo_cmd(sh).arg("test").arg("--all-features").args(cargo_args).run_with_capture()?;
+        }
+        Some(features) => {
+            // Test specific features (or no features if empty).
+            let mut build_cmd = cargo_cmd(sh).arg("build").arg("--no-default-features");
+            if !features.is_empty() {
+                build_cmd = build_cmd.arg("--features").args(features);
+            }
+            build_cmd.args(cargo_args).run_with_capture()?;
 
-    cargo_cmd(sh)
-        .arg("test")
-        .arg("--no-default-features")
-        .arg("--features")
-        .arg(&features_str)
-        .args(cargo_args)
-        .run_with_capture()?;
+            let mut test_cmd = cargo_cmd(sh).arg("test").arg("--no-default-features");
+            if !features.is_empty() {
+                test_cmd = test_cmd.arg("--features").args(features);
+            }
+            test_cmd.args(cargo_args).run_with_capture()?;
+        }
+    }
+
     Ok(())
 }
 
@@ -352,15 +422,12 @@ fn test_commit(
         rbmt_eprintln!("Testing package: {}", package.name);
 
         let _dir = sh.push_dir(&package.dir);
-        // prepare_toolchain is called per-package because MSRV is read from
-        // each package's Cargo.toml individually rather than the workspace root.
-        prepare_toolchain(sh, toolchain)?;
         let config = TestConfig::load(Path::new(&package.dir))?;
 
         let mut pkg_summary = PackageSummary { name: package.name.clone(), ..Default::default() };
 
-        do_examples(sh, &config, &mut pkg_summary)?;
-        do_feature_matrix(sh, package, &config, cargo_args, &mut pkg_summary)?;
+        do_examples(sh, toolchain, &config, &mut pkg_summary)?;
+        do_feature_matrix(sh, toolchain, package, &config, cargo_args, &mut pkg_summary)?;
         do_no_std_check(sh, &package.dir, &mut pkg_summary)?;
 
         pkg_summaries.push(pkg_summary);
@@ -372,6 +439,7 @@ fn test_commit(
 /// Run examples.
 fn do_examples(
     sh: &Shell,
+    toolchain: Toolchain,
     config: &TestConfig,
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -384,6 +452,8 @@ fn do_examples(
             1 => {
                 let name = parts[0];
                 rbmt_eprintln!("Running example {} with no features in {}", name, summary.name);
+                prepare_toolchain_with_override(sh, toolchain, None)?;
+
                 cargo_cmd(sh)
                     .arg("run")
                     .arg("--no-default-features")
@@ -393,21 +463,27 @@ fn do_examples(
             }
             2 => {
                 let name = parts[0];
-                let features = parts[1];
+                let features: Vec<String> =
+                    parts[1].split_whitespace().map(std::string::ToString::to_string).collect();
 
                 rbmt_eprintln!(
-                    "Running example {} with features {} in {}",
+                    "Running example {} with features {:?} in {}",
                     name,
                     features,
                     summary.name
                 );
+
+                // Prepare toolchain with any MSRV override for these features.
+                let msrv_override = config.msrv_overrides.get(Some(&features))?;
+                prepare_toolchain_with_override(sh, toolchain, msrv_override)?;
+
                 cargo_cmd(sh)
                     .arg("run")
                     .arg("--no-default-features")
                     .arg("--example")
                     .arg(name)
                     .arg("--features")
-                    .arg(features)
+                    .args(&features)
                     .run_with_capture()?;
             }
             _ => {
@@ -433,6 +509,7 @@ fn do_examples(
 /// 4. Exact feature sets (when configured)
 fn do_feature_matrix(
     sh: &Shell,
+    toolchain: Toolchain,
     package: &Package,
     config: &TestConfig,
     cargo_args: &[String],
@@ -442,13 +519,11 @@ fn do_feature_matrix(
 
     // Test all features.
     rbmt_eprintln!("Testing all features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--all-features").args(cargo_args).run_with_capture()?;
-    cargo_cmd(sh).arg("test").arg("--all-features").args(cargo_args).run_with_capture()?;
+    test_features(sh, toolchain, None, cargo_args, &config.msrv_overrides)?;
 
     // Test no features.
     rbmt_eprintln!("Testing no features in {}", package.name);
-    cargo_cmd(sh).arg("build").arg("--no-default-features").args(cargo_args).run_with_capture()?;
-    cargo_cmd(sh).arg("test").arg("--no-default-features").args(cargo_args).run_with_capture()?;
+    test_features(sh, toolchain, Some(&[]), cargo_args, &config.msrv_overrides)?;
 
     // Test each feature in isolation, plus sampled subsets.
     let features: Vec<String> = discover_features(sh, package)?
@@ -462,13 +537,27 @@ fn do_feature_matrix(
             package.name,
             features
         );
-        sampled_feature_matrix(sh, &features, config.sample_strategy, cargo_args, summary)?;
+        sampled_feature_matrix(
+            sh,
+            toolchain,
+            &features,
+            config.sample_strategy,
+            cargo_args,
+            &config.msrv_overrides,
+            summary,
+        )?;
     }
 
     // Test exact feature sets.
     for features in &config.exact_features {
         rbmt_eprintln!("Testing exact feature set in {}: {:?}", package.name, features);
-        test_features(sh, features, cargo_args)?;
+        test_features(
+            sh,
+            toolchain,
+            Some(features.as_slice()),
+            cargo_args,
+            &config.msrv_overrides,
+        )?;
         summary.feature_subsets.push(features.clone());
     }
 
@@ -478,15 +567,23 @@ fn do_feature_matrix(
 /// Test auto-discovered features with configurable sampling strategy.
 fn sampled_feature_matrix(
     sh: &Shell,
+    toolchain: Toolchain,
     features: &[String],
     strategy: SampleStrategy,
     cargo_args: &[String],
+    msrv_overrides: &MsrvOverrides,
     summary: &mut PackageSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Test each feature individually.
     for feature in features {
         rbmt_eprintln!("Testing individual feature in {}: {}", summary.name, feature);
-        test_features(sh, &[feature], cargo_args)?;
+        test_features(
+            sh,
+            toolchain,
+            Some(std::slice::from_ref(feature)),
+            cargo_args,
+            msrv_overrides,
+        )?;
         summary.individual_features.push(feature.clone());
     }
 
@@ -494,7 +591,7 @@ fn sampled_feature_matrix(
     let commit = git_commit_id(sh);
     for subset in strategy.generate_subsets(features, commit) {
         rbmt_eprintln!("Testing feature set in {}: {:?}", summary.name, subset);
-        test_features(sh, &subset, cargo_args)?;
+        test_features(sh, toolchain, Some(&subset), cargo_args, msrv_overrides)?;
         summary.feature_subsets.push(subset);
     }
 
