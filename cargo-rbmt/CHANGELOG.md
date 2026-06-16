@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-16
+
 * Add dynamic MSRVs based on features to the `test` command.
 * [BREAKING] Drop the `-` syntax for running an example with no default features in `test`. Instead, an empty list now means no default features.
 * `api` output files no longer de-dupe equivalent lines, instead they add relevant context to each line (e.g. add the trait impl).
@@ -49,7 +51,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.3.0...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.0...HEAD
+[0.4.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.3.0...cargo-rbmt-0.4.0
 [0.3.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.1...cargo-rbmt-0.3.0
 [0.2.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...cargo-rbmt-0.2.1
 [0.2.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.1.0...cargo-rbmt-0.2.0
