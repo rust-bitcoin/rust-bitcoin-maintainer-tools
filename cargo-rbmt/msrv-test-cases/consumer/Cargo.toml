@@ -1,0 +1,15 @@
+[workspace]
+
+[package]
+name = "consumer"
+version = "0.1.0"
+edition = "2021"
+# Needs to be at least 1.60.0 to parse the higher-msrv-dep manifest.
+rust-version = "1.60.0"
+publish = false
+
+[dependencies]
+higher-msrv-dep = { path = "../higher-msrv-dep", optional = true }
+
+[package.metadata.rbmt.test]
+msrv_overrides = { "higher-msrv-dep" = "1.70.0" }

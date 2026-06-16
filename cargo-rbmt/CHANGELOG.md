@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Add dynamic MSRVs based on features to the `test` command.
 * [BREAKING] Drop the `-` syntax for running an example with no default features in `test`. Instead, an empty list now means no default features.
 * `api` output files no longer de-dupe equivalent lines, instead they add relevant context to each line (e.g. add the trait impl).
 * Add a `sample_strategy` configuration to the `test` command in order to allow testing all possible feature sets.
