@@ -335,13 +335,15 @@ fn test_features(
             // Test specific features (or no features if empty).
             let mut build_cmd = cargo_cmd(sh).arg("build").arg("--no-default-features");
             if !features.is_empty() {
-                build_cmd = build_cmd.arg("--features").args(features);
+                // Avoid issues with feature names which contain a hyphen.
+                build_cmd = build_cmd.arg("--features").arg(features.join(","));
             }
             build_cmd.args(cargo_args).run_with_capture()?;
 
             let mut test_cmd = cargo_cmd(sh).arg("test").arg("--no-default-features");
             if !features.is_empty() {
-                test_cmd = test_cmd.arg("--features").args(features);
+                // Avoid issues with feature names which contain a hyphen.
+                test_cmd = test_cmd.arg("--features").arg(features.join(","));
             }
             test_cmd.args(cargo_args).run_with_capture()?;
         }
@@ -483,7 +485,8 @@ fn do_examples(
                     .arg("--example")
                     .arg(name)
                     .arg("--features")
-                    .args(&features)
+                    // Avoid issues with feature names which contain a hyphen.
+                    .arg(features.join(","))
                     .run_with_capture()?;
             }
             _ => {
