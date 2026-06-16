@@ -104,7 +104,13 @@ impl Toolchain {
         match self {
             Self::Nightly => config.and_then(|c| c.nightly),
             Self::Stable => config.and_then(|c| c.stable),
-            Self::Msrv => get_workspace_msrv(sh).ok(),
+            Self::Msrv => match get_workspace_msrv(sh) {
+                Ok(msrv) => Some(msrv),
+                Err(e) => {
+                    rbmt_eprintln!("Unable to determine MSRV: {}", e);
+                    None
+                }
+            },
         }
     }
 
