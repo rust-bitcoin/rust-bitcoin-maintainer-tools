@@ -189,11 +189,10 @@ pub fn get_workspace_packages(
         .ok_or("Missing 'packages' field in cargo metadata")?
         .iter()
         .filter_map(|package| {
+            let manifest_path = PathBuf::from(package["manifest_path"].as_str()?);
             Some(Package {
                 name: package["name"].as_str()?.to_string(),
-                dir: PathBuf::from(
-                    package["manifest_path"].as_str()?.trim_end_matches("/Cargo.toml"),
-                ),
+                dir: manifest_path.parent()?.to_path_buf(),
                 id: package["id"].as_str()?.to_string(),
             })
         })
@@ -281,12 +280,12 @@ pub fn get_workspace_root(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Err
 ///
 /// This respects `CARGO_TARGET_DIR`, .cargo/config.toml, and other cargo
 /// target directory configuration.
-pub fn get_target_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+pub fn get_target_dir(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let metadata = rbmt_cmd!(sh, "cargo metadata --no-deps --format-version 1").read()?;
     let json: serde_json::Value = serde_json::from_str(&metadata)?;
     let target_dir =
         json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
-    Ok(target_dir.to_string())
+    Ok(PathBuf::from(target_dir))
 }
 
 /// Discover the features defined for a package.

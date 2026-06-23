@@ -156,8 +156,7 @@ fn get_package_apis(
 
         // Change back to workspace root and parse JSON.
         sh.change_dir(&workspace_root);
-        let target_dir = get_target_dir(sh)?;
-        let json_path = Path::new(&target_dir)
+        let json_path = get_target_dir(sh)?
             .join("doc")
             // Rustdoc replaces hyphens with underscores in the filename.
             .join(package_name.replace('-', "_"))

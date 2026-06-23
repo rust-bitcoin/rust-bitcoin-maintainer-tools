@@ -72,7 +72,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
     rbmt_eprintln!("Looking for integration tests in {} crate(s)", packages.len());
 
     for package in packages {
-        let config = IntegrationConfig::load(Path::new(&package.dir))?;
+        let config = IntegrationConfig::load(&package.dir)?;
         let integration_dir = package.dir.join(config.package_name());
 
         if !integration_dir.exists() {

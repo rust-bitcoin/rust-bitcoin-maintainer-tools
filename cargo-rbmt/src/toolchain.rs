@@ -16,7 +16,7 @@
 //! `[package.metadata.rbmt.toolchains]` is used as a fallback.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use toml_edit::DocumentMut;
 use xshell::Shell;
@@ -316,14 +316,9 @@ fn get_msrv_from_manifest(
     sh: &Shell,
     manifest_path: &Path,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    // Convert Path to string for comparison. If path contains invalid UTF-8, fail early.
-    let manifest_path_str = manifest_path.to_str().ok_or_else(|| {
-        format!("Manifest path contains invalid UTF-8: {}", manifest_path.display())
-    })?;
-
     collect_msrvs(sh)?
         .into_iter()
-        .find(|(path, _)| path == manifest_path_str)
+        .find(|(path, _)| path == manifest_path)
         .and_then(|(_, rust_version)| rust_version)
         .ok_or_else(|| {
             format!("No MSRV (rust-version) specified in {}", manifest_path.display()).into()
@@ -331,14 +326,14 @@ fn get_msrv_from_manifest(
 }
 
 /// `(manifest_path, rust_version)` pair; `rust_version` is `None` when not declared.
-type ManifestMsrv = (String, Option<String>);
+type ManifestMsrv = (PathBuf, Option<String>);
 
 /// Parse rust-version directly from a Cargo.toml file.
 ///
 /// Used as a fallback when cargo metadata doesn't include the `rust_version` field
 /// which happens with older rust versions.
 fn parse_rust_version_from_toml(
-    manifest_path: &str,
+    manifest_path: &Path,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let content = fs::read_to_string(manifest_path)?;
     let doc = content.parse::<DocumentMut>()?;
@@ -365,7 +360,7 @@ fn collect_msrvs(sh: &Shell) -> Result<Vec<ManifestMsrv>, Box<dyn std::error::Er
             packages
                 .iter()
                 .filter_map(|pkg| {
-                    let manifest_path = pkg["manifest_path"].as_str()?.to_string();
+                    let manifest_path = PathBuf::from(pkg["manifest_path"].as_str()?);
 
                     // Try to get rust_version from metadata first,
                     // then attempt direct parsing of manifest toml
