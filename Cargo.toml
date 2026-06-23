@@ -6,7 +6,7 @@ members = [
 resolver = "2"
 
 [workspace.metadata.rbmt]
-toolchains = { nightly = "nightly-2026-05-31", stable = "1.96.0" }
+toolchains = { nightly = "nightly-2026-06-23", stable = "1.96.0" }
 tools = { zizmor = "1.23.1" }
 
 [workspace.lints.clippy]
@@ -40,7 +40,6 @@ filter_map_next = "warn"
 flat_map_option = "warn"
 float_cmp = "allow" # Bitcoin floats are typically limited to 8 decimal places and we want them exact.
 fn_params_excessive_bools = "warn"
-from_iter_instead_of_collect = "warn"
 if_not_else = "warn"
 ignored_unit_patterns = "warn"
 implicit_clone = "warn"
