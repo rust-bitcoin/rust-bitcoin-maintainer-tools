@@ -24,7 +24,11 @@ pub fn run(
     prepare_toolchain(sh, Toolchain::Stable)?;
     rbmt_eprintln!("Building docs...");
 
-    let mut cmd = cargo_cmd(sh).arg("doc").arg("--all-features").arg("--no-deps").arg("--examples");
+    let mut cmd = cargo_cmd(sh)
+        .arg("doc")
+        .arg("--all-features")
+        .arg("--no-deps")
+        .env("RUSTDOCFLAGS", "-D warnings");
 
     // Add package filters if specified.
     for package in packages {
@@ -35,7 +39,7 @@ pub fn run(
         cmd = cmd.arg("--open");
     }
 
-    cmd.env("RUSTDOCFLAGS", "-D warnings").run_with_capture()?;
+    cmd.run_with_capture()?;
 
     rbmt_eprintln!("Docs built successfully.");
     Ok(())
@@ -57,7 +61,11 @@ pub fn run_docsrs(
     prepare_toolchain(sh, Toolchain::Nightly)?;
     rbmt_eprintln!("Building docs...");
 
-    let mut cmd = cargo_cmd(sh).arg("doc").arg("--all-features").arg("--no-deps").arg("--examples");
+    let mut cmd = cargo_cmd(sh)
+        .arg("doc")
+        .arg("--all-features")
+        .arg("--no-deps")
+        .env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links");
 
     // Add package filters if specified.
     for package in packages {
@@ -68,8 +76,7 @@ pub fn run_docsrs(
         cmd = cmd.arg("--open");
     }
 
-    cmd.env("RUSTDOCFLAGS", "--cfg docsrs -D warnings -D rustdoc::broken-intra-doc-links")
-        .run_with_capture()?;
+    cmd.run_with_capture()?;
 
     rbmt_eprintln!("Docs built successfully.");
     Ok(())
