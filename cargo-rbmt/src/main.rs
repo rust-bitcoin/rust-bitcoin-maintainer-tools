@@ -30,7 +30,7 @@ use xshell::Shell;
 #[command(name = "cargo-rbmt")]
 #[command(about = "Rust Bitcoin Maintainer Tools", long_about = None)]
 struct Cli {
-    /// Lock file to use for dependencies.
+    /// Lockfile to use for dependencies.
     #[arg(
         long = "lockfile",
         alias = "lock-file",
@@ -90,9 +90,9 @@ enum Commands {
     },
     /// Run bitcoin core integration tests.
     Integration,
-    /// Update lock files for dependency version testing.
+    /// Update dependency versions in lockfiles.
     Lock {
-        /// Lock file types to generate.
+        /// Lockfile types to generate.
         #[arg(long, value_delimiter = ',', default_values = ["minimal", "recent"])]
         lockfiles: Vec<GeneratableLockFile>,
     },
@@ -206,7 +206,7 @@ fn main() {
             },
         Commands::Lock { lockfiles } =>
             if let Err(e) = lock::run(&sh, &lockfiles) {
-                eprintln!("Error updating lock files: {}", e);
+                eprintln!("Error updating lockfiles: {}", e);
                 process::exit(1);
             },
         Commands::Run { toolchain, args } =>
