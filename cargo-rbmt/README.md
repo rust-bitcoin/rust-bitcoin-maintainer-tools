@@ -1,22 +1,25 @@
 # cargo-rbmt
 
-Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshell](https://github.com/matklad/xshell).
+A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) that codifies `rust-bitcoin` build standards and patterns. `cargo-rbmt` manages toolchain and lockfile dependency versions for thorough and reproducible tests.
 
 ## Table of Contents
 
 - [Environment Variables](#environment-variables)
 - [Configuration](#configuration)
-- [Format](#format)
-- [Lint](#lint)
-- [Test](#test)
-  - [no_std](#no_std)
-- [Integration](#integration)
-- [Prerelease](#prerelease)
-- [Run](#run)
-- [Lock Files](#lock-files)
-- [API](#api)
-- [Toolchains](#toolchains)
-- [Tools](#tools)
+- [Commands](#commands)
+  - [api](#api)
+  - [docs](#docs)
+  - [fmt](#fmt)
+  - [generate](#generate)
+  - [integration](#integration)
+  - [lint](#lint)
+  - [lock](#lock)
+  - [prerelease](#prerelease)
+  - [run](#run)
+  - [test](#test)
+    - [no_std](#no_std)
+  - [toolchains](#toolchains)
+  - [tools](#tools)
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
@@ -31,11 +34,49 @@ Maintainer tools for Rust-based projects in the Bitcoin domain. Built with [xshe
 
 ## Configuration
 
-Configuration for `rbmt` is stored in `[package.metadata.rbmt]` in a package's `Cargo.toml` manifest. Some configuration lives under `[workspace.metadata.rbmt]` in the root manifest of a workspace, but can fallback to `[package.metadata.rbmt]` if there is only one package in the repository.
+Configuration for `cargo-rbmt` is stored in `[package.metadata.rbmt]` in a package's `Cargo.toml` manifest. Some configuration lives under `[workspace.metadata.rbmt]` in the root manifest of a workspace, but can fallback to `[package.metadata.rbmt]` if there is only one package in the repository.
 
 > **NOTE:** Cargo reserves `[package.metadata]` and `[workspace.metadata]` as explicitly supported extension points for third-party tooling. Cargo itself ignores any keys nested under these tables, so they will never clash with a future built-in Cargo field. `[workspace.metadata]` was stabilized in Cargo 1.46 and `[package.metadata]` has been around much longer. The `rbmt` sub-key further namespaces the configuration to avoid collisions with other tools. If a repository only has one package and is not using any workspace features, use the `package` namespace because simply adding the `workspace.metadata` settings enables workspace features in cargo.
 
-## Format
+## Commands
+
+All of `cargo-rbmt`'s subcommands use one of the existing lockfiles (minimal, maximum, recent, or existing) through the `--lockfile` flag. The lockfiles are generated and managed with the [`lock`](#lock) command.
+
+### api
+
+The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface.
+
+> **NOTE:** `api` has an implicit dependency on the version of the nightly toolchain since it relies on an unstable docsrs interface. Currently, it requires [*nightly-2025-08-02* or later](https://github.com/cargo-public-api/cargo-public-api/blob/main/README.md#compatibility-matrix).
+
+```bash
+cargo rbmt api
+```
+
+1. Generates API snapshots for feature configurations.
+2. Validates that features are additive (enabling features only adds to the API, never removes).
+3. Checks for uncommitted changes to API files.
+
+The generated API files are stored in `api/<package-name>/`.
+
+```bash
+cargo rbmt api --baseline v0.1.0
+```
+
+Compares the current API against a baseline git reference (tag, branch, or commit) to detect breaking changes.
+
+#### `#[doc(hidden)]` policy
+
+Items marked with `#[doc(hidden)]` are *excluded from API snapshots and breaking change detection*. `#[doc(hidden)]` is an escape hatch to allow API changes without triggering breaking change warnings in CI. While hiding documentation doesn't change the actual types or signatures, it signals that the item is not part of the public API contract and may be modified or removed without warning.
+
+### docs
+
+The `docs` and `docsrs` commands build documentation following the convention in the rust-bitcoin ecosystem.
+
+```bash
+cargo rbmt docs
+```
+
+### fmt
 
 The `fmt` command formats all files in the workspace using `rustfmt` with the nightly toolchain, which is the convention in the rust-bitcoin ecosystem.
 
@@ -45,7 +86,29 @@ cargo rbmt fmt --check
 cargo rbmt fmt -p bitcoin
 ```
 
-## Lint
+### generate
+
+The `generate` command detects changes to generated files by running the file generation script, which is assumed to be at `<package-root>/generate-files.sh`, and running a diff. The command fails if the file generation script is not present or a diff is present after file generation.
+
+```bash
+cargo rbmt generate -p fuzz
+```
+
+### integration
+
+The `integration` command runs tests in isolated integration sub-packages designed to work with the [`corepc`](https://github.com/rust-bitcoin/corepc) testing framework, which provides Bitcoin Core binaries and testing infrastructure. Integration sub-packages should define its own `[package.metadata.rbmt.toolchains.stable]` to lock a stable version.
+
+Integration sub-packages should be *standalone*, not members of a workspace. This ensures test infrastructure dependencies don't influence workspace dependency resolution which could change the minimum versions for tests.
+
+```toml
+[package.metadata.rbmt.integration]
+# Integration tests package name, defaults to "bitcoind-tests".
+package = "bitcoind-tests"
+# Versions to test. If omitted, tests all discovered versions from Cargo.toml.
+versions = ["29_0", "28_2", "27_2"]
+```
+
+### lint
 
 The `lint` command detects duplicate dependencies, but some may be unavoidable (e.g., during dependency updates where transitive dependencies haven't caught up). Configure `[package.metadata.rbmt.lint]` to whitelist specific duplicates.
 
@@ -59,7 +122,63 @@ allowed_duplicates = [
 
 > **NOTE:** Linting is only enforced (through command failure) on the given *nightly* toolchain. It is possible for different versions of rust to have different lint rules and behaviour, so to keep things simple just the newest is considered fail worthy.
 
-## Test
+### lock
+
+To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` can generate lock files for different version scenarios.
+
+* `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints. Verifies that direct dependency versions aren't being bumped by transitive dependencies.
+* `Cargo-maximum.lock` - Maximum versions that satisfy your dependency constraints. Verifies new updates do not break.
+* `Cargo-recent.lock` - Recent versions start out the same as maximum, but are conservatively updated. Versions are only increased if needed due to new dependency constraints.
+
+The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against any version set.
+
+```bash
+# Generate minimal and recent (default for backward compatibility).
+cargo rbmt lock
+# Generate all three lock files.
+cargo rbmt lock --lockfiles minimal,maximum,recent
+```
+
+When you specify `--lockfile`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
+
+```bash
+# Test with minimal versions.
+cargo rbmt --lockfile minimal test
+# Test with maximum versions.
+cargo rbmt --lockfile maximum test
+```
+
+### prerelease
+
+The `prerelease` command performs readiness checks before releasing a package. Checks are opt-in and only run for packages with `enabled = true` that also have a version bump in `Cargo.toml` since the baseline ref.
+
+```toml
+[package.metadata.rbmt.prerelease]
+enabled = true
+# baseline = "master"  # default
+```
+
+Use `--force` to run checks regardless of whether a version bump is detected.
+
+```bash
+cargo rbmt prerelease --force
+```
+
+### run
+
+The `run` command executes arbitrary cargo commands with the specified toolchain and lockfile.
+
+```bash
+cargo rbmt run --lockfile minimal --toolchain nightly -- <CARGO_COMMAND> [ARGS...]
+```
+
+The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass everything after it to cargo. For example, here is how to run benchmarks with the nightly toolchain.
+
+```bash
+cargo rbmt run --toolchain nightly -- bench
+```
+
+### test
 
 The `test` command runs feature matrix testing for your package. Every run unconditionally tests all features enabled, no features enabled, and each feature by itself. A package's features are auto-discovered. Randomly sampled feature subsets (number of sets grows with the number of package features) are tested per commit ID to try and catch interaction bugs without running massive matrices on every run.
 
@@ -110,120 +229,11 @@ sample_strategy = "all"
 msrv_overrides = { "serde" = "1.75.0" }
 ```
 
-### no_std
+#### no_std
 
 When a package declares `#![no_std]` in its library source, `cargo-rbmt test` automatically performs an additional verification step on the `thumbv7m-none-eabi` target to try and detect unintentional std library usage.
 
-## Integration
-
-The `integration` command runs tests in isolated integration sub-packages designed to work with the [`corepc`](https://github.com/rust-bitcoin/corepc) testing framework, which provides Bitcoin Core binaries and testing infrastructure. Integration sub-packages should define its own `[package.metadata.rbmt.toolchains.stable]` to lock a stable version.
-
-Integration sub-packages should be *standalone*, not members of a workspace. This ensures test infrastructure dependencies don't influence workspace dependency resolution which could change the minimum versions for tests.
-
-```toml
-[package.metadata.rbmt.integration]
-# Integration tests package name, defaults to "bitcoind-tests".
-package = "bitcoind-tests"
-# Versions to test. If omitted, tests all discovered versions from Cargo.toml.
-versions = ["29_0", "28_2", "27_2"]
-```
-
-## Prerelease
-
-The `prerelease` command performs readiness checks before releasing a package. Checks are opt-in and only run for packages with `enabled = true` that also have a version bump in `Cargo.toml` since the baseline ref.
-
-```toml
-[package.metadata.rbmt.prerelease]
-enabled = true
-# baseline = "master"  # default
-```
-
-Use `--force` to run checks regardless of whether a version bump is detected.
-
-```bash
-cargo rbmt prerelease --force
-```
-
-## Run
-
-The `run` command executes arbitrary cargo commands with the specified toolchain and lockfile.
-
-```bash
-cargo rbmt run --lockfile minimal --toolchain nightly -- <CARGO_COMMAND> [ARGS...]
-```
-
-The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass everything after it to cargo. For example, here is how to run benchmarks with the nightly toolchain.
-
-```bash
-cargo rbmt run --toolchain nightly -- bench
-```
-
-## Lock Files
-
-To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` can generate lock files for different version scenarios.
-
-* `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints. Verifies that direct dependency versions aren't being bumped by transitive dependencies.
-* `Cargo-maximum.lock` - Maximum versions that satisfy your dependency constraints. Verifies new updates do not break.
-* `Cargo-recent.lock` - Recent versions start out the same as maximum, but are conservatively updated. Versions are only increased if needed due to new dependency constraints.
-
-The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against any version set.
-
-```bash
-# Generate minimal and recent (default for backward compatibility).
-cargo rbmt lock
-# Generate all three lock files.
-cargo rbmt lock --lockfiles minimal,maximum,recent
-```
-
-When you specify `--lockfile`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
-
-```bash
-# Test with minimal versions.
-cargo rbmt --lockfile minimal test
-# Test with maximum versions.
-cargo rbmt --lockfile maximum test
-```
-
-## API
-
-The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface.
-
-> **NOTE:** `api` has an implicit dependency on the version of the nightly toolchain since it relies on an unstable docsrs interface. Currently, it requires [*nightly-2025-08-02* or later](https://github.com/cargo-public-api/cargo-public-api/blob/main/README.md#compatibility-matrix).
-
-```bash
-cargo rbmt api
-```
-
-1. Generates API snapshots for feature configurations.
-2. Validates that features are additive (enabling features only adds to the API, never removes).
-3. Checks for uncommitted changes to API files.
-
-The generated API files are stored in `api/<package-name>/`.
-
-```bash
-cargo rbmt api --baseline v0.1.0
-```
-
-Compares the current API against a baseline git reference (tag, branch, or commit) to detect breaking changes.
-
-### `#[doc(hidden)]` policy
-
-Items marked with `#[doc(hidden)]` are *excluded from API snapshots and breaking change detection*. `#[doc(hidden)]` is an escape hatch to allow API changes without triggering breaking change warnings in CI. While hiding documentation doesn't change the actual types or signatures, it signals that the item is not part of the public API contract and may be modified or removed without warning.
-
-## Generate
-
-The `generate` command detects changes to generated files by running the file generation script, which is assumed to be at `<package-root>/generate-files.sh`, and running a diff. If the file generation script is not present or a diff is present after file generation, the caller will receive an error.
-
-```bash
-# For a single package
-cargo rbmt generate -p fuzz
-
-# For multiple packages
-cargo rbmt generate -p fuzz -p crypto
-
-```
-
-## Toolchains
+### toolchains
 
 The `toolchains` command installs the three required toolchains for `cargo-rbmt` commands, `nightly`, `stable`, and `MSRV`. `nightly` and `stable` Toolchain versions are read from the root manifest `Cargo.toml` of a repository. The `MSRV` is read from all the package manifests in a workspace. Workspaces must declare a single consistent MSRV across all packages. Workspaces with conflicting `rust-version` fields are not supported.
 
@@ -245,7 +255,7 @@ cargo +$(cargo rbmt toolchains --nightly) test --features one-off
 
 The `--update-nightly` and `--update-stable` flags each install the corresponding floating toolchain, query its resolved version from `rustc`, and write the result to the appropriate version file before proceeding with the normal install and export.
 
-## Tools
+### tools
 
 The `tools` command installs external cargo tools whose versions are pinned in the *root* `Cargo.toml` manifest. The preferred location is `[workspace.metadata.rbmt.tools]`.
 
