@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Fix `docs`/`docsrs` bug where a package with no examples is a no-op.
+
 ## [0.4.0] - 2026-06-16
 
 * Add dynamic MSRVs based on features to the `test` command.
