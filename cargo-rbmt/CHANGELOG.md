@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+# [0.4.1] - 2026-06-24
+
+* Fix windows support with correct internal `Path` usage.
 * Fix `docs`/`docsrs` bug where a package with no examples is a no-op.
 
 ## [0.4.0] - 2026-06-16
@@ -53,7 +56,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.0...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.1...HEAD
+[0.4.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.0...cargo-rbmt-0.4.1
 [0.4.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.3.0...cargo-rbmt-0.4.0
 [0.3.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.1...cargo-rbmt-0.3.0
 [0.2.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.0...cargo-rbmt-0.2.1
