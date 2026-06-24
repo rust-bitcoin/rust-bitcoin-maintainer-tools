@@ -59,14 +59,14 @@ impl Drop for LockFileGuard {
 /// Represents the different types of managed lock files.
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
 pub enum LockFile {
-    /// Uses minimal versions that satisfy dependency constraints.
+    /// Minimal (oldest) dependency versions that satisfy dependency constraints.
     Minimal,
-    /// Uses maximum versions that satisfy dependency constraints.
+    /// Maximum (newest) dependency versions that satisfy dependency constraints.
     Maximum,
-    /// Uses recent/updated versions of dependencies.
+    /// Recent (conservatively updated) dependency versions that satisfy dependency constraints.
     #[default]
     Recent,
-    /// Uses the existing Cargo.lock as-is (for binary crates).
+    /// `Cargo.lock` as-is (useful for binary crates).
     Existing,
 }
 
