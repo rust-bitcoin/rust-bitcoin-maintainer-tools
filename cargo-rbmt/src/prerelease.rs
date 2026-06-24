@@ -4,7 +4,7 @@
 
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use xshell::Shell;
@@ -57,7 +57,7 @@ pub fn run(
     rbmt_eprintln!("Running pre-release checks on {} packages", packages.len());
 
     for package in packages {
-        let config = PrereleaseConfig::load(Path::new(&package.dir))?;
+        let config = PrereleaseConfig::load(&package.dir)?;
 
         if !config.enabled {
             rbmt_eprintln!("Skipping {} (pre-release not enabled)", package.name);
@@ -163,7 +163,7 @@ fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let package_dir = get_publish_dir(sh)?;
 
     let _dir = sh.push_dir(&package_dir);
-    rbmt_eprintln!("Testing publish package: {}", package_dir);
+    rbmt_eprintln!("Testing publish package: {}", package_dir.display());
     // Re-derive dependencies since it is what an end user will see.
     LockFile::Minimal.derive(sh)?;
     cargo_cmd(sh).arg("test").arg("--all-features").arg("--all-targets").run_with_capture()?;
@@ -173,7 +173,7 @@ fn check_publish(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Get the path to the publish directory for the current package from cargo metadata.
-fn get_publish_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+fn get_publish_dir(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let target_dir = get_target_dir(sh)?;
 
     // Find the package that matches the current directory.
@@ -189,12 +189,12 @@ fn get_publish_dir(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
         let manifest_path =
             package["manifest_path"].as_str().ok_or("Missing manifest_path in package")?;
 
-        if manifest_path == current_manifest.to_str().ok_or("Invalid path")? {
+        if Path::new(manifest_path) == current_manifest {
             let name = package["name"].as_str().ok_or("Missing name in package")?;
 
             let version = package["version"].as_str().ok_or("Missing version in package")?;
 
-            return Ok(format!("{}/package/{}-{}", target_dir, name, version));
+            return Ok(target_dir.join("package").join(format!("{}-{}", name, version)));
         }
     }
 

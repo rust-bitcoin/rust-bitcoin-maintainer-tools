@@ -59,9 +59,9 @@ fn remove_trailing_whitespace(
         // Get files from each specified package directory.
         let mut all_files = Vec::new();
         for package in packages {
-            let pkg_dir = package.dir.to_string_lossy();
+            let pathspec = package.dir.join("**/*.rs");
             let mut cmd = rbmt_cmd!(sh, "git ls-files --cached");
-            cmd = cmd.arg(format!("{}/**/*.rs", pkg_dir));
+            cmd = cmd.arg(pathspec);
             let files_output = cmd.read()?;
             all_files.push(files_output);
         }

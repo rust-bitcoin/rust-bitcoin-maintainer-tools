@@ -9,7 +9,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use xshell::Shell;
@@ -424,7 +424,7 @@ fn test_commit(
         rbmt_eprintln!("Testing package: {}", package.name);
 
         let _dir = sh.push_dir(&package.dir);
-        let config = TestConfig::load(Path::new(&package.dir))?;
+        let config = TestConfig::load(&package.dir)?;
 
         let mut pkg_summary = PackageSummary { name: package.name.clone(), ..Default::default() };
 
@@ -626,7 +626,8 @@ fn is_no_std_package(sh: &Shell, package_dir: &Path) -> Result<bool, Box<dyn std
     let Some(lib_target) = lib_target else {
         return Ok(false);
     };
-    let lib_path = lib_target["src_path"].as_str().ok_or("Missing src_path in lib target")?;
+    let lib_path =
+        PathBuf::from(lib_target["src_path"].as_str().ok_or("Missing src_path in lib target")?);
 
     // Check for #![no_std] attribute.
     let contents = std::fs::read_to_string(lib_path)?;
