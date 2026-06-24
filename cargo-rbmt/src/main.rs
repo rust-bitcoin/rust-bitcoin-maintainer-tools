@@ -175,12 +175,15 @@ fn main() {
                 process::exit(1);
             },
         Commands::Docs { open } =>
-            if let Err(e) = docs::run(&sh, cli.lockfile, &cli.packages, open) {
+            if let Err(e) = docs::run(&sh, cli.lockfile, &cli.packages, docs::DocsMode::Docs, open)
+            {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
             },
         Commands::Docsrs { open } =>
-            if let Err(e) = docs::run_docsrs(&sh, cli.lockfile, &cli.packages, open) {
+            if let Err(e) =
+                docs::run(&sh, cli.lockfile, &cli.packages, docs::DocsMode::DocsRs, open)
+            {
                 eprintln!("Error building docs.rs docs: {}", e);
                 process::exit(1);
             },
