@@ -4,7 +4,7 @@ use std::process::Command;
 
 fn main() {
     let git_hash = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "HEAD"])
         .output()
         .ok()
         .and_then(|output| {
@@ -20,6 +20,7 @@ fn main() {
     let build_version = format!("{} ({})", version, git_hash);
 
     println!("cargo:rustc-env=RBMT_BUILD_VERSION={}", build_version);
+    println!("cargo:rustc-env=RBMT_GIT_HASH={}", git_hash);
 
     // Optimize re-builds by only rebuilding if HEAD
     // is updated or the build script itself is changed.

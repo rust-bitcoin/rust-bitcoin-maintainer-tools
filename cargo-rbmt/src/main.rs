@@ -18,6 +18,7 @@ mod test;
 mod toolchain;
 mod toolchains;
 mod tools;
+mod version;
 
 use std::process;
 
@@ -155,6 +156,12 @@ fn main() {
         .map(|(_, arg)| arg);
     let cli = Cli::parse_from(args);
     let sh = Shell::new().unwrap();
+
+    // Check version requirement early before running any commands
+    if let Err(e) = version::check(&sh) {
+        eprintln!("Error: {}", e);
+        process::exit(1);
+    }
 
     match cli.command {
         Commands::Version => println!("{}", env!("RBMT_BUILD_VERSION")),

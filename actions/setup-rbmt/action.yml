@@ -17,8 +17,8 @@ runs:
         if [ -n "$RBMT_PATH" ]; then
           cargo install --locked --path "$RBMT_PATH"
         else
-          RBMT_VERSION=$(cat rbmt-version)
-          cargo install --locked --git https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools --rev "$RBMT_VERSION"
+          VERSION=$(grep "^version" Cargo.toml | cut -d'"' -f2)
+          cargo install cargo-rbmt --version $VERSION
         fi
 
     - name: Install toolchains
