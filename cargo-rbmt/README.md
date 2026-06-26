@@ -167,9 +167,9 @@ When you specify `--lockfile`, the tool copies that lock file to `Cargo.lock` be
 
 ```bash
 # Test with minimal versions.
-cargo rbmt --lockfile minimal test
+cargo rbmt test --lockfile minimal
 # Test with maximum versions.
-cargo rbmt --lockfile maximum test
+cargo rbmt test --lockfile maximum
 ```
 
 ### prerelease
