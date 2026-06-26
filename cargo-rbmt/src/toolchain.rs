@@ -87,20 +87,6 @@ pub enum Toolchain {
 }
 
 impl Toolchain {
-    /// Query the latest available version from the rust release channel API.
-    ///
-    /// For nightly, returns the latest nightly release date as `nightly-YYYY-MM-DD`.
-    /// For stable, returns the latest stable version number (e.g. `"1.96.0"`).
-    /// For MSRV, returns an error since MSRV is read-only from Cargo.toml.
-    pub fn latest_version(self) -> Result<String, Box<dyn std::error::Error>> {
-        match self {
-            Self::Nightly => Self::fetch_latest_nightly(),
-            Self::Stable => Self::fetch_latest_stable(),
-            Self::Msrv =>
-                Err("Cannot fetch recent MSRV version (read-only from Cargo.toml)".into()),
-        }
-    }
-
     /// Try to read the pinned version for this toolchain, returning `None` if not configured.
     ///
     /// For nightly and stable, returns `None` if not in `[workspace.metadata.rbmt.toolchains]`
@@ -128,44 +114,40 @@ impl Toolchain {
         }
     }
 
-    /// Write an updated version to Cargo.toml.
+    /// Update the pinned version for this toolchain to the latest available.
     ///
-    /// Writes to the same location where the toolchains were originally found
-    /// (either `[workspace.metadata.rbmt.toolchains]` or `[package.metadata.rbmt.toolchains]`).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if trying to write MSRV which is derived from Cargo.toml, not editable.
-    pub fn write_version(
-        self,
-        sh: &Shell,
-        version: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    /// For MSRV, returns an error since MSRV is read-only from Cargo.toml.
+    pub fn update_version(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+        // Get the existing TOML configuration.
         let root = get_workspace_root(sh)?;
         let path = root.join("Cargo.toml");
         let contents = std::fs::read_to_string(&path)?;
         let mut doc: toml_edit::DocumentMut = contents.parse()?;
-
         let table = match Self::read_toolchains_config(sh)?.location {
             ToolchainsLocation::Workspace =>
                 &mut doc["workspace"]["metadata"]["rbmt"]["toolchains"],
             ToolchainsLocation::Package => &mut doc["package"]["metadata"]["rbmt"]["toolchains"],
         };
 
-        match self {
+        // Fetch latest version and set on config.
+        let version = match self {
             Self::Nightly => {
-                table["nightly"] = toml_edit::value(version);
+                let v = Self::fetch_latest_nightly()?;
+                table["nightly"] = toml_edit::value(&v);
+                v
             }
             Self::Stable => {
-                table["stable"] = toml_edit::value(version);
+                let v = Self::fetch_latest_stable()?;
+                table["stable"] = toml_edit::value(&v);
+                v
             }
-            Self::Msrv =>
-                return Err(
-                    "Cannot update MSRV via write_version; it's derived from Cargo.toml".into()
-                ),
-        }
+            Self::Msrv => return Err("Cannot update MSRV version".into()),
+        };
 
+        // Write the new configuration back out.
         std::fs::write(&path, doc.to_string())?;
+        rbmt_eprintln!("Updated {:?}: {}", self, version);
+
         Ok(())
     }
 

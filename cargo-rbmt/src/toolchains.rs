@@ -3,7 +3,7 @@
 use xshell::Shell;
 
 use crate::environment::ProgressGuard;
-use crate::toolchain::{install_toolchain, reinstall_toolchain, Toolchain};
+use crate::toolchain::{install_toolchain, Toolchain};
 
 /// Status string for toolchains that are not configured.
 const NOT_CONFIGURED: &str = "(not configured)";
@@ -50,23 +50,11 @@ pub fn run(
     }
 
     if update_nightly {
-        if install_toolchain(sh, "nightly").is_err() {
-            rbmt_eprintln!("Install failed, retrying with reinstall");
-            reinstall_toolchain(sh, "nightly")?;
-        }
-        let version = Toolchain::Nightly.latest_version()?;
-        Toolchain::Nightly.write_version(sh, &version)?;
-        rbmt_eprintln!("Updated nightly-version: {}", version);
+        Toolchain::Nightly.update_version(sh)?;
     }
 
     if update_stable {
-        if install_toolchain(sh, "stable").is_err() {
-            rbmt_eprintln!("Install failed, retrying with reinstall");
-            reinstall_toolchain(sh, "stable")?;
-        }
-        let version = Toolchain::Stable.latest_version()?;
-        Toolchain::Stable.write_version(sh, &version)?;
-        rbmt_eprintln!("Updated stable-version: {}", version);
+        Toolchain::Stable.update_version(sh)?;
     }
 
     let nightly_status = if let Some(version) = Toolchain::Nightly.try_read_version(sh) {
