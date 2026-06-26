@@ -87,6 +87,20 @@ pub enum Toolchain {
 }
 
 impl Toolchain {
+    /// Query the latest available version from the rust release channel API.
+    ///
+    /// For nightly, returns the latest nightly release date as `nightly-YYYY-MM-DD`.
+    /// For stable, returns the latest stable version number (e.g. `"1.96.0"`).
+    /// For MSRV, returns an error since MSRV is read-only from Cargo.toml.
+    pub fn latest_version(self) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            Self::Nightly => Self::fetch_latest_nightly(),
+            Self::Stable => Self::fetch_latest_stable(),
+            Self::Msrv =>
+                Err("Cannot fetch recent MSRV version (read-only from Cargo.toml)".into()),
+        }
+    }
+
     /// Try to read the pinned version for this toolchain, returning `None` if not configured.
     ///
     /// For nightly and stable, returns `None` if not in `[workspace.metadata.rbmt.toolchains]`
@@ -186,6 +200,47 @@ impl Toolchain {
 
         Err("No [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains] exists."
             .into())
+    }
+
+    /// Fetch the latest nightly version from the rust release channel API.
+    fn fetch_latest_nightly() -> Result<String, Box<dyn std::error::Error>> {
+        let manifest =
+            bitreq::get("https://static.rust-lang.org/dist/channel-rust-nightly.toml").send()?;
+        let text = manifest.as_str()?;
+
+        let parsed: toml::Value = toml::from_str(text)?;
+        let date = parsed
+            .get("date")
+            .and_then(|v| v.as_str())
+            .ok_or("Could not find 'date' field in nightly channel manifest")?;
+
+        Ok(format!("nightly-{}", date))
+    }
+
+    /// Fetch the latest stable version from the rust release channel API.
+    fn fetch_latest_stable() -> Result<String, Box<dyn std::error::Error>> {
+        let manifest =
+            bitreq::get("https://static.rust-lang.org/dist/channel-rust-stable.toml").send()?;
+        let text = manifest.as_str()?;
+
+        let parsed: toml::Value = toml::from_str(text)?;
+        let rustc_section = parsed
+            .get("pkg")
+            .and_then(|pkg| pkg.get("rustc"))
+            .ok_or("Could not find pkg.rustc section in stable channel manifest")?;
+
+        let version_str = rustc_section
+            .get("version")
+            .and_then(|v| v.as_str())
+            .ok_or("Could not find version field in rustc package")?;
+
+        // Version is like "1.96.0 (ac68faa20 2026-05-25)" - extract just the version number
+        let version = version_str
+            .split_whitespace()
+            .next()
+            .ok_or("Could not parse version from rustc package")?;
+
+        Ok(version.to_string())
     }
 }
 
