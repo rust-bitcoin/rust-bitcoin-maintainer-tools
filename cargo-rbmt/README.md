@@ -202,6 +202,8 @@ The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass eve
 cargo rbmt run --toolchain nightly -- bench
 ```
 
+The `--baseline <ref>` flag checks that every commit between `<ref>` and `HEAD` can run the command.
+
 ### test
 
 The `test` command runs feature matrix testing for your package. Every run unconditionally tests all features enabled, no features enabled, and each feature by itself. A package's features are auto-discovered. Randomly sampled feature subsets (number of sets grows with the number of package features) are tested per commit ID to try and catch interaction bugs without running massive matrices on every run.

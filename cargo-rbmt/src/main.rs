@@ -111,6 +111,9 @@ enum Commands {
         /// Toolchain to use: stable, nightly, or msrv.
         #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
         toolchain: Toolchain,
+        /// Run the command on every commit between the given baseline ref and HEAD to ensure consistency.
+        #[arg(long)]
+        baseline: Option<String>,
         /// Cargo command and arguments (everything after `--`).
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -217,8 +220,10 @@ fn main() {
                 eprintln!("Error updating lockfiles: {}", e);
                 process::exit(1);
             },
-        Commands::Run { lockfile, toolchain, args } =>
-            if let Err(e) = run::run(&sh, lockfile, toolchain, args) {
+        Commands::Run { lockfile, toolchain, baseline, args } =>
+            if let Err(e) =
+                run::run(&sh, lockfile, toolchain, baseline.as_deref(), &cli.packages, &args)
+            {
                 eprintln!("Error running cargo command: {}", e);
                 process::exit(1);
             },

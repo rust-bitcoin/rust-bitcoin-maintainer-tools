@@ -85,3 +85,43 @@ pub fn list_commits(sh: &Shell, base: &str) -> Result<Vec<String>, Box<dyn std::
     let commits = output.lines().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect();
     Ok(commits)
 }
+
+/// Iterate over commits between baseline and HEAD, running an operation on each.
+///
+/// # Arguments
+///
+/// * `sh` - The shell environment.
+/// * `lockfile` - Which lockfile variant to use for each commit.
+/// * `baseline` - Optional baseline ref. If `None`, runs once at HEAD.
+/// * `on_commit` - Closure to run on each commit. Receives the Shell and runs with git and
+///   lockfile state properly configured.
+pub fn for_each_commit<F>(
+    sh: &Shell,
+    lockfile: crate::lock::LockFile,
+    baseline: Option<&str>,
+    mut on_commit: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: FnMut(&Shell) -> Result<(), Box<dyn std::error::Error>>,
+{
+    if let Some(baseline) = baseline {
+        let commits = list_commits(sh, baseline)?;
+        if commits.is_empty() {
+            rbmt_eprintln!("No commits found between '{}' and HEAD.", baseline);
+            return Ok(());
+        }
+
+        for sha in commits {
+            rbmt_eprintln!("Running on commit {}...", &sha[..12]);
+            let _git_guard = GitSwitchGuard::new(sh, &sha)?;
+            let _lockfile_guard = lockfile.activate(sh)?;
+
+            on_commit(sh)?;
+        }
+    } else {
+        let _lockfile_guard = lockfile.activate(sh)?;
+        on_commit(sh)?;
+    }
+
+    Ok(())
+}

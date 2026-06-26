@@ -377,31 +377,14 @@ pub fn run(
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
 
-    if let Some(baseline) = baseline {
-        let commits = git::list_commits(sh, baseline)?;
-        if commits.is_empty() {
-            rbmt_eprintln!("No commits found between '{}' and HEAD.", baseline);
-            return Ok(());
-        }
-        rbmt_eprintln!("Testing {} commit(s) against baseline '{}'", commits.len(), baseline);
-        for sha in &commits {
-            rbmt_eprintln!("Testing commit {}...", &sha[..12]);
-            // Switch to the commit first, then use lockfile on that commit in case
-            // there are lockfile updates. Guards will unwind in reverse order (LIFO).
-            let _git_guard = git::GitSwitchGuard::new(sh, sha)?;
-            let _lockfile_guard = lockfile.activate(sh)?;
-            // Resolve packages for each commit, so we only test packages that exist in that commit.
-            let packages = get_workspace_packages(sh, packages)?;
-            let pkg_summaries = test_commit(sh, toolchain, &packages, cargo_args)?;
-            summary.commits.push((sha.clone(), pkg_summaries));
-        }
-    } else {
-        let packages = get_workspace_packages(sh, packages)?;
-        let _lockfile_guard = lockfile.activate(sh)?;
+    git::for_each_commit(sh, lockfile, baseline, |sh| {
+        // Resolve packages for each commit, so we only test packages that exist in that commit.
+        let resolved_packages = get_workspace_packages(sh, packages)?;
         let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
-        let pkg_summaries = test_commit(sh, toolchain, &packages, cargo_args)?;
+        let pkg_summaries = test_commit(sh, toolchain, &resolved_packages, cargo_args)?;
         summary.commits.push((sha, pkg_summaries));
-    }
+        Ok(())
+    })?;
 
     rbmt_eprintln!("Tests complete.");
     progress.disable();
