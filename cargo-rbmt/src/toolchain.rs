@@ -114,44 +114,40 @@ impl Toolchain {
         }
     }
 
-    /// Write an updated version to Cargo.toml.
+    /// Update the pinned version for this toolchain to the latest available.
     ///
-    /// Writes to the same location where the toolchains were originally found
-    /// (either `[workspace.metadata.rbmt.toolchains]` or `[package.metadata.rbmt.toolchains]`).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if trying to write MSRV which is derived from Cargo.toml, not editable.
-    pub fn write_version(
-        self,
-        sh: &Shell,
-        version: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    /// For MSRV, returns an error since MSRV is read-only from Cargo.toml.
+    pub fn update_version(self, sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+        // Get the existing TOML configuration.
         let root = get_workspace_root(sh)?;
         let path = root.join("Cargo.toml");
         let contents = std::fs::read_to_string(&path)?;
         let mut doc: toml_edit::DocumentMut = contents.parse()?;
-
         let table = match Self::read_toolchains_config(sh)?.location {
             ToolchainsLocation::Workspace =>
                 &mut doc["workspace"]["metadata"]["rbmt"]["toolchains"],
             ToolchainsLocation::Package => &mut doc["package"]["metadata"]["rbmt"]["toolchains"],
         };
 
-        match self {
+        // Fetch latest version and set on config.
+        let version = match self {
             Self::Nightly => {
-                table["nightly"] = toml_edit::value(version);
+                let v = Self::fetch_latest_nightly()?;
+                table["nightly"] = toml_edit::value(&v);
+                v
             }
             Self::Stable => {
-                table["stable"] = toml_edit::value(version);
+                let v = Self::fetch_latest_stable()?;
+                table["stable"] = toml_edit::value(&v);
+                v
             }
-            Self::Msrv =>
-                return Err(
-                    "Cannot update MSRV via write_version; it's derived from Cargo.toml".into()
-                ),
-        }
+            Self::Msrv => return Err("Cannot update MSRV version".into()),
+        };
 
+        // Write the new configuration back out.
         std::fs::write(&path, doc.to_string())?;
+        rbmt_eprintln!("Updated {:?}: {}", self, version);
+
         Ok(())
     }
 
@@ -186,6 +182,47 @@ impl Toolchain {
 
         Err("No [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains] exists."
             .into())
+    }
+
+    /// Fetch the latest nightly version from the rust release channel API.
+    fn fetch_latest_nightly() -> Result<String, Box<dyn std::error::Error>> {
+        let manifest =
+            bitreq::get("https://static.rust-lang.org/dist/channel-rust-nightly.toml").send()?;
+        let text = manifest.as_str()?;
+
+        let parsed: toml::Value = toml::from_str(text)?;
+        let date = parsed
+            .get("date")
+            .and_then(|v| v.as_str())
+            .ok_or("Could not find 'date' field in nightly channel manifest")?;
+
+        Ok(format!("nightly-{}", date))
+    }
+
+    /// Fetch the latest stable version from the rust release channel API.
+    fn fetch_latest_stable() -> Result<String, Box<dyn std::error::Error>> {
+        let manifest =
+            bitreq::get("https://static.rust-lang.org/dist/channel-rust-stable.toml").send()?;
+        let text = manifest.as_str()?;
+
+        let parsed: toml::Value = toml::from_str(text)?;
+        let rustc_section = parsed
+            .get("pkg")
+            .and_then(|pkg| pkg.get("rustc"))
+            .ok_or("Could not find pkg.rustc section in stable channel manifest")?;
+
+        let version_str = rustc_section
+            .get("version")
+            .and_then(|v| v.as_str())
+            .ok_or("Could not find version field in rustc package")?;
+
+        // Version is like "1.96.0 (ac68faa20 2026-05-25)" - extract just the version number
+        let version = version_str
+            .split_whitespace()
+            .next()
+            .ok_or("Could not parse version from rustc package")?;
+
+        Ok(version.to_string())
     }
 }
 

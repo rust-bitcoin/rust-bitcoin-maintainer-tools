@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Fix discrepancy between `nightly` toolchain commit date vs. publish date.
 * Add version check at runtime if `workspace.metadata.rbmt.version` is set to a semver or hash value to ensure the right version of `cargo-rbmt` is running.
 
 # [0.4.1] - 2026-06-24
