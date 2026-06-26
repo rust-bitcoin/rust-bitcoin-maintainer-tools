@@ -6,6 +6,7 @@ A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) th
 
 - [Environment Variables](#environment-variables)
 - [Configuration](#configuration)
+  - [Version Pinning](#version-pinning)
 - [Commands](#commands)
   - [api](#api)
   - [docs](#docs)
@@ -37,6 +38,29 @@ A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) th
 Configuration for `cargo-rbmt` is stored in `[package.metadata.rbmt]` in a package's `Cargo.toml` manifest. Some configuration lives under `[workspace.metadata.rbmt]` in the root manifest of a workspace, but can fallback to `[package.metadata.rbmt]` if there is only one package in the repository.
 
 > **NOTE:** Cargo reserves `[package.metadata]` and `[workspace.metadata]` as explicitly supported extension points for third-party tooling. Cargo itself ignores any keys nested under these tables, so they will never clash with a future built-in Cargo field. `[workspace.metadata]` was stabilized in Cargo 1.46 and `[package.metadata]` has been around much longer. The `rbmt` sub-key further namespaces the configuration to avoid collisions with other tools. If a repository only has one package and is not using any workspace features, use the `package` namespace because simply adding the `workspace.metadata` settings enables workspace features in cargo.
+
+### Version Pinning
+
+Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup.
+
+```toml
+[workspace.metadata]
+rbmt.version = "0.4.1"
+```
+
+The TOML metadata is grep-able for a simple bootstrap script for `cargo-rbmt`.
+
+```bash
+VERSION=$(grep "^rbmt.version" Cargo.toml | cut -d'"' -f2)
+cargo install cargo-rbmt --version $VERSION
+```
+
+For git hashes, you'll need to install from the repository instead.
+
+```bash
+HASH=$(grep "^rbmt.version" Cargo.toml | cut -d'"' -f2)
+cargo install --locked --git https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools --rev $HASH cargo-rbmt
+```
 
 ## Commands
 
