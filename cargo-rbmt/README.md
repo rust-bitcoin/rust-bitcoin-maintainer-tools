@@ -167,9 +167,9 @@ When you specify `--lockfile`, the tool copies that lock file to `Cargo.lock` be
 
 ```bash
 # Test with minimal versions.
-cargo rbmt --lockfile minimal test
+cargo rbmt test --lockfile minimal
 # Test with maximum versions.
-cargo rbmt --lockfile maximum test
+cargo rbmt test --lockfile maximum
 ```
 
 ### prerelease
@@ -201,6 +201,8 @@ The `--` separator tells `cargo-rbmt` to stop parsing its own flags and pass eve
 ```bash
 cargo rbmt run --toolchain nightly -- bench
 ```
+
+The `--baseline <ref>` flag checks that every commit between `<ref>` and `HEAD` can run the command.
 
 ### test
 

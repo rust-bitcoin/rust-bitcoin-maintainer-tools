@@ -5,10 +5,10 @@ members = [
 ]
 resolver = "2"
 
-[workspace.metadata.rbmt]
-version = "0.4.1"
-toolchains = { nightly = "nightly-2026-06-23", stable = "1.96.0" }
-tools = { zizmor = "1.23.1" }
+[workspace.metadata]
+rbmt.version = "0.4.1"
+rbmt.toolchains = { nightly = "nightly-2026-06-23", stable = "1.96.0" }
+rbmt.tools = { zizmor = "1.23.1" }
 
 [workspace.lints.clippy]
 # Exclude lints we don't think are valuable.

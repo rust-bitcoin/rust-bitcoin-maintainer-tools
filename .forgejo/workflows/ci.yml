@@ -24,10 +24,10 @@ jobs:
         uses: ./actions/setup-rbmt
         with:
           rbmt-path: cargo-rbmt
-      - run: cargo rbmt --lockfile existing lint
-      - run: cargo rbmt --lockfile existing docs
-      - run: cargo rbmt --lockfile existing docsrs
-      - run: cargo rbmt --lockfile existing fmt --check
+      - run: cargo rbmt lint --lockfile existing
+      - run: cargo rbmt docs --lockfile existing
+      - run: cargo rbmt docsrs --lockfile existing
+      - run: cargo rbmt fmt --check
 
   dogfood-prerelease:
     runs-on: debian-trixie
@@ -73,4 +73,4 @@ jobs:
         with:
           rbmt-path: cargo-rbmt
       - name: Run tests
-        run: cargo rbmt --lockfile ${{ matrix.lockfile }} test --toolchain ${{ matrix.toolchain }} --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
+        run: cargo rbmt test --lockfile ${{ matrix.lockfile }} --toolchain ${{ matrix.toolchain }} --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}

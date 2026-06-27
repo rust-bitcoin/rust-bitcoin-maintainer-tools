@@ -31,16 +31,6 @@ use xshell::Shell;
 #[command(name = "cargo-rbmt")]
 #[command(about = "Rust Bitcoin Maintainer Tools", long_about = None)]
 struct Cli {
-    /// Lockfile to use for dependencies.
-    #[arg(
-        long = "lockfile",
-        alias = "lock-file",
-        global = true,
-        value_enum,
-        default_value_t = LockFile::Recent
-    )]
-    lockfile: LockFile,
-
     /// Filter which packages are operated on in the workspace. Can be a package's manifest name or directory.
     #[arg(short = 'p', long = "package", global = true)]
     packages: Vec<String>,
@@ -53,6 +43,9 @@ struct Cli {
 enum Commands {
     /// Check for public API changes in stabilizing crates.
     Api {
+        /// Lockfile to use for dependencies.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
+        lockfile: LockFile,
         /// Git ref to use as baseline for semver comparison (tag, branch, or commit).
         #[arg(long)]
         baseline: Option<String>,
@@ -64,21 +57,34 @@ enum Commands {
         check: bool,
     },
     /// Run the linter (clippy) for workspace and all crates.
-    Lint,
+    Lint {
+        /// Lockfile to use for dependencies.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
+        lockfile: LockFile,
+    },
     /// Build documentation with stable toolchain.
     Docs {
+        /// Lockfile to use for dependencies.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
+        lockfile: LockFile,
         /// Open documentation in browser after building.
         #[arg(long)]
         open: bool,
     },
     /// Build documentation with nightly toolchain for docs.rs.
     Docsrs {
+        /// Lockfile to use for dependencies.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
+        lockfile: LockFile,
         /// Open documentation in browser after building.
         #[arg(long)]
         open: bool,
     },
     /// Run tests with specified toolchain.
     Test {
+        /// Lockfile to use for dependencies.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
+        lockfile: LockFile,
         /// Toolchain to use: stable, nightly, or msrv.
         #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
         toolchain: Toolchain,
@@ -99,9 +105,15 @@ enum Commands {
     },
     /// Run arbitrary cargo commands with toolchain and lockfile management.
     Run {
+        /// Lockfile to use for dependencies.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
+        lockfile: LockFile,
         /// Toolchain to use: stable, nightly, or msrv.
         #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
         toolchain: Toolchain,
+        /// Run the command on every commit between the given baseline ref and HEAD to ensure consistency.
+        #[arg(long)]
+        baseline: Option<String>,
         /// Cargo command and arguments (everything after `--`).
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -165,8 +177,8 @@ fn main() {
 
     match cli.command {
         Commands::Version => println!("{}", env!("RBMT_BUILD_VERSION")),
-        Commands::Api { baseline } => {
-            if let Err(e) = api::run(&sh, cli.lockfile, &cli.packages, baseline.as_deref()) {
+        Commands::Api { lockfile, baseline } => {
+            if let Err(e) = api::run(&sh, lockfile, &cli.packages, baseline.as_deref()) {
                 eprintln!("Error running API check: {}", e);
                 process::exit(1);
             }
@@ -176,33 +188,25 @@ fn main() {
                 eprintln!("Error running fmt task: {}", e);
                 process::exit(1);
             },
-        Commands::Lint =>
-            if let Err(e) = lint::run(&sh, cli.lockfile, &cli.packages) {
+        Commands::Lint { lockfile } =>
+            if let Err(e) = lint::run(&sh, lockfile, &cli.packages) {
                 eprintln!("Error running lint task: {}", e);
                 process::exit(1);
             },
-        Commands::Docs { open } =>
-            if let Err(e) = docs::run(&sh, cli.lockfile, &cli.packages, docs::DocsMode::Docs, open)
-            {
+        Commands::Docs { lockfile, open } =>
+            if let Err(e) = docs::run(&sh, lockfile, &cli.packages, docs::DocsMode::Docs, open) {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
             },
-        Commands::Docsrs { open } =>
-            if let Err(e) =
-                docs::run(&sh, cli.lockfile, &cli.packages, docs::DocsMode::DocsRs, open)
-            {
+        Commands::Docsrs { lockfile, open } =>
+            if let Err(e) = docs::run(&sh, lockfile, &cli.packages, docs::DocsMode::DocsRs, open) {
                 eprintln!("Error building docs.rs docs: {}", e);
                 process::exit(1);
             },
-        Commands::Test { toolchain, baseline, cargo_args } =>
-            if let Err(e) = test::run(
-                &sh,
-                cli.lockfile,
-                toolchain,
-                baseline.as_deref(),
-                &cli.packages,
-                &cargo_args,
-            ) {
+        Commands::Test { lockfile, toolchain, baseline, cargo_args } =>
+            if let Err(e) =
+                test::run(&sh, lockfile, toolchain, baseline.as_deref(), &cli.packages, &cargo_args)
+            {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             },
@@ -216,8 +220,10 @@ fn main() {
                 eprintln!("Error updating lockfiles: {}", e);
                 process::exit(1);
             },
-        Commands::Run { toolchain, args } =>
-            if let Err(e) = run::run(&sh, cli.lockfile, toolchain, args) {
+        Commands::Run { lockfile, toolchain, baseline, args } =>
+            if let Err(e) =
+                run::run(&sh, lockfile, toolchain, baseline.as_deref(), &cli.packages, &args)
+            {
                 eprintln!("Error running cargo command: {}", e);
                 process::exit(1);
             },

@@ -17,7 +17,7 @@ runs:
         if [ -n "$RBMT_PATH" ]; then
           cargo install --locked --path "$RBMT_PATH"
         else
-          VERSION=$(grep "^version" Cargo.toml | cut -d'"' -f2)
+          VERSION=$(grep "^rbmt.version" Cargo.toml | cut -d'"' -f2)
           cargo install cargo-rbmt --version $VERSION
         fi
 

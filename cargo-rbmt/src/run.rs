@@ -4,7 +4,8 @@
 
 use xshell::Shell;
 
-use crate::environment::{cargo_cmd, CmdExt, ProgressGuard};
+use crate::environment::{cargo_cmd, get_workspace_packages, CmdExt, ProgressGuard};
+use crate::git;
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -15,17 +16,40 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 /// * `sh` - The shell environment.
 /// * `lockfile` - Which lockfile variant to use (minimal, recent, or existing).
 /// * `toolchain` - Which toolchain to use (nightly, stable, or msrv).
+/// * `baseline` - Optional baseline ref for running the command on multiple commits.
+/// * `packages` - Packages to run the command on (empty = all packages).
 /// * `cargo_args` - Arguments to pass to cargo (everything after `--`).
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
     toolchain: Toolchain,
-    cargo_args: Vec<String>,
+    baseline: Option<&str>,
+    packages: &[String],
+    cargo_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    prepare_toolchain(sh, toolchain)?;
-    let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
-    rbmt_eprintln!("Running cargo command with {:?} deps and {:?} toolchain", lockfile, toolchain);
-    cargo_cmd(sh).args(cargo_args).run_with_capture()?;
+
+    git::for_each_commit(sh, lockfile, baseline, |sh| {
+        // Set toolchain and packages per-commit.
+        prepare_toolchain(sh, toolchain)?;
+        let resolved_packages = get_workspace_packages(sh, packages)?;
+
+        let mut cmd = cargo_cmd(sh);
+        // Add cargo subcommand (first arg in cargo_args).
+        if let Some(subcommand) = cargo_args.first() {
+            cmd = cmd.arg(subcommand);
+        }
+        // Add package flags after subcommand, but before other arguments.
+        for pkg in &resolved_packages {
+            cmd = cmd.arg("-p").arg(&pkg.name);
+        }
+        // Add remaining arguments (skip first which was the subcommand).
+        if cargo_args.len() > 1 {
+            cmd = cmd.args(&cargo_args[1..]);
+        }
+
+        cmd.run_with_capture()
+    })?;
+
     Ok(())
 }
