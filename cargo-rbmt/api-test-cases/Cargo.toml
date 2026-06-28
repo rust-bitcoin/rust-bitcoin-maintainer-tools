@@ -8,5 +8,5 @@ publish = false
 exclude = ["api"]
 
 [package.metadata.rbmt]
-api = { enabled = true }
+api = { enabled = true, snapshot = true }
 toolchains = { nightly = "nightly-2026-05-04" }

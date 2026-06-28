@@ -8,7 +8,7 @@ keywords = ["bitcoin"]
 categories = ["development-tools::cargo-plugins"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 exclude = ["api-test-cases", "msrv-test-cases"]
 
 [[bin]]
@@ -23,7 +23,7 @@ serde_json = "1.0.104"
 toml = "1.1.2"
 bitreq = { version = "0.3", features = ["https"] }
 toml_edit = { version = "0.25.12", features = ["serde"] }
-public-api = { version = "0.50", default-features = false }
+public-api = { version = "0.52.1", default-features = false, features = ["experimental-feature-that-can-be-removed-in-a-patch-release_re-export-rustdoc-types"] }
 
 [lints]
 workspace = true

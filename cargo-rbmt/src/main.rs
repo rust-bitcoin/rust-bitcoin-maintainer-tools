@@ -49,6 +49,9 @@ enum Commands {
         /// Git ref to use as baseline for semver comparison (tag, branch, or commit).
         #[arg(long)]
         baseline: Option<String>,
+        /// Write API snapshot files.
+        #[arg(long)]
+        snapshot: bool,
     },
     /// Format files using rustfmt with the nightly toolchain.
     Fmt {
@@ -171,8 +174,8 @@ fn main() {
 
     match cli.command {
         Commands::Version => println!("{}", env!("RBMT_BUILD_VERSION")),
-        Commands::Api { lockfile, baseline } => {
-            if let Err(e) = api::run(&sh, lockfile, &cli.packages, baseline.as_deref()) {
+        Commands::Api { lockfile, baseline, snapshot } => {
+            if let Err(e) = api::run(&sh, lockfile, &cli.packages, baseline.as_deref(), snapshot) {
                 eprintln!("Error running API check: {}", e);
                 process::exit(1);
             }
