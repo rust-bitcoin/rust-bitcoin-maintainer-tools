@@ -226,10 +226,11 @@ impl<T> core::convert::From<T> for api_test_cases::multiple_from_impls::Value<V>
 pub fn api_test_cases::multiple_from_impls::Value<V>::from(T) -> T [impl: impl<T> core::convert::From<T> for api_test_cases::multiple_from_impls::Value<V>]
 pub mod api_test_cases::multiple_trait_impls
 pub struct api_test_cases::multiple_trait_impls::Foo
+impl api_test_cases::multiple_trait_impls::Foo
+pub fn api_test_cases::multiple_trait_impls::Foo::new_method()
 impl api_test_cases::multiple_trait_impls::Bar for api_test_cases::multiple_trait_impls::Foo
-pub fn api_test_cases::multiple_trait_impls::Foo::do_it() [impl: impl api_test_cases::multiple_trait_impls::Bar for api_test_cases::multiple_trait_impls::Foo]
 impl api_test_cases::multiple_trait_impls::Baz for api_test_cases::multiple_trait_impls::Foo
-pub fn api_test_cases::multiple_trait_impls::Foo::do_it() [impl: impl api_test_cases::multiple_trait_impls::Baz for api_test_cases::multiple_trait_impls::Foo]
+pub fn api_test_cases::multiple_trait_impls::Foo::do_it() -> i32 [impl: impl api_test_cases::multiple_trait_impls::Baz for api_test_cases::multiple_trait_impls::Foo]
 impl core::marker::Freeze for api_test_cases::multiple_trait_impls::Foo
 impl core::marker::Send for api_test_cases::multiple_trait_impls::Foo
 impl core::marker::Sync for api_test_cases::multiple_trait_impls::Foo
@@ -254,13 +255,11 @@ pub fn api_test_cases::multiple_trait_impls::Foo::borrow_mut(&mut self) -> &mut 
 impl<T> core::convert::From<T> for api_test_cases::multiple_trait_impls::Foo
 pub fn api_test_cases::multiple_trait_impls::Foo::from(T) -> T [impl: impl<T> core::convert::From<T> for api_test_cases::multiple_trait_impls::Foo]
 pub trait api_test_cases::multiple_trait_impls::Bar
-pub fn api_test_cases::multiple_trait_impls::Bar::do_it()
 impl api_test_cases::multiple_trait_impls::Bar for api_test_cases::multiple_trait_impls::Foo
-pub fn api_test_cases::multiple_trait_impls::Foo::do_it() [impl: impl api_test_cases::multiple_trait_impls::Bar for api_test_cases::multiple_trait_impls::Foo]
 pub trait api_test_cases::multiple_trait_impls::Baz
-pub fn api_test_cases::multiple_trait_impls::Baz::do_it()
+pub fn api_test_cases::multiple_trait_impls::Baz::do_it() -> i32
 impl api_test_cases::multiple_trait_impls::Baz for api_test_cases::multiple_trait_impls::Foo
-pub fn api_test_cases::multiple_trait_impls::Foo::do_it() [impl: impl api_test_cases::multiple_trait_impls::Baz for api_test_cases::multiple_trait_impls::Foo]
+pub fn api_test_cases::multiple_trait_impls::Foo::do_it() -> i32 [impl: impl api_test_cases::multiple_trait_impls::Baz for api_test_cases::multiple_trait_impls::Foo]
 pub mod api_test_cases::trait_default_methods
 pub struct api_test_cases::trait_default_methods::Foo
 impl api_test_cases::trait_default_methods::Bar for api_test_cases::trait_default_methods::Foo
