@@ -48,12 +48,15 @@ jobs:
       - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0 # Context for baseline API comparison.
       - uses: ./actions/setup-rbmt
         with:
           rbmt-path: cargo-rbmt
-      - name: Setup api-test-cases toolchains and check API
+      - name: Setup api-test-cases toolchains and check API fails as expected
         working-directory: cargo-rbmt/api-test-cases
-        run: cargo rbmt toolchains && cargo rbmt api --lockfile existing
+        run: |
+          cargo rbmt toolchains
+          ! cargo rbmt api --lockfile existing --baseline f1975147
 
   dogfood-tests:
     runs-on: debian-trixie
