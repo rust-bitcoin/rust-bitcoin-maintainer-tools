@@ -10,12 +10,9 @@ on:
     branches: [ master ]
   pull_request:
 
-permissions: {}
-
 jobs:
   dogfood-lints:
     runs-on: debian-trixie
-    permissions: {}
     steps:
       - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
         with:
@@ -30,7 +27,6 @@ jobs:
 
   dogfood-prerelease:
     runs-on: debian-trixie
-    permissions: {}
     steps:
       - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
         with:
@@ -43,7 +39,6 @@ jobs:
 
   dogfood-api:
     runs-on: debian-trixie
-    permissions: {}
     steps:
       - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
         with:
@@ -60,7 +55,6 @@ jobs:
 
   dogfood-tests:
     runs-on: debian-trixie
-    permissions: {}
     strategy:
       matrix:
         lockfile: [existing, recent, minimal, maximum]
