@@ -198,7 +198,7 @@ impl std::error::Error for ApiDiffError {}
 /// # Arguments
 ///
 /// * `packages` - Optional list of packages to check. If empty, checks all packages in the workspace.
-/// * `baseline` - Git ref for optional baseline diff comparison.
+/// * `baseline` - Git ref for optional baseline diff comparison. When not provided, outputs APIs to stdout.
 /// * `snapshot` - Whether to generate API snapshot files to disk.
 pub fn run(
     sh: &Shell,
@@ -209,11 +209,12 @@ pub fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
-    let _progress = ProgressGuard::new();
+    let mut progress = ProgressGuard::new();
     rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
     let mut package_diffs = Vec::new();
+    let mut package_apis: Vec<(String, PackageApis)> = Vec::new();
 
     for package in packages {
         let api_config = ApiConfig::load(&package.dir)?;
@@ -225,6 +226,7 @@ pub fn run(
         rbmt_eprintln!("API check enabled in {}", package.name);
 
         let current_apis = get_package_apis(sh, &package.name, &package.dir)?;
+
         if snapshot || api_config.snapshot {
             write_api_files(&package, &current_apis)?;
         }
@@ -232,11 +234,27 @@ pub fn run(
             if let Some(package_diff) = check_baseline(sh, &package, baseline, current_apis)? {
                 package_diffs.push(package_diff);
             }
+        } else {
+            package_apis.push((package.name.clone(), current_apis));
         }
     }
 
     if !package_diffs.is_empty() {
         return Err(Box::new(ApiDiffError { package_diffs }));
+    }
+
+    // Output all APIs by default.
+    if baseline.is_none() {
+        progress.disable();
+        for (package_name, feature_apis) in package_apis {
+            for (feature_config, api) in feature_apis {
+                println!("--- {} API ({})", package_name, feature_config.name());
+                let context = ItemContext::new(&api);
+                for item in api.items() {
+                    println!("{}", context.format(item));
+                }
+            }
+        }
     }
 
     Ok(())
