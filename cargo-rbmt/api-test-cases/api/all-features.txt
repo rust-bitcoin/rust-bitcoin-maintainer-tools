@@ -1,4 +1,5 @@
 pub mod api_test_cases
+pub use api_test_cases::InternalHelper
 pub mod api_test_cases::associated_types
 pub struct api_test_cases::associated_types::Foo
 impl api_test_cases::associated_types::Container for api_test_cases::associated_types::Foo

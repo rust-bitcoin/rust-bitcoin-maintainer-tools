@@ -77,6 +77,7 @@ The `api` command helps maintain API stability by generating and diff'ing a pack
 enabled = true
 snapshot = false
 features = [ ["alloc"], ["alloc", "serde"] ]
+private = ["bitcoin-internals"]
 ```
 
 A package must opt-in to api checking through the `api.enabled` configuration since it can be quite noisy during heavy development. Since a package's API depends on what features are enabled, no features enabled and all features enabled are always generated. Specific feature sets can be added through the `api.features` configuration.
@@ -86,6 +87,8 @@ cargo rbmt api --snapshot --baseline v0.1.0
 ```
 
 If the `--snapshot` flag is passed in, API files are generated under `<package-dir>/api/<feature-set>/`. If the `--baseline` flag is set, the current APIs are compared to their versions at the given git ref. An error is thrown on *any* changes so that they can be further analyzed.
+
+If there are dependencies which should not be a part of the public API, they can be listed in the `private` config. The command will fail if they are detected. This is a hack until RFC #3516 lands in cargo.
 
 #### `#[doc(hidden)]` policy
 
