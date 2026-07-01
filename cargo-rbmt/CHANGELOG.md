@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* [BREAKING] Combine `docs` and `docsrs` into one `docs` command which runs both by default.
 * Fix discrepancy between `nightly` toolchain commit date vs. publish date.
 * Add `--baseline` functionality to the `run` command to run per-commit.
 * Push `--lockfile` arg to be per-subcommand since about half of the subcommands don't use it.

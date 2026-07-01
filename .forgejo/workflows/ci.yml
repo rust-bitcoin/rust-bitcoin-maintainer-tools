@@ -26,7 +26,6 @@ jobs:
           rbmt-path: cargo-rbmt
       - run: cargo rbmt lint --lockfile existing
       - run: cargo rbmt docs --lockfile existing
-      - run: cargo rbmt docsrs --lockfile existing
       - run: cargo rbmt fmt --check
 
   dogfood-prerelease:

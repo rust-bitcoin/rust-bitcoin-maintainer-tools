@@ -62,20 +62,14 @@ enum Commands {
         #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
         lockfile: LockFile,
     },
-    /// Build documentation with stable toolchain.
+    /// Build documentation at rust-bitcoin standards.
     Docs {
         /// Lockfile to use for dependencies.
         #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
         lockfile: LockFile,
-        /// Open documentation in browser after building.
+        /// Build with stable toolchain instead of nightly and skip docs.rs validation.
         #[arg(long)]
-        open: bool,
-    },
-    /// Build documentation with nightly toolchain for docs.rs.
-    Docsrs {
-        /// Lockfile to use for dependencies.
-        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
-        lockfile: LockFile,
+        no_docsrs: bool,
         /// Open documentation in browser after building.
         #[arg(long)]
         open: bool,
@@ -193,16 +187,13 @@ fn main() {
                 eprintln!("Error running lint task: {}", e);
                 process::exit(1);
             },
-        Commands::Docs { lockfile, open } =>
-            if let Err(e) = docs::run(&sh, lockfile, &cli.packages, docs::DocsMode::Docs, open) {
+        Commands::Docs { lockfile, no_docsrs, open } => {
+            let mode = if no_docsrs { docs::DocsMode::Docs } else { docs::DocsMode::DocsRs };
+            if let Err(e) = docs::run(&sh, lockfile, &cli.packages, mode, open) {
                 eprintln!("Error building docs: {}", e);
                 process::exit(1);
-            },
-        Commands::Docsrs { lockfile, open } =>
-            if let Err(e) = docs::run(&sh, lockfile, &cli.packages, docs::DocsMode::DocsRs, open) {
-                eprintln!("Error building docs.rs docs: {}", e);
-                process::exit(1);
-            },
+            }
+        }
         Commands::Test { lockfile, toolchain, baseline, cargo_args } =>
             if let Err(e) =
                 test::run(&sh, lockfile, toolchain, baseline.as_deref(), &cli.packages, &cargo_args)
