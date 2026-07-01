@@ -96,7 +96,7 @@ Items marked with `#[doc(hidden)]` are *excluded from API snapshots and breaking
 
 ### docs
 
-The `docs` and `docsrs` commands build documentation following the convention in the rust-bitcoin ecosystem.
+The `docs` command builds documentation following the convention in the rust-bitcoin ecosystem.
 
 ```bash
 cargo rbmt docs
