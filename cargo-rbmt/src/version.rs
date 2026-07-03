@@ -44,6 +44,15 @@ pub fn check(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         // If expected looks like a git hash (40+ hex chars), compare against commit hash,
         // otherwise compare as a semantic version string.
         if expected.len() >= 40 && expected.chars().all(|c| c.is_ascii_hexdigit()) {
+            // If actual_hash is empty (e.g., installed from crates.io registry),
+            // we cannot validate against a git hash requirement.
+            if actual_hash.is_empty() {
+                return Err(format!(
+                    "cargo-rbmt version mismatch: expected commit {}, but git hash unavailable (likely installed from registry)",
+                    expected
+                )
+                .into());
+            }
             if !actual_hash.starts_with(&expected) {
                 return Err(format!(
                     "cargo-rbmt version mismatch: expected commit {}, found {}",

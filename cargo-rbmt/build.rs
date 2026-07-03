@@ -14,13 +14,14 @@ fn main() {
                 None
             }
         })
-        .map_or_else(|| "unknown".to_string(), |s| s.trim().to_string());
+        .map(|s| s.trim().to_string());
 
     let version = std::env::var("CARGO_PKG_VERSION").unwrap();
-    let build_version = format!("{} ({})", version, git_hash);
+    let build_version =
+        if let Some(hash) = &git_hash { format!("{} ({})", version, hash) } else { version };
 
     println!("cargo:rustc-env=RBMT_BUILD_VERSION={}", build_version);
-    println!("cargo:rustc-env=RBMT_GIT_HASH={}", git_hash);
+    println!("cargo:rustc-env=RBMT_GIT_HASH={}", git_hash.unwrap_or_default());
 
     // Optimize re-builds by only rebuilding if HEAD
     // is updated or the build script itself is changed.
