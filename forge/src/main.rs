@@ -94,6 +94,15 @@ enum Commands {
         #[arg(short = 'c', long)]
         current: bool,
     },
+    /// Import an issue from GitHub into Forgejo
+    #[command(alias = "i")]
+    Import {
+        /// GitHub issue number
+        issue_number: u64,
+        /// Forgejo repository to import into, in format "owner/repo" (optional, uses current repo if not specified)
+        #[arg(short, long)]
+        repo: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -269,6 +278,62 @@ fn list_prs(repo: Option<String>) -> Result<()> {
 
 fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
     api_get(&config.api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
+}
+
+#[derive(Deserialize, Debug)]
+struct GithubIssue {
+    title: String,
+    body: Option<String>,
+}
+
+#[derive(Serialize)]
+struct CreateIssueOptions {
+    title: String,
+    body: String,
+}
+
+/// Fetches issue `issue_number` from `github.com/<github_repo>` using the `gh` CLI.
+fn fetch_github_issue(github_repo: &str, issue_number: u64) -> Result<GithubIssue> {
+    let output = Command::new("gh")
+        .args(["api", &format!("repos/{}/issues/{}", github_repo, issue_number)])
+        .output()
+        .context("Failed to run gh (is the GitHub CLI installed and authenticated?)")?;
+
+    if !output.status.success() {
+        anyhow::bail!("gh api failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    serde_json::from_slice(&output.stdout).context("Failed to parse GitHub issue JSON")
+}
+
+fn create_forgejo_issue(repo: &str, issue: &CreateIssueOptions, config: &Config) -> Result<()> {
+    api_post(&config.api_url(), &config.token, &format!("/repos/{}/issues", repo), issue)
+}
+
+fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
+    let config = load_config()?;
+
+    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
+
+    let repo_name = repo.rsplit('/').next().context("Invalid repository name")?;
+    let github_repo = format!("rust-bitcoin/{}", repo_name);
+
+    println!("Fetching issue #{} from github.com/{}...", issue_number, github_repo);
+    let issue = fetch_github_issue(&github_repo, issue_number)?;
+
+    println!("Importing issue into {}: {}", repo, issue.title);
+    let original_url = format!("https://github.com/{}/issues/{}", github_repo, issue_number);
+    let body = format!(
+        "**I am not the original author**. Imported from {}\n\n{}",
+        original_url,
+        issue.body.unwrap_or_default()
+    );
+    let options = CreateIssueOptions { title: issue.title, body };
+    create_forgejo_issue(&repo, &options, &config)?;
+
+    println!("Successfully imported issue #{} into {}", issue_number, repo);
+
+    Ok(())
 }
 
 fn fetch_pr_refs(repo: &str, refspecs: &[&str], config: &Config) -> Result<()> {
@@ -1193,6 +1258,9 @@ fn main() -> Result<()> {
         }
         Commands::Push { current } => {
             push_with_jj(current)?;
+        }
+        Commands::Import { issue_number, repo } => {
+            import_issue(issue_number, repo)?;
         }
     }
 
