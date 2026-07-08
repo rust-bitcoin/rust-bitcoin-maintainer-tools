@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-08
+
 * [BREAKING] Combine `docs` and `docsrs` into one `docs` command which runs both by default.
 * Add private dependency leaks in public api detection to `api`.
 * [BREAKING] Refactor the `api` command around diff detection.
@@ -64,7 +66,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.1...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.0...HEAD
+[0.5.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.1...cargo-rbmt-0.5.0
 [0.4.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.0...cargo-rbmt-0.4.1
 [0.4.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.3.0...cargo-rbmt-0.4.0
 [0.3.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.2.1...cargo-rbmt-0.3.0
