@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use public_api::rustdoc_types::Id;
 use xshell::Shell;
 
 use crate::environment::{
@@ -32,8 +33,12 @@ type PackageApis = HashMap<FeatureConfig, public_api::PublicApi>;
 struct ApiConfig {
     /// Whether to run API checks for this package. Defaults to `false`.
     enabled: bool,
+    /// Whether to generate API snapshot files. Defaults to `false`.
+    snapshot: bool,
     /// Feature combinations to test (in addition to no-features and all-features).
     features: Vec<Vec<String>>,
+    /// List of private/internal dependencies that should not appear in public API.
+    private: Vec<String>,
 }
 
 impl ApiConfig {
@@ -92,33 +97,209 @@ impl FeatureConfig {
     }
 }
 
-/// Run the API check task.
-///
-/// This command checks for changes to the public API of workspace packages by generating
-/// API files using the `public-api` library and comparing them with committed versions in each
-/// package's own `api/` directory.
-///
-/// Always checks that features are additive and API files match git state.
-/// When a baseline ref is given or configured, also performs semver
-/// compatibility checking by comparing the current API against the baseline.
+/// Build a map of item ID to extra context if it has any.
+struct ItemContext {
+    // Parent ID to the context it provides.
+    map: HashMap<Id, String>,
+}
+
+impl ItemContext {
+    /// Prime `ItemContext` based on a full API.
+    fn new(api: &public_api::PublicApi) -> Self {
+        let parent_items: Vec<_> = api.items().collect();
+        let id_to_item: HashMap<_, _> = parent_items.iter().map(|i| (i.id(), i)).collect();
+
+        let map = api.items()
+            .filter_map(|item| {
+                if let Some(parent_id) = item.parent_id() {
+                    if let Some(parent_item) = id_to_item.get(&parent_id) {
+                        // If parent is a trait impl (contains "for" keyword), capture the context.
+                        if parent_item.tokens().any(
+                            |token| matches!(token, public_api::tokens::Token::Keyword(kw) if kw == "for"),
+                        ) {
+                            let context = format!("[impl: {}]", parent_item);
+                            return Some((parent_id, context));
+                        }
+                    }
+                }
+                // Item has no useful context.
+                None
+            })
+            .collect();
+
+        Self { map }
+    }
+
+    /// Format a `PublicItem` for display, appending context if it has any.
+    fn format(&self, item: &public_api::PublicItem) -> String {
+        match item.parent_id().and_then(|pid| self.map.get(&pid)) {
+            Some(ctx) => format!("{item} {ctx}"),
+            None => item.to_string(),
+        }
+    }
+}
+
+/// A feature set configuration's diff with formatting contexts.
+struct FeatureDiff {
+    feature_config: FeatureConfig,
+    diff: public_api::diff::PublicApiDiff,
+    baseline_context: ItemContext,
+    current_context: ItemContext,
+}
+
+/// Represents all diffs for a single package across different feature configurations.
+struct PackageDiff {
+    package_name: String,
+    feature_diffs: Vec<FeatureDiff>,
+}
+
+/// Error type for when API diffs are detected.
+struct ApiDiffError {
+    package_diffs: Vec<PackageDiff>,
+}
+
+impl std::fmt::Display for ApiDiffError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "API diffs found in {} package(s)", self.package_diffs.len())?;
+        for package in &self.package_diffs {
+            for feature in &package.feature_diffs {
+                writeln!(
+                    f,
+                    "--- {} API Diff ({})",
+                    package.package_name,
+                    feature.feature_config.name()
+                )?;
+                for item in &feature.diff.removed {
+                    writeln!(f, "- {}", feature.baseline_context.format(item))?;
+                }
+                for item in &feature.diff.changed {
+                    writeln!(
+                        f,
+                        "~ {} > {}",
+                        feature.baseline_context.format(&item.old),
+                        feature.current_context.format(&item.new)
+                    )?;
+                }
+                for item in &feature.diff.added {
+                    writeln!(f, "+ {}", feature.current_context.format(item))?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Debug for ApiDiffError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "ApiDiffError") }
+}
+
+impl std::error::Error for ApiDiffError {}
+
+/// Check if any private dependencies are exposed in the public API.
+fn check_private_deps(
+    package_name: &str,
+    apis: &PackageApis,
+    private_deps: &[String],
+) -> Result<(), Box<dyn std::error::Error>> {
+    if private_deps.is_empty() {
+        return Ok(());
+    }
+
+    let mut leaked_items = Vec::new();
+
+    for (feature_config, api) in apis {
+        for item in api.items() {
+            // Check if any token is an identifier matching a private dependency.
+            for token in item.tokens() {
+                if let public_api::tokens::Token::Identifier(ident) = token {
+                    for private_dep in private_deps {
+                        if ident == private_dep || ident.starts_with(&format!("{}::", private_dep))
+                        {
+                            leaked_items.push((feature_config.name(), item.to_string()));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !leaked_items.is_empty() {
+        let mut message =
+            format!("Private dependency exposed in public API of {}:\n", package_name);
+        for (feature, item) in leaked_items {
+            message.push_str(&format!("  [{}] {}\n", feature, item));
+        }
+        return Err(message.into());
+    }
+
+    Ok(())
+}
+
+/// Run the API task to check or generate API snapshots for packages.
 ///
 /// # Arguments
 ///
 /// * `packages` - Optional list of packages to check. If empty, checks all packages in the workspace.
-/// * `baseline` - Git ref for optional semver comparison.
+/// * `baseline` - Git ref for optional baseline diff comparison. When not provided, outputs APIs to stdout.
+/// * `snapshot` - Whether to generate API snapshot files to disk.
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
     packages: &[String],
     baseline: Option<&str>,
+    snapshot: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
-    let _progress = ProgressGuard::new();
+    let mut progress = ProgressGuard::new();
     rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
-    check_apis(sh, &packages, baseline)?;
+    let mut package_diffs = Vec::new();
+    let mut package_apis: Vec<(String, PackageApis)> = Vec::new();
+
+    for package in packages {
+        let api_config = ApiConfig::load(&package.dir)?;
+
+        if !api_config.enabled {
+            continue;
+        }
+
+        rbmt_eprintln!("API check enabled in {}", package.name);
+
+        let current_apis = get_package_apis(sh, &package.name, &package.dir)?;
+        check_private_deps(&package.name, &current_apis, &api_config.private)?;
+
+        if snapshot || api_config.snapshot {
+            write_api_files(&package, &current_apis)?;
+        }
+        if let Some(baseline) = baseline {
+            if let Some(package_diff) = check_baseline(sh, &package, baseline, current_apis)? {
+                package_diffs.push(package_diff);
+            }
+        } else {
+            package_apis.push((package.name.clone(), current_apis));
+        }
+    }
+
+    if !package_diffs.is_empty() {
+        return Err(Box::new(ApiDiffError { package_diffs }));
+    }
+
+    // Output all APIs by default.
+    if baseline.is_none() {
+        progress.disable();
+        for (package_name, feature_apis) in package_apis {
+            for (feature_config, api) in feature_apis {
+                println!("--- {} API ({})", package_name, feature_config.name());
+                let context = ItemContext::new(&api);
+                for item in api.items() {
+                    println!("{}", context.format(item));
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -169,201 +350,72 @@ fn get_package_apis(
     Ok(apis)
 }
 
-/// Format API with context per-item.
-///
-/// Uses `parent_id` relationships from rustdoc to annotate items with their context.
-fn format_api(api: &public_api::PublicApi) -> String {
-    let items: Vec<_> = api.items().collect();
-    let mut lines = Vec::new();
-
-    // Build a map of id to item for lookups.
-    let id_to_item: HashMap<_, _> = items.iter().map(|item| (item.id(), item)).collect();
-
-    for item in &items {
-        let mut item_str = item.to_string();
-
-        // If this item has a parent, possibly add more context to the item.
-        if let Some(parent_id) = item.parent_id() {
-            if let Some(parent_item) = id_to_item.get(&parent_id) {
-                // Annotate if parent is a trait impl (has "for" keyword).
-                if parent_item.tokens().any(
-                    |token| matches!(token, public_api::tokens::Token::Keyword(kw) if kw == "for"),
-                ) {
-                    item_str = format!("  {} [impl: {}]", item_str, parent_item);
-                }
-            }
-        }
-
-        lines.push(item_str);
-    }
-
-    lines.join("\n")
-}
-
-/// Check API files for all packages.
-///
-/// For each package, generates public API files for different feature configurations,
-/// validates that features are additive, and checks for git changes.
-fn check_apis(
-    sh: &Shell,
-    package_info: &[Package],
-    baseline: Option<&str>,
+/// Write API files to disk.
+fn write_api_files(
+    package: &Package,
+    apis: &PackageApis,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut api_dirs: Vec<PathBuf> = Vec::new();
-
-    for package in package_info {
-        let api_config = ApiConfig::load(&package.dir)?;
-
-        if !api_config.enabled {
-            continue;
-        }
-
-        check_api_excluded(&package.dir, &package.name)?;
-        let mut apis = get_package_apis(sh, &package.name, &package.dir)?;
-
-        // Write API files into the package's own api/ directory.
-        let package_api_dir = package.dir.join(API_DIR);
-        fs::create_dir_all(&package_api_dir)?;
-        api_dirs.push(package_api_dir.clone());
-
-        for (config, public_api) in &apis {
-            let output_file = package_api_dir.join(config.filename());
-            let api_display = format_api(public_api);
-            fs::write(&output_file, api_display)?;
-        }
-
-        // Check that features are additive (all-features contains everything from no-features).
-        let no_features =
-            apis.remove(&FeatureConfig::None).ok_or("No-features config not found")?;
-        let all_features =
-            apis.remove(&FeatureConfig::All).ok_or("All-features config not found")?;
-
-        let diff = public_api::diff::PublicApiDiff::between(no_features, all_features);
-
-        if !diff.removed.is_empty() || !diff.changed.is_empty() {
-            println!("Non-additive features detected in {}:", package.name);
-
-            if !diff.removed.is_empty() {
-                println!("  Items removed when enabling features:");
-                for item in &diff.removed {
-                    println!("    - {}", item);
-                }
-            }
-
-            if !diff.changed.is_empty() {
-                println!("  Items changed when enabling features:");
-                for item in &diff.changed {
-                    println!("    - old: {}", item.old);
-                    println!("      new: {}", item.new);
-                }
-            }
-
-            return Err("Non-additive features detected".into());
-        }
-
-        if let Some(baseline) = baseline {
-            check_semver(sh, &package.name, &package.dir, baseline)?;
-        }
-    }
-
-    for api_dir in &api_dirs {
-        let status_output = rbmt_cmd!(sh, "git status --porcelain {api_dir}").read()?;
-        if !status_output.trim().is_empty() {
-            // Show the diff for context.
-            rbmt_cmd!(sh, "git diff --color=always {api_dir}").run()?;
-            return Err(format!(
-                "You have introduced changes to the public API, commit the changes to {} currently in your working directory",
-                api_dir.display()
-            ).into());
-        }
-    }
-
-    Ok(())
-}
-
-/// Check that the package's manifest excludes the `api/` directory from publishing.
-fn check_api_excluded(
-    package_dir: &Path,
-    package_name: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let manifest = Manifest::read(package_dir)?;
-
+    // Check that the package's manifest excludes the `api/` directory from publishing.
+    let manifest = Manifest::read(&package.dir)?;
     if !manifest.exclude.iter().any(|e| e.starts_with("api")) {
         return Err(format!(
             "Package '{}' has an api/ directory but does not exclude it from publishing. \
              Add \"api\" to the `exclude` list in {}/Cargo.toml.",
-            package_name,
-            package_dir.display(),
+            package.name,
+            package.dir.display(),
         )
         .into());
     }
 
+    let package_api_dir = package.dir.join(API_DIR);
+    fs::create_dir_all(&package_api_dir)?;
+    for (config, public_api) in apis {
+        let output_file = package_api_dir.join(config.filename());
+        let context = ItemContext::new(public_api);
+        let api_display =
+            public_api.items().map(|item| context.format(item)).collect::<Vec<_>>().join("\n");
+        fs::write(&output_file, api_display)?;
+    }
     Ok(())
 }
 
-/// Run semver compatibility check against a baseline ref.
-///
-/// Compares the current all-features API against the baseline to report removed, changed, and
-/// added items. This check is informational and never fails, it just prints a summary of API
-/// differences to help maintainers assess semver impact.
-///
-/// Only checks the all-features configuration. This means items that were moved behind a
-/// feature gate (from unconditional to `#[cfg(feature = "...")]`) will not be detected as
-/// removed, since they still appear in the all-features API. Detecting such changes would
-/// require checking every feature combination from the baseline.
-fn check_semver(
+/// Compare current APIs against a baseline ref, return diffs for any feature sets with API changes.
+fn check_baseline(
     sh: &Shell,
-    package_name: &str,
-    package_dir: &PathBuf,
+    package: &Package,
     baseline: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Running semver check against baseline: {}", baseline);
+    current_apis: PackageApis,
+) -> Result<Option<PackageDiff>, Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Comparing against baseline: {}", baseline);
 
-    let mut current_apis = get_package_apis(sh, package_name, package_dir)?;
     let mut baseline_apis = {
         let _guard = git::GitSwitchGuard::new(sh, baseline)?;
-        get_package_apis(sh, package_name, package_dir)?
+        get_package_apis(sh, &package.name, &package.dir)?
     };
 
-    let baseline_api = baseline_apis
-        .remove(&FeatureConfig::All)
-        .ok_or("All-features config not found in baseline")?;
-    let current_api = current_apis
-        .remove(&FeatureConfig::All)
-        .ok_or("All-features config not found in current")?;
+    let mut feature_diffs = Vec::new();
+    for (feature_config, current_api) in current_apis {
+        let baseline_api = baseline_apis.remove(&feature_config).ok_or(format!(
+            "Feature {:?} not found in baseline for {}",
+            feature_config, package.name
+        ))?;
 
-    let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
-
-    println!("Semver check vs {}:", baseline);
-
-    if !diff.removed.is_empty() {
-        println!("  Removed (possibly breaking):");
-        for item in &diff.removed {
-            println!("    - {}", item);
+        let baseline_context = ItemContext::new(&baseline_api);
+        let current_context = ItemContext::new(&current_api);
+        let diff = public_api::diff::PublicApiDiff::between(baseline_api, current_api);
+        if !diff.is_empty() {
+            feature_diffs.push(FeatureDiff {
+                feature_config,
+                diff,
+                baseline_context,
+                current_context,
+            });
         }
     }
 
-    if !diff.changed.is_empty() {
-        println!("  Changed (possibly breaking):");
-        for item in &diff.changed {
-            println!("    old: {}", item.old);
-            println!("    new: {}", item.new);
-        }
+    if feature_diffs.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(PackageDiff { package_name: package.name.clone(), feature_diffs }))
     }
-
-    if !diff.added.is_empty() {
-        println!("  Added:");
-        for item in &diff.added {
-            println!("    + {}", item);
-        }
-    }
-
-    println!(
-        "  Summary: {} removed, {} changed, {} added",
-        diff.removed.len(),
-        diff.changed.len(),
-        diff.added.len()
-    );
-
-    Ok(())
 }

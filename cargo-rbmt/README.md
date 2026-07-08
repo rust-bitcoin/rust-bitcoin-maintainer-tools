@@ -68,25 +68,27 @@ All of `cargo-rbmt`'s subcommands use one of the existing lockfiles (minimal, ma
 
 ### api
 
-The `api` command helps maintain API stability by generating public API snapshots and checking for breaking changes. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate to analyze a crate's public interface.
+The `api` command helps maintain API stability by generating and diff'ing a package's public API. It uses the [public-api](https://github.com/Enselic/cargo-public-api) crate under the hood.
 
 > **NOTE:** `api` has an implicit dependency on the version of the nightly toolchain since it relies on an unstable docsrs interface. Currently, it requires [*nightly-2025-08-02* or later](https://github.com/cargo-public-api/cargo-public-api/blob/main/README.md#compatibility-matrix).
 
-```bash
-cargo rbmt api
+```toml
+[api]
+enabled = true
+snapshot = false
+features = [ ["alloc"], ["alloc", "serde"] ]
+private = ["bitcoin-internals"]
 ```
 
-1. Generates API snapshots for feature configurations.
-2. Validates that features are additive (enabling features only adds to the API, never removes).
-3. Checks for uncommitted changes to API files.
-
-The generated API files are stored in `api/<package-name>/`.
+A package must opt-in to api checking through the `api.enabled` configuration since it can be quite noisy during heavy development. Since a package's API depends on what features are enabled, no features enabled and all features enabled are always generated. Specific feature sets can be added through the `api.features` configuration.
 
 ```bash
-cargo rbmt api --baseline v0.1.0
+cargo rbmt api --snapshot --baseline v0.1.0
 ```
 
-Compares the current API against a baseline git reference (tag, branch, or commit) to detect breaking changes.
+If the `--snapshot` flag is passed in, API files are generated under `<package-dir>/api/<feature-set>/`. If the `--baseline` flag is set, the current APIs are compared to their versions at the given git ref. An error is thrown on *any* changes so that they can be further analyzed.
+
+If there are dependencies which should not be a part of the public API, they can be listed in the `private` config. The command will fail if they are detected. This is a hack until RFC #3516 lands in cargo.
 
 #### `#[doc(hidden)]` policy
 
@@ -94,7 +96,7 @@ Items marked with `#[doc(hidden)]` are *excluded from API snapshots and breaking
 
 ### docs
 
-The `docs` and `docsrs` commands build documentation following the convention in the rust-bitcoin ecosystem.
+The `docs` command builds documentation following the convention in the rust-bitcoin ecosystem.
 
 ```bash
 cargo rbmt docs

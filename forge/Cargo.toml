@@ -6,7 +6,7 @@ description = "CLI tool for common rust-bitcoin forge patterns"
 repository = "https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools"
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 
 [[bin]]
 name = "forge"
