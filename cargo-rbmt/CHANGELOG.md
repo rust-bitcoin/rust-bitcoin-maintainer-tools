@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Add `--no-update` to toolchain install to avoid network requests speeding up test matrix execution.
+
 ## [0.5.1] - 2026-07-15
 
 * Fix bug in `run` where package name instead of package ID are passed to cargo.

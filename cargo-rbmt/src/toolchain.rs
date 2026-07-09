@@ -22,11 +22,14 @@ use toml_edit::DocumentMut;
 use xshell::Shell;
 
 use crate::environment::{get_workspace_root, CmdExt, WorkspaceManifest};
+use crate::semantic_version::Version;
 
 /// Fixed components installed on every toolchain.
 const COMPONENTS: &str = "rust-src,clippy,rustfmt";
 /// Fixed target installed on every toolchain (for no-std cross-compilation testing).
 const TARGET: &str = "thumbv7m-none-eabi";
+/// Minimum rustup version that supports --no-update flag.
+const MIN_RUSTUP_VERSION_NO_UPDATE: Version = Version { major: 1, minor: 29, patch: 0 };
 
 /// Where the toolchain pins were found in the root `Cargo.toml`.
 ///
@@ -75,7 +78,7 @@ struct ToolchainsConfig {
 /// subprocesses without repeating the `+toolchain` flag on every inner call.
 const RUSTUP_TOOLCHAIN: &str = "RUSTUP_TOOLCHAIN";
 
-/// Toolchain requirement for a task.
+/// The class of toolchain required for a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Toolchain {
     /// Nightly toolchain.
@@ -226,20 +229,43 @@ impl Toolchain {
     }
 }
 
+/// Get the installed rustup version.
+fn rustup_version(sh: &Shell) -> Result<Version, Box<dyn std::error::Error>> {
+    let version_output = rbmt_cmd!(sh, "rustup --version").read()?;
+
+    // Extract version from "rustup 1.29.0 (date)"
+    if let Some(version_str) = version_output.split_whitespace().nth(1) {
+        if let Some(version) = Version::parse(version_str) {
+            return Ok(version);
+        }
+    }
+
+    Err("Could not parse rustup version".into())
+}
+
 /// Install a single toolchain with the fixed components and target using `rustup`.
 pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing toolchain {}", toolchain);
 
-    // --no-self-update keeps rustup from updating itself, not related to toolchains.
-    rbmt_cmd!(
+    let mut install_cmd = rbmt_cmd!(
         sh,
-        "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET} --no-self-update"
+        "rustup toolchain install {toolchain} --component {COMPONENTS} --target {TARGET}"
     )
+    // --no-self-update keeps rustup from updating itself, not related to toolchains.
+    .arg("--no-self-update")
     // An unstable fallback feature which makes updating toolchains more robust
     // when working inside containers (the usual for CI actions). Should not
     // have any effect elsewhere.
-    .env("RUSTUP_PERMIT_COPY_RENAME", "true")
-    .run_with_capture()?;
+    .env("RUSTUP_PERMIT_COPY_RENAME", "true");
+
+    if rustup_version(sh)? >= MIN_RUSTUP_VERSION_NO_UPDATE {
+        // --no-update skips syncing channel metadata (a network call) if the toolchain is already installed.
+        // This does introduce a potential for a previouly installed toolchain to have the wrong
+        // components/target, but a user can just re-install.
+        install_cmd = install_cmd.arg("--no-update");
+    }
+
+    install_cmd.run_with_capture()?;
     Ok(())
 }
 

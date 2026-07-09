@@ -14,6 +14,7 @@ mod lint;
 mod lock;
 mod prerelease;
 mod run;
+mod semantic_version;
 mod test;
 mod toolchain;
 mod toolchains;
