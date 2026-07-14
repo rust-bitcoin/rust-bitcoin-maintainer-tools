@@ -41,7 +41,7 @@ pub fn run(
         }
         // Add package flags after subcommand, but before other arguments.
         for pkg in &resolved_packages {
-            cmd = cmd.arg("-p").arg(&pkg.name);
+            cmd = cmd.arg("-p").arg(&pkg.id);
         }
         // Add remaining arguments (skip first which was the subcommand).
         if cargo_args.len() > 1 {
