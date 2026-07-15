@@ -1,6 +1,6 @@
 [package]
 name = "cargo-rbmt"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Nick Johnson <nick@yonson.dev>"]
 description = "Maintainer tools for rust-bitcoin projects"
 repository = "https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools"
