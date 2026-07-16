@@ -218,6 +218,15 @@ fn check_duplicate_deps(
         let output = cargo_cmd(sh).args(CARGO_TREE_ARGS).ignore_status().read()?;
 
         let tree = DuplicateTree::parse(&output, &config.allowed_duplicates);
+
+        if !tree.semver_trick_packages().is_empty() {
+            rbmt_eprintln!(
+                "Found semver trick duplicates in {}: {}",
+                package.name,
+                tree.semver_trick_packages().join(", ")
+            );
+        }
+
         if !tree.duplicates().is_empty() {
             duplicate_deps.push((package.name.clone(), output));
         }
@@ -331,30 +340,41 @@ impl Dependency {
 /// Maps each duplicate crate name to the list of versions found, where each version records which
 /// workspace members are responsible for pulling it in (at any depth in the inverted tree).
 struct DuplicateTree {
+    /// The name of the crate with duplicates mapped to the versions, which are in turn mapped
+    /// to the workspace packages which pulled them in. Trees are used to keep keys sorted.
+    ///
     /// ```text
     /// "hex-conservative" -> {
-    ///     "v0.2.0" -> {"pkg1"},
-    ///     "v0.3.0" -> {"pkg2", "pkg3"},
+    ///     "v0.2.0" -> {"workspace_pkg1"},
+    ///     "v0.3.0" -> {"workspace_pkg2", "workspace_pkg3"},
     /// }
     /// ```
-    inner: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
+    duplicate_crates: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
     /// Entries from `allowed_duplicates` that did not appear as actual duplicates
     /// in the tree. These are stale and should be removed from the allowlist.
     stale_allowed: Vec<String>,
+    /// Workspace packages detected as using the semver trick pattern. These are intentional
+    /// duplicates where the current version depends on a newer version of the same crate.
+    semver_tricks: Vec<String>,
 }
 
 impl DuplicateTree {
     /// Parse the raw output of `cargo tree --duplicates --prefix depth`.
     fn parse(output: &str, allowed_duplicates: &[String]) -> Self {
-        let mut inner: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> = BTreeMap::new();
+        let mut duplicate_crates: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> =
+            BTreeMap::new();
         // Current duplicate version being parsed.
         let mut current_duplicate: Option<(String, String)> = None;
         // Track which allowed entries actually appeared as duplicates in the tree.
         let mut seen_allowed_duplicate: HashSet<String> = HashSet::new();
+        // Track crates detected as using the semver trick pattern.
+        let mut semver_tricks: Vec<String> = Vec::new();
 
         for line in output.lines() {
             let Some(dep) = Dependency::parse(line) else { continue };
 
+            // Depth-0 is a duplicate crate, we initialize it in the duplicate map, but still
+            // need to track down what package is pulling in the duplicate version.
             if dep.depth == 0 {
                 // Skip crates that are explicitly allowed to have duplicate versions,
                 // but record that they were actually seen as duplicates.
@@ -364,19 +384,40 @@ impl DuplicateTree {
                     continue;
                 }
                 // Start of a new version block. Ensure a slot exists for this (name, version).
-                inner.entry(dep.name.clone()).or_default().entry(dep.version.clone()).or_default();
+                duplicate_crates
+                    .entry(dep.name.clone())
+                    .or_default()
+                    .entry(dep.version.clone())
+                    .or_default();
                 current_duplicate = Some((dep.name, dep.version));
-            } else if let Some((ref name, ref version)) = current_duplicate {
+            } else if let Some((ref duplicate_name, ref duplicate_version)) = current_duplicate {
+                // Check if this depth-1 line is the same crate at a different version.
+                // This is the semver trick pattern, an older version depends on a newer version
+                // of the same crate and re-exports its types.
+                if dep.depth == 1
+                    && dep.name == *duplicate_name
+                    && !semver_tricks.contains(duplicate_name)
+                {
+                    semver_tricks.push(duplicate_name.clone());
+                }
+
                 // Any line beneath depth-0 traces the path by which this version is included.
-                // Only track workspace members (those with actual paths, not external crates).
+                // Only track workspace members which pull in duplicates (those with actual paths,
+                // not external crates).
                 if dep.is_workspace_member {
-                    if let Some(members) =
-                        inner.get_mut(name).and_then(|versions| versions.get_mut(version))
+                    if let Some(members) = duplicate_crates
+                        .get_mut(duplicate_name)
+                        .and_then(|versions| versions.get_mut(duplicate_version))
                     {
                         members.insert(dep.name.clone());
                     }
                 }
             }
+        }
+
+        // Filter out semver trick duplicates from the results.
+        for crate_name in &semver_tricks {
+            duplicate_crates.remove(crate_name);
         }
 
         // Any allowed entry never seen at depth-0 is no longer duplicated and should be removed.
@@ -386,14 +427,19 @@ impl DuplicateTree {
             .cloned()
             .collect();
 
-        Self { inner, stale_allowed }
+        Self { duplicate_crates, stale_allowed, semver_tricks }
     }
 
     /// All duplicate crates found in the tree.
-    fn duplicates(&self) -> &BTreeMap<String, BTreeMap<String, BTreeSet<String>>> { &self.inner }
+    fn duplicates(&self) -> &BTreeMap<String, BTreeMap<String, BTreeSet<String>>> {
+        &self.duplicate_crates
+    }
 
     /// Entries from `allowed_duplicates` that are no longer actually duplicated in the tree.
     fn stale_allowed_duplicates(&self) -> &[String] { &self.stale_allowed }
+
+    /// Duplicates detected as using the semver trick pattern.
+    fn semver_trick_packages(&self) -> &[String] { &self.semver_tricks }
 
     /// Returns cross-package duplicates, crates with different versions pulled in by
     /// different workspace members.
@@ -468,7 +514,7 @@ impl DuplicateTree {
     /// { "foo" -> { "v0.1.0" -> {"pkg1"}, "v0.2.0" -> {"pkg2"} } }
     /// ```
     fn cross_package_duplicates(&self) -> BTreeMap<&str, &BTreeMap<String, BTreeSet<String>>> {
-        self.inner
+        self.duplicate_crates
             .iter()
             // Filter out per-package duplicates.
             .filter(|(_, versions)| {
@@ -708,5 +754,43 @@ mod tests {
 ";
         let tree = DuplicateTree::parse(output, &[]);
         assert!(tree.stale_allowed_duplicates().is_empty());
+    }
+
+    #[test]
+    fn semver_trick_detected_and_filtered() {
+        let output = "\
+0units v0.4.1
+1units v0.5.0 (https://github.com/...)
+2other_dep v1.0.0
+
+0units v0.5.0
+1another_dep v2.0.0
+";
+        let tree = DuplicateTree::parse(output, &[]);
+        // Both versions should be filtered out as semver trick.
+        assert!(tree.duplicates().is_empty(), "semver trick duplicates should be filtered");
+        assert!(tree.semver_trick_packages().contains(&"units".to_string()));
+    }
+
+    #[test]
+    fn semver_trick_only_filters_matching_crate() {
+        let output = "\
+0my_crate v0.4.1
+1my_crate v0.5.0 (https://...)
+
+0my_crate v0.5.0
+1other_dep v1.0.0
+
+0hex_conservative v0.1.0
+1pkg1 v0.1.0
+
+0hex_conservative v0.2.0
+1pkg2 v0.1.0
+";
+        let tree = DuplicateTree::parse(output, &[]);
+        // my_crate should be filtered as semver trick.
+        assert!(!tree.duplicates().contains_key("my_crate"));
+        assert!(tree.duplicates().contains_key("hex_conservative"));
+        assert!(tree.semver_trick_packages().contains(&"my_crate".to_string()));
     }
 }
