@@ -8,7 +8,7 @@
 
 ## [0.5.0] - 2026-07-08
 
-* [BREAKING] Combine `docs` and `docsrs` into one `docs` command which runs both by default.
+* [BREAKING] Combine `docs` and `docsrs` into one `docs` command which runs docsrs mode by default. Use `--no-docsrs` for the stable toolchain docs build.
 * Add private dependency leaks in public api detection to `api`.
 * [BREAKING] Refactor the `api` command around diff detection.
 * Fix discrepancy between `nightly` toolchain commit date vs. publish date.
