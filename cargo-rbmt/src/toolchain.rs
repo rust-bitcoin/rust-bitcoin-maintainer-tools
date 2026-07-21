@@ -269,14 +269,6 @@ pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std:
     Ok(())
 }
 
-/// Reinstall a toolchain by uninstalling and then installing fresh using `rustup`.
-/// Used as a fallback when the normal install fails (e.g., due to overlayfs issues in containers).
-pub fn reinstall_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    rbmt_eprintln!("Uninstalling toolchain {}", toolchain);
-    rbmt_cmd!(sh, "rustup toolchain uninstall {toolchain}").ignore_stdout().run()?;
-    install_toolchain(sh, toolchain)
-}
-
 /// Ensures a [`Toolchain`] is ready for use (see [`prepare_toolchain_with_override`]).
 pub fn prepare_toolchain(
     sh: &Shell,
@@ -309,10 +301,7 @@ pub fn prepare_toolchain_with_override(
         .or_else(|| required.try_read_version(sh))
     {
         if rbmt_cmd!(sh, "rustup --version").ignore_stderr().read().is_ok() {
-            if let Err(e) = install_toolchain(sh, version) {
-                rbmt_eprintln!("Install failed, retrying with reinstall: {}", e);
-                reinstall_toolchain(sh, version)?;
-            }
+            install_toolchain(sh, version)?;
             sh.set_var(RUSTUP_TOOLCHAIN, version.clone());
         }
     }
