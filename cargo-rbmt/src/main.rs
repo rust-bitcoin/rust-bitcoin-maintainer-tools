@@ -14,6 +14,7 @@ mod lint;
 mod lock;
 mod prerelease;
 mod run;
+mod semantic_version;
 mod test;
 mod toolchain;
 mod toolchains;
@@ -141,6 +142,9 @@ enum Commands {
         /// Print the stable toolchain version and exit without installing any toolchains.
         #[arg(long)]
         stable: bool,
+        /// Force fresh toolchain installs, maay help fix missing components.
+        #[arg(long)]
+        force: bool,
     },
     /// Install tools pinned in [workspace.metadata.rbmt.tools].
     Tools {
@@ -226,9 +230,9 @@ fn main() {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },
-        Commands::Toolchains { update_nightly, update_stable, msrv, nightly, stable } =>
+        Commands::Toolchains { update_nightly, update_stable, msrv, nightly, stable, force } =>
             if let Err(e) =
-                toolchains::run(&sh, update_nightly, update_stable, msrv, nightly, stable)
+                toolchains::run(&sh, update_nightly, update_stable, msrv, nightly, stable, force)
             {
                 eprintln!("Error setting up toolchains: {}", e);
                 process::exit(1);
