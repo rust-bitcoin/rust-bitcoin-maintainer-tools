@@ -16,7 +16,7 @@
 * Push `--lockfile` arg to be per-subcommand since about half of the subcommands don't use it.
 * Add version check at runtime if `workspace.metadata.rbmt.version` is set to a semver or hash value to ensure the right version of `cargo-rbmt` is running.
 
-# [0.4.1] - 2026-06-24
+## [0.4.1] - 2026-06-24
 
 * Fix windows support with correct internal `Path` usage.
 * Fix `docs`/`docsrs` bug where a package with no examples is a no-op.
