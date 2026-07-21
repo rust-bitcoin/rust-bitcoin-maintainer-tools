@@ -244,7 +244,11 @@ fn rustup_version(sh: &Shell) -> Result<Version, Box<dyn std::error::Error>> {
 }
 
 /// Install a single toolchain with the fixed components and target using `rustup`.
-pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn install_toolchain(
+    sh: &Shell,
+    toolchain: &str,
+    force: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing toolchain {}", toolchain);
 
     let mut install_cmd = rbmt_cmd!(
@@ -258,10 +262,13 @@ pub fn install_toolchain(sh: &Shell, toolchain: &str) -> Result<(), Box<dyn std:
     // have any effect elsewhere.
     .env("RUSTUP_PERMIT_COPY_RENAME", "true");
 
-    if rustup_version(sh)? >= MIN_RUSTUP_VERSION_NO_UPDATE {
+    if force {
+        // --force forces an update to iron out some missing components.
+        install_cmd = install_cmd.arg("--force");
+    } else if rustup_version(sh)? >= MIN_RUSTUP_VERSION_NO_UPDATE {
         // --no-update skips syncing channel metadata (a network call) if the toolchain is already installed.
-        // This does introduce a potential for a previouly installed toolchain to have the wrong
-        // components/target, but a user can just re-install.
+        // This does introduce a potential for a previously installed toolchain to have the wrong
+        // components/target, but a user can use --force to re-install.
         install_cmd = install_cmd.arg("--no-update");
     }
 
@@ -301,7 +308,7 @@ pub fn prepare_toolchain_with_override(
         .or_else(|| required.try_read_version(sh))
     {
         if rbmt_cmd!(sh, "rustup --version").ignore_stderr().read().is_ok() {
-            install_toolchain(sh, version)?;
+            install_toolchain(sh, version, false)?;
             sh.set_var(RUSTUP_TOOLCHAIN, version.clone());
         }
     }

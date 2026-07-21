@@ -26,6 +26,7 @@ pub fn run(
     msrv: bool,
     nightly: bool,
     stable: bool,
+    force: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _progress = ProgressGuard::new();
     if msrv {
@@ -58,7 +59,7 @@ pub fn run(
     }
 
     let nightly_status = if let Some(version) = Toolchain::Nightly.try_read_version(sh) {
-        install_toolchain(sh, &version)?;
+        install_toolchain(sh, &version, force)?;
         version
     } else {
         rbmt_eprintln!("No pinned nightly toolchain found in [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains]");
@@ -66,7 +67,7 @@ pub fn run(
     };
 
     let stable_status = if let Some(version) = Toolchain::Stable.try_read_version(sh) {
-        install_toolchain(sh, &version)?;
+        install_toolchain(sh, &version, force)?;
         version
     } else {
         rbmt_eprintln!("No pinned stable toolchain found in [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains]");
@@ -74,7 +75,7 @@ pub fn run(
     };
 
     let msrv_status = if let Some(version) = Toolchain::Msrv.try_read_version(sh) {
-        install_toolchain(sh, &version)?;
+        install_toolchain(sh, &version, force)?;
         version
     } else {
         rbmt_eprintln!("No MSRV (rust-version) found in any Cargo.toml in the workspace");
