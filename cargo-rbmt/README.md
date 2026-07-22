@@ -153,9 +153,9 @@ allowed_duplicates = [
 
 To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` can generate lockfiles for different version scenarios.
 
-* `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints. Verifies that direct dependency versions aren't being bumped by transitive dependencies.
-* `Cargo-maximum.lock` - Maximum versions that satisfy your dependency constraints. Verifies new updates do not break.
-* `Cargo-recent.lock` - Recent versions start out the same as maximum, but are conservatively updated. Versions are only increased if needed due to new dependency constraints.
+* `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints. Verifies that direct dependency versions aren't being bumped by transitive dependencies. This is the most rigorous test for a workspace's dependency constraints.
+* `Cargo-maximum.lock` - Maximum versions that satisfy your dependency constraints. Verifies new dependency versions, in other words, that the workspace is forwards compatible. This could cause churn if upstream dependencies are not very stable.
+* `Cargo-recent.lock` - Recent versions start out the same as maximum, but are conservatively updated. Versions are only increased if needed due to new dependency constraints. This is a middle ground which optimizes stability since a workspace is not exposed to unstable upstream dependencies.
 
 The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against any version set.
 
