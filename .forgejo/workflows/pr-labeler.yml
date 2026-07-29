@@ -1,0 +1,85 @@
+name: PR Labeler
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  label-pr:
+    runs-on: debian-trixie
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+        with:
+          persist-credentials: false
+
+      - name: Label PR based on changed files
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import urllib.request
+          import urllib.error
+
+          repo = os.environ['FORGEJO_REPOSITORY']
+          pr_number = os.environ['FORGEJO_PULL_REQUEST']
+          server = os.environ['FORGEJO_SERVER_URL']
+          token = os.environ['FORGEJO_TOKEN']
+
+          file_paths_to_labels = {
+              'bitcoind/': 'C-bitcoind',
+              'bitreq/': 'C-bitreq',
+              'client/': 'C-client',
+              'electrsd/': 'C-electrsd',
+              'integration_test/': 'C-integration-test',
+              'jsonrpc/': 'C-jsonrpc',
+              'types/': 'C-types',
+              'verify/': 'C-verify',
+          }
+
+          def forgejo_request(path, method='GET', data=None):
+              url = f"{server}/api/v1/repos/{repo}{path}"
+              req = urllib.request.Request(url, method=method)
+              req.add_header('Authorization', f'token {token}')
+              req.add_header('Content-Type', 'application/json')
+              if data is not None:
+                  data = json.dumps(data).encode()
+              try:
+                  with urllib.request.urlopen(req, data=data) as resp:
+                      body = resp.read().decode()
+                      return json.loads(body) if body else None
+              except urllib.error.HTTPError as exc:
+                  body = exc.read().decode()
+                  raise SystemExit(f"Forgejo API request failed: {exc.code} {body}")
+
+          changed_files = forgejo_request(f"/pulls/{pr_number}/files")
+          labels_to_add = set()
+          for file_info in changed_files:
+              path = file_info['filename']
+              for prefix, label in file_paths_to_labels.items():
+                  if path.startswith(prefix):
+                      labels_to_add.add(label)
+                      break
+
+          all_known_labels = set(file_paths_to_labels.values())
+          current_labels = forgejo_request(f"/issues/{pr_number}/labels")
+          current_label_names = {label['name'] for label in current_labels}
+
+          if labels_to_add:
+              forgejo_request(
+                  f"/issues/{pr_number}/labels",
+                  method='POST',
+                  data={'labels': sorted(labels_to_add)},
+              )
+
+          for label in current_label_names:
+              if label in all_known_labels and label not in labels_to_add:
+                  forgejo_request(
+                      f"/issues/{pr_number}/labels/{label}",
+                      method='DELETE',
+                  )
+          PY

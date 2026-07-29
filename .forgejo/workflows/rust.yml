@@ -1,0 +1,231 @@
+---   # rust-bitcoin CI: If you edit this file please update README.md
+on:   # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - master
+      - 'test-ci/**'
+  pull_request:
+
+name: Continuous integration
+
+env:
+  RUSTUP_HOME: /home/ci/tmp
+  CARGO_HOME: /home/ci/tmp/.cargo
+
+jobs:
+  Test: # 6 jobs: 3 toolchains × 2 lock files.
+    name: Test - ${{ matrix.toolchain }} toolchain (${{ matrix.dep }})
+    runs-on: debian-trixie
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        dep: [minimal, recent]
+        toolchain: [stable, nightly, msrv]
+    steps:
+      - name: Checkout repo
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - uses: ./.forgejo/actions/setup-rbmt
+      - name: Run ${{ matrix.toolchain }} tests
+        run: |
+          cargo rbmt --lock-file ${{ matrix.dep }} test --toolchain ${{ matrix.toolchain }} \
+            -p bitreq \
+            -p corepc-client \
+            -p jsonrpc-fuzz \
+            -p jsonrpc \
+            -p corepc-types
+
+  Lint:
+    name: Lint - nightly toolchain
+    runs-on: debian-trixie
+    env:
+      BITCOIND_SKIP_DOWNLOAD: "1"
+      ELECTRSD_SKIP_DOWNLOAD: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        dep: [recent]
+    steps:
+      - name: Checkout repo
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - uses: ./.forgejo/actions/setup-rbmt
+      - name: Run lints
+        run: |
+          cargo rbmt --lock-file ${{ matrix.dep }} lint \
+            -p bitreq \
+            -p corepc-client \
+            -p jsonrpc-fuzz \
+            -p jsonrpc \
+            -p corepc-types
+          ./contrib/lint-integration-tests.sh
+          ./contrib/lint-verify.sh
+
+  Docs:
+    name: Docs - stable toolchain
+    runs-on: debian-trixie
+    env:
+      BITCOIND_SKIP_DOWNLOAD: "1"
+      ELECTRSD_SKIP_DOWNLOAD: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        dep: [recent]
+    steps:
+      - name: Checkout repo
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - uses: ./.forgejo/actions/setup-rbmt
+      - name: Run doc tests
+        run: cargo rbmt --lock-file ${{ matrix.dep }} docs
+
+  Docsrs:
+    name: Docs - nightly toolchain
+    runs-on: debian-trixie
+    env:
+      BITCOIND_SKIP_DOWNLOAD: "1"
+      ELECTRSD_SKIP_DOWNLOAD: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        dep: [recent]
+    steps:
+      - name: Checkout repo
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - uses: ./.forgejo/actions/setup-rbmt
+      - name: Run docsrs tests
+        run: cargo rbmt --lock-file ${{ matrix.dep }} docsrs
+
+  Format:
+    name: Format - nightly toolchain
+    runs-on: debian-trixie
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Checkout repo
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - uses: ./.forgejo/actions/setup-rbmt
+      - name: Check formatting
+        run: |
+          cargo rbmt fmt --check
+          ./contrib/fmt-integration-tests.sh
+          ./contrib/fmt-verify.sh
+
+  Verify:
+    name: Verify - stable toolchain
+    runs-on: debian-trixie
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Checkout repo
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - run: mkdir -p "$RUSTUP_HOME"
+      - name: Select toolchain
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+      - name: Run the verify program
+        run: cd verify && cargo run all
+
+  Integration:
+    name: Integration tests ${{ matrix.version }} - stable toolchain
+    runs-on: debian-trixie
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        version:
+          [
+            "31_0",
+            "30_2",
+            "29_0",
+            "28_2",
+            "27_2",
+            "26_2",
+            "25_2",
+            "24_2",
+            "23_2",
+            "22_1",
+            "0_21_2",
+            "0_20_2",
+            "0_19_1",
+            "0_18_1",
+            "0_17_2",
+          ]
+    steps:
+      - name: Checkout repo
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - uses: ./.forgejo/actions/setup-rbmt
+      - name: Run integration tests
+        run: |
+          set -o pipefail
+          cache_dir="$PWD/.cache/corepc/bitcoind"
+          mkdir -p "$cache_dir"
+          export BITCOIND_DOWNLOAD_DIR="$cache_dir"
+          test_output="$PWD/integration-test-${{ matrix.version }}.out"
+          cd integration_test
+          cargo test --features=${{ matrix.version }},download 2>&1 | tee "$test_output"
+      - name: Verify integration test coverage
+        run: |
+          test_output="$PWD/integration-test-${{ matrix.version }}.out"
+          verify_version="${{ matrix.version }}"
+          verify_version="${verify_version#0_}"
+          verify_version="${verify_version%%_*}"
+          cd verify
+          cargo run -- --tests "$test_output" "$verify_version"
+
+  test-electrs:
+    name: Test Electrs ${{ matrix.features }}
+    runs-on: debian-trixie
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_LOG: debug
+    strategy:
+      max-parallel: 20
+      matrix:
+        features:
+          - bitcoind_22_1,bitcoind_download,electrs_0_8_10
+          - bitcoind_22_1,bitcoind_download,electrs_0_9_1
+          - bitcoind_22_1,bitcoind_download,electrs_0_9_11
+          - bitcoind_22_1,bitcoind_download,electrs_0_10_6
+      fail-fast: false
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - run: mkdir -p "$RUSTUP_HOME"
+      - name: Select toolchain
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+      - run: cd electrsd && cargo test --no-default-features --features ${{ matrix.features }}
+
+  test-electrs-esplora:
+    name: Test Electrs Esplora ${{ matrix.features }}
+    runs-on: debian-trixie
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_LOG: debug
+    strategy:
+      matrix:
+        features: ["bitcoind_22_1,bitcoind_download,legacy,esplora_a33e97e1"]
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - run: mkdir -p "$RUSTUP_HOME"
+      - name: Select toolchain
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+      - run: cd electrsd && cargo test --no-default-features --features ${{ matrix.features }}
+
+  test-electrs-no-download:
+    name: Test Electrs no auto-download features
+    runs-on: debian-trixie
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_LOG: debug
+      ELECTRSD_SKIP_DOWNLOAD: "1"
+    steps:
+      - run: mkdir -p "$RUSTUP_HOME"
+      - name: Select toolchain
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+      - name: Install electrs
+        uses: https://github.com/baptiste0928/cargo-install@v2
+        with:
+          crate: electrs
+          version: 0.10.6
+          locked: true
+      - run: echo "ELECTRS_EXEC=$HOME/.cargo-install/electrs/bin/electrs" >> "$FORGEJO_ENV"
+      - name: Checkout Crate
+        uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - run: cd electrsd && cargo test --no-default-features --features 'bitcoind_25_2,electrs_0_10_6,bitcoind_download'
