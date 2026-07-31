@@ -4,6 +4,9 @@
 //! rpc_txoutproof.py, rpc_scantxoutset.py, rpc_gettxspendingprevout.py,
 //! rpc_dumptxoutset.py and rpc_getblockstats.py
 
+#[cfg(not(feature = "v23_and_below"))]
+use bitcoin::OutPoint;
+use bitcoin::{Amount, Txid};
 use bitcoind::mtype;
 use bitcoind::vtype::*;
 use integration_test::{BitcoinD, BitcoinDExt as _, Wallet};
@@ -238,7 +241,7 @@ fn get_tx_spending_prevout_for_unspent_output() {
     node.fund_wallet();
     let (_, txid) = node.create_mempool_transaction();
 
-    let outpoints = vec![bitcoin::OutPoint { txid, vout: 0 }];
+    let outpoints = vec![OutPoint { txid, vout: 0 }];
     #[cfg(feature = "v30_and_below")]
     let json: GetTxSpendingPrevout = node.client.get_tx_spending_prevout(&outpoints).unwrap();
     #[cfg(not(feature = "v30_and_below"))]
@@ -403,11 +406,11 @@ fn get_block_stats_v25_actual_utxo_fields() {
     assert!(json.utxo_size_increase_actual.is_some());
 }
 
-fn create_child_spending_parent(node: &BitcoinD, parent: bitcoin::Txid) -> bitcoin::Txid {
+fn create_child_spending_parent(node: &BitcoinD, parent: Txid) -> Txid {
     use bitcoind::{Input, Output};
     let inputs = vec![Input { txid: parent, vout: 0, sequence: None }];
     let addr = node.client.new_address().unwrap();
-    let outputs = vec![Output::new(addr, bitcoin::Amount::from_sat(100_000))];
+    let outputs = vec![Output::new(addr, Amount::from_sat(100_000))];
 
     let raw: CreateRawTransaction = node.client.create_raw_transaction(&inputs, &outputs).unwrap();
     let unsigned = raw.transaction().unwrap();

@@ -5,6 +5,8 @@
 #![allow(non_snake_case)] // Test names intentionally use double underscore.
 
 use bitcoin::hex;
+#[cfg(not(feature = "v20_and_below"))]
+use bitcoin::Amount;
 use bitcoind::mtype;
 use bitcoind::vtype::*;
 use integration_test::{BitcoinD, BitcoinDExt as _, Wallet}; // All the version specific types.
@@ -16,7 +18,7 @@ fn generating__generate_block__modelled() {
     node.fund_wallet();
     let mining_addr = node.client.new_address().expect("failed to get new address");
     let dest_addr = node.client.new_address().expect("failed to get new address");
-    let amount = bitcoin::Amount::from_sat(1_000_000);
+    let amount = Amount::from_sat(1_000_000);
     let txid = node
         .client
         .send_to_address_rbf(&dest_addr, amount)

@@ -10,7 +10,8 @@ use bitcoin::consensus::encode;
 use bitcoin::hex::FromHex as _;
 use bitcoin::opcodes::all::*;
 use bitcoin::{
-    absolute, consensus, hex, psbt, script, transaction, Amount, ScriptBuf, Transaction, TxOut,
+    absolute, consensus, hex, psbt, script, transaction, Address, Amount, Psbt, ScriptBuf,
+    Transaction, TxOut, Txid,
 };
 use bitcoind::vtype::*;
 use bitcoind::{mtype, Input, Output};
@@ -633,11 +634,9 @@ fn create_a_raw_transaction(node: &BitcoinD) -> Transaction {
 }
 
 // Sends a transaction, mines a block then grabs a million sat UTXO from the mined transaction.
-fn create_utxo(
-    node: &BitcoinD,
-) -> (bitcoin::Address, bitcoin::Transaction, bitcoin::Txid, bitcoin::TxOut, u64) {
+fn create_utxo(node: &BitcoinD) -> (Address, Transaction, Txid, TxOut, u64) {
     // TODO: We should probably pass this into `create_mined_transaction`.
-    const MILLION_SATS: bitcoin::Amount = bitcoin::Amount::from_sat(1000000);
+    const MILLION_SATS: Amount = Amount::from_sat(1000000);
 
     let (addr, tx) = node.create_mined_transaction(); // A million sat transaction.
     let txid = tx.compute_txid();
@@ -668,7 +667,7 @@ fn create_utxo(
 }
 
 // Creates a PSBT using client to do RPC call `create_psbt`.
-fn create_a_psbt(node: &BitcoinD) -> bitcoin::Psbt {
+fn create_a_psbt(node: &BitcoinD) -> Psbt {
     let (_addr, _tx, txid, tx_out, vout) = create_utxo(node);
 
     // Assumes tx_out has a million sats in it.

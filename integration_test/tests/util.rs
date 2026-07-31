@@ -5,7 +5,8 @@
 #![allow(non_snake_case)] // Test names intentionally use double underscore.
 #![allow(unused_imports)] // Because of feature gated tests.
 
-use bitcoin::{address, amount, sign_message, PrivateKey, PublicKey};
+use bitcoin::secp256k1::Secp256k1;
+use bitcoin::{address, amount, sign_message, Address, PrivateKey, PublicKey};
 use bitcoind::vtype::*;
 use bitcoind::{mtype, FeeEstimateMode};
 use integration_test::{BitcoinD, BitcoinDExt as _, Wallet};
@@ -122,9 +123,9 @@ fn util__sign_message_with_priv_key__modelled() {
     let message = "integration test message";
 
     // Derive the address from the private key
-    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let secp = Secp256k1::new();
     let pubkey = privkey.public_key(&secp);
-    let addr = bitcoin::Address::p2pkh(pubkey, privkey.network);
+    let addr = Address::p2pkh(pubkey, privkey.network);
 
     // Sign the message with the private key
     let json: SignMessageWithPrivKey =
