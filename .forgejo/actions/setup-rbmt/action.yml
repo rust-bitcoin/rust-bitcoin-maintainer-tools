@@ -18,9 +18,7 @@ runs:
       run: |
         cargo install \
           --locked \
-          --git https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools \
-          --rev $(cat rbmt-version) \
-          cargo-rbmt
+          cargo-rbmt@$(grep '^rbmt.version' Cargo.toml | cut -d'"' -f2)
 
     - name: Install toolchains
       shell: bash
