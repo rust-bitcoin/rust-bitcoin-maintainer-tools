@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 * Add `--no-update` to toolchain install to avoid network requests speeding up test matrix execution.
+* Flip `prerelease.enabled` default to `true` since the version bump detection is usually enough.
 
 ## [0.5.1] - 2026-07-15
 

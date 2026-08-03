@@ -16,11 +16,15 @@ use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(default)]
 struct PrereleaseConfig {
-    /// Whether to run pre-release checks for this package. Defaults to `false`.
+    /// Whether to run pre-release checks for this package. Defaults to `true`.
     enabled: bool,
+}
+
+impl Default for PrereleaseConfig {
+    fn default() -> Self { Self { enabled: true } }
 }
 
 impl PrereleaseConfig {
