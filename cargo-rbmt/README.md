@@ -176,12 +176,12 @@ cargo rbmt test --lockfile maximum
 
 ### prerelease
 
-The `prerelease` command performs readiness checks before releasing a package. Checks are opt-in and only run for packages with `enabled = true` that also have a version bump in `Cargo.toml` since the baseline ref.
+The `prerelease` command performs readiness checks before releasing a package. Checks only run for packages that have a version bump in `Cargo.toml` since the baseline ref.
 
 ```toml
 [package.metadata.rbmt.prerelease]
 enabled = true
-# baseline = "master"  # default
+baseline = "master"
 ```
 
 Use `--force` to run checks regardless of whether a version bump is detected.
