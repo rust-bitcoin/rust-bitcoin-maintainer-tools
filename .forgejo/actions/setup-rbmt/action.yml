@@ -1,0 +1,29 @@
+name: Setup RBMT
+description: Install cargo-rbmt and toolchains for workspace
+
+runs:
+  using: composite
+  steps:
+    - name: Create rustup home
+      shell: bash
+      run: mkdir -p "$RUSTUP_HOME"
+    - name: Install default Rust toolchain
+      shell: bash
+      run: |
+        rustup toolchain install stable --profile minimal --component cargo --component rust-std --component rustc --component rustfmt --component clippy
+        rustup default stable
+
+    - name: Install cargo-rbmt
+      shell: bash
+      run: |
+        cargo install \
+          --locked \
+          cargo-rbmt@$(grep '^rbmt.version' Cargo.toml | cut -d'"' -f2)
+
+    - name: Install toolchains
+      shell: bash
+      run: cargo rbmt toolchains
+
+    - name: Install tools
+      shell: bash
+      run: cargo rbmt tools

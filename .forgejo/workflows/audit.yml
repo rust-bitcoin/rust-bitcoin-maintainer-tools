@@ -1,0 +1,40 @@
+name: Audit
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  schedule:
+    - cron: '0 0 * * *'
+
+env:
+  RUSTUP_HOME: /home/ci/tmp
+  CARGO_HOME: /home/ci/tmp/.cargo
+
+jobs:
+  audit:
+    name: Security audit - ${{ matrix.lockfile }}
+    runs-on: debian-trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        lockfile: [Cargo.lock, Cargo-minimal.lock, Cargo-recent.lock]
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+      - name: Create rustup home
+        run: mkdir -p "$RUSTUP_HOME"
+      - name: Select toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component cargo --component rust-std --component rustc
+          rustup default stable
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - name: Generate fresh Cargo.lock
+        if: ${{ matrix.lockfile == 'Cargo.lock' }}
+        run: cargo generate-lockfile
+      - name: Use ${{ matrix.lockfile }}
+        if: ${{ matrix.lockfile != 'Cargo.lock' }}
+        run: cp ${{ matrix.lockfile }} Cargo.lock
+      - name: Run cargo audit
+        run: cargo audit
