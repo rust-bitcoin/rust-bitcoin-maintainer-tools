@@ -4,8 +4,14 @@
 
 #![allow(non_snake_case)] // Test names intentionally use double underscore.
 
+#[cfg(not(feature = "v22_and_below"))]
+use bitcoin::block::{Header, Version};
 use bitcoin::consensus::encode;
-use bitcoin::hex;
+#[cfg(not(feature = "v23_and_below"))]
+use bitcoin::OutPoint;
+use bitcoin::{hex, Amount, Txid};
+#[cfg(not(feature = "v22_and_below"))]
+use bitcoin::{CompactTarget, TxMerkleNode};
 use bitcoind::vtype::*; // All the version specific types.
 use bitcoind::{mtype, Input, Output};
 use integration_test::{BitcoinD, BitcoinDExt as _, Wallet};
@@ -127,7 +133,7 @@ fn blockchain__load_tx_out_set__modelled() {
 
     assert_eq!(model.base_height, snapshot_height as u32);
     assert_eq!(model.tip_hash, hash_at_height);
-    assert_eq!(model.coins_loaded, bitcoin::Amount::from_btc(110.0).unwrap());
+    assert_eq!(model.coins_loaded, Amount::from_btc(110.0).unwrap());
 }
 
 #[test]
@@ -246,12 +252,12 @@ fn blockchain__get_block_from_peer() {
         .as_secs() as u32;
 
     // Create a dummy header and submit it
-    let mut header = bitcoin::block::Header {
-        version: bitcoin::block::Version::from_consensus(0x20000000),
+    let mut header = Header {
+        version: Version::from_consensus(0x20000000),
         prev_blockhash: node1.client.best_block_hash().expect("best_block_hash failed"),
-        merkle_root: bitcoin::TxMerkleNode::all_zeros(),
+        merkle_root: TxMerkleNode::all_zeros(),
         time: now,
-        bits: bitcoin::CompactTarget::from_consensus(0x207fffff),
+        bits: CompactTarget::from_consensus(0x207fffff),
         nonce: 0,
     };
     let target = header.target();
@@ -600,7 +606,7 @@ fn blockchain__get_mempool_cluster__modelled() {
     // The parent and its child are linearised in the same cluster.
     assert_eq!(cluster.tx_count, 2);
     assert!(cluster.cluster_weight > 0);
-    let cluster_txids: Vec<bitcoin::Txid> =
+    let cluster_txids: Vec<Txid> =
         cluster.chunks.iter().flat_map(|c| c.txs.iter().copied()).collect();
     assert!(cluster_txids.contains(&parent_txid));
     assert!(cluster_txids.contains(&child_txid));
@@ -670,10 +676,7 @@ fn blockchain__get_tx_spending_prevout__modelled() {
     let (_address1, txid_1) = node.create_mempool_transaction();
     let (_address2, txid_2) = node.create_mempool_transaction();
 
-    let inputs = vec![
-        bitcoin::OutPoint { txid: txid_1, vout: 0 },
-        bitcoin::OutPoint { txid: txid_2, vout: 0 },
-    ];
+    let inputs = vec![OutPoint { txid: txid_1, vout: 0 }, OutPoint { txid: txid_2, vout: 0 }];
 
     #[cfg(feature = "v30_and_below")]
     let json: GetTxSpendingPrevout =
@@ -912,10 +915,10 @@ fn blockchain__wait_for_new_block__modelled() {
 
 /// Create and broadcast a child transaction spending vout 0 of the given parent mempool txid.
 /// Returns the child's txid.
-fn create_child_spending_parent(node: &BitcoinD, parent_txid: bitcoin::Txid) -> bitcoin::Txid {
+fn create_child_spending_parent(node: &BitcoinD, parent_txid: Txid) -> Txid {
     let inputs = vec![Input { txid: parent_txid, vout: 0, sequence: None }];
     let spend_address = node.client.new_address().expect("newaddress");
-    let outputs = vec![Output::new(spend_address, bitcoin::Amount::from_sat(100_000))];
+    let outputs = vec![Output::new(spend_address, Amount::from_sat(100_000))];
 
     let raw: CreateRawTransaction =
         node.client.create_raw_transaction(&inputs, &outputs).expect("createrawtransaction");

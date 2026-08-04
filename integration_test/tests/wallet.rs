@@ -36,7 +36,7 @@ fn wallet__abandon_transaction() {
     let block_hash = block_hashes.expect("blockhash").0[0];
 
     let dest_addr = node.client.new_address().expect("newaddress");
-    let amount = bitcoin::Amount::from_sat(1_000_000);
+    let amount = Amount::from_sat(1_000_000);
 
     let txid = node
         .client
@@ -147,11 +147,8 @@ fn wallet__create_wallet_descriptor() {
     let hdkey = xpub.to_string();
 
     // Import the private key into the wallet.
-    let privkey = bitcoin::PrivateKey {
-        compressed: true,
-        network: Network::Regtest.into(),
-        inner: xprv.private_key,
-    };
+    let privkey =
+        PrivateKey { compressed: true, network: Network::Regtest.into(), inner: xprv.private_key };
     let wif = privkey.to_wif();
     let raw_descriptor = format!("wpkh({})", wif);
     let info = node.client.get_descriptor_info(&raw_descriptor).expect("get_descriptor_info");
@@ -454,9 +451,9 @@ fn wallet__import_address() {
         PrivateKey::from_wif("cVt4o7BGAig1UXywgGSmARhxMdzP5qvQsxKkSsc1XEkw3tDTQFpy").unwrap();
 
     // Derive the address from the private key
-    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let secp = secp256k1::Secp256k1::new();
     let pubkey = privkey.public_key(&secp);
-    let addr = bitcoin::Address::p2pkh(pubkey, privkey.network);
+    let addr = Address::p2pkh(pubkey, privkey.network);
 
     let _: () = node.client.import_address(&addr).expect("importaddress");
 }

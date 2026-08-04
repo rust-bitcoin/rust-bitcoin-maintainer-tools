@@ -6,7 +6,8 @@
 #![cfg(not(feature = "v24_and_below"))]
 
 use bitcoin::address::KnownHrp;
-use bitcoin::{Address, CompressedPublicKey, PrivateKey};
+use bitcoin::secp256k1::Secp256k1;
+use bitcoin::{Address, CompressedPublicKey, Network, PrivateKey};
 use corepc_client::client_async::{Auth, Client};
 use integration_test::{BitcoinD, BitcoinDExt as _, Wallet};
 
@@ -100,7 +101,7 @@ async fn get_raw_transaction() {
     let node = BitcoinD::with_wallet(Wallet::None, &["-txindex"]);
     let privkey =
         PrivateKey::from_wif("cVt4o7BGAig1UXywgGSmARhxMdzP5qvQsxKkSsc1XEkw3tDTQFpy").expect("wif");
-    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let secp = Secp256k1::new();
     let pubkey = privkey.public_key(&secp);
     let address = Address::p2wpkh(&CompressedPublicKey(pubkey.inner), KnownHrp::Regtest);
     node.client.generate_to_address(1, &address).expect("generatetoaddress");
@@ -119,7 +120,7 @@ async fn get_tx_out() {
     let node = BitcoinD::with_wallet(Wallet::None, &[]);
     let privkey =
         PrivateKey::from_wif("cVt4o7BGAig1UXywgGSmARhxMdzP5qvQsxKkSsc1XEkw3tDTQFpy").expect("wif");
-    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let secp = Secp256k1::new();
     let pubkey = privkey.public_key(&secp);
     let address = Address::p2wpkh(&CompressedPublicKey(pubkey.inner), KnownHrp::Regtest);
     node.client.generate_to_address(1, &address).expect("generatetoaddress");
@@ -140,7 +141,7 @@ async fn get_blockchain_info() {
     let client = async_client_for(&node);
 
     let got = client.get_blockchain_info().await.unwrap();
-    assert_eq!(got.chain, bitcoin::Network::Regtest);
+    assert_eq!(got.chain, Network::Regtest);
 }
 
 fn auth_for(node: &BitcoinD) -> Auth { Auth::CookieFile(node.params.cookie_file.clone()) }

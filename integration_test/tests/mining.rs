@@ -4,6 +4,8 @@
 
 #![allow(non_snake_case)] // Test names intentionally use double underscore.
 
+#[cfg(not(feature = "v25_and_below"))]
+use bitcoin::hex;
 use bitcoin::SignedAmount;
 use bitcoind::vtype::*;
 use bitcoind::{mtype, TemplateRequest, TemplateRules};
@@ -75,8 +77,7 @@ fn mining__get_prioritised_transactions__modelled() {
 
     let json: GetPrioritisedTransactions =
         node.client.get_prioritised_transactions().expect("getprioritisedtransactions");
-    let model: Result<mtype::GetPrioritisedTransactions, bitcoin::hex::HexToArrayError> =
-        json.into_model();
+    let model: Result<mtype::GetPrioritisedTransactions, hex::HexToArrayError> = json.into_model();
     let model = model.unwrap();
 
     let prioritised_tx = model.0.get(&txid).expect("prioritised transaction should be present");

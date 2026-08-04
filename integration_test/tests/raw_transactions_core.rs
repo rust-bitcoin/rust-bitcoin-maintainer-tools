@@ -2,10 +2,12 @@
 
 //! Tests derived from Bitcoin Core's rpc_rawtransaction.py, rpc_psbt.py and rpc_decodescript.py
 
-#[cfg(not(feature = "v17"))]
-use bitcoin::Amount;
 #[cfg(not(feature = "v21_and_below"))]
 use bitcoin::PublicKey;
+#[cfg(not(feature = "v20_and_below"))]
+use bitcoin::Transaction;
+#[cfg(not(feature = "v17"))]
+use bitcoin::{Amount, Psbt};
 use bitcoind::vtype::*;
 #[cfg(not(feature = "v17"))]
 use bitcoind::{Input, Output};
@@ -66,7 +68,7 @@ fn analyze_psbt_has_estimates_after_wallet_process() {
     let psbt = build_psbt(&node);
     let processed: WalletProcessPsbt = node.client.wallet_process_psbt(&psbt).unwrap();
 
-    let parsed: bitcoin::Psbt = processed.psbt.parse().unwrap();
+    let parsed: Psbt = processed.psbt.parse().unwrap();
     let json: AnalyzePsbt = node.client.analyze_psbt(&parsed).unwrap();
 
     assert!(json.estimated_vsize.is_some());
@@ -231,14 +233,14 @@ fn build_inputs_outputs(node: &BitcoinD) -> (Vec<Input>, Vec<Output>) {
 }
 
 #[cfg(not(feature = "v17"))]
-fn build_psbt(node: &BitcoinD) -> bitcoin::Psbt {
+fn build_psbt(node: &BitcoinD) -> Psbt {
     let (inputs, outputs) = build_inputs_outputs(node);
     let json: CreatePsbt = node.client.create_psbt(&inputs, &outputs).unwrap();
     json.into_model().unwrap().0
 }
 
 #[cfg(not(feature = "v20_and_below"))]
-fn build_and_sign_unbroadcast_tx(node: &BitcoinD) -> bitcoin::Transaction {
+fn build_and_sign_unbroadcast_tx(node: &BitcoinD) -> Transaction {
     let (inputs, outputs) = build_inputs_outputs(node);
     let json: CreateRawTransaction = node.client.create_raw_transaction(&inputs, &outputs).unwrap();
     let raw = json.transaction().unwrap();

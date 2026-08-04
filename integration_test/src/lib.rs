@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use bitcoin::bip32::{Fingerprint, Xpriv, Xpub};
 use bitcoin::secp256k1::{Secp256k1, XOnlyPublicKey};
-use bitcoin::Network;
+use bitcoin::{Address, Amount, Network, Transaction, Txid};
 use bitcoind::{Conf, P2P};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
@@ -44,14 +44,14 @@ pub trait BitcoinDExt {
     /// # Returns
     ///
     /// The receive address and the transaction.
-    fn create_mempool_transaction(&self) -> (bitcoin::Address, bitcoin::Txid);
+    fn create_mempool_transaction(&self) -> (Address, Txid);
 
     /// Creates a transaction and mines a block that includes it in the chain.
     ///
     /// # Returns
     ///
     /// The receive address and the transaction.
-    fn create_mined_transaction(&self) -> (bitcoin::Address, bitcoin::Transaction);
+    fn create_mined_transaction(&self) -> (Address, Transaction);
 
     /// Returns the number of peers connected to this node.
     fn peers_connected(&self) -> usize;
@@ -85,8 +85,8 @@ impl BitcoinDExt for BitcoinD {
         self.client.generate_to_address(1, &address).expect("failed to generate to address");
     }
 
-    fn create_mempool_transaction(&self) -> (bitcoin::Address, bitcoin::Txid) {
-        const MILLION_SATS: bitcoin::Amount = bitcoin::Amount::from_sat(1000000);
+    fn create_mempool_transaction(&self) -> (Address, Txid) {
+        const MILLION_SATS: Amount = Amount::from_sat(1000000);
 
         let address = self.client.new_address().expect("failed to get new address");
 
@@ -99,7 +99,7 @@ impl BitcoinDExt for BitcoinD {
         (address, txid)
     }
 
-    fn create_mined_transaction(&self) -> (bitcoin::Address, bitcoin::Transaction) {
+    fn create_mined_transaction(&self) -> (Address, Transaction) {
         let (address, _) = self.create_mempool_transaction();
         self.mine_a_block();
 

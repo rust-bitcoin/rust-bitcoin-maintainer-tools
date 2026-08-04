@@ -2,6 +2,8 @@
 
 //! Tests derived from Bitcoin Core mining_basic.py, rpc_generate.py
 
+#[cfg(not(feature = "v20_and_below"))]
+use bitcoin::BlockHash;
 #[cfg(not(feature = "v25_and_below"))]
 use bitcoin::SignedAmount;
 use bitcoind::vtype::*;
@@ -47,7 +49,7 @@ fn generate_block_with_empty_tx_list() {
     #[cfg(not(feature = "v24_and_below"))]
     let json: GenerateBlock = node.client.generate_block(&addr.to_string(), &[], true).unwrap();
 
-    let block_hash: bitcoin::BlockHash = json.hash.parse().unwrap();
+    let block_hash: BlockHash = json.hash.parse().unwrap();
     assert_eq!(block_hash, node.client.best_block_hash().unwrap());
 }
 
