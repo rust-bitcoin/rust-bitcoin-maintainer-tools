@@ -1,6 +1,6 @@
 [package]
 name = "cargo-rbmt"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Nick Johnson <nick@yonson.dev>"]
 description = "Maintainer tools for rust-bitcoin projects"
 repository = "https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools"
@@ -27,3 +27,7 @@ public-api = { version = "0.52.1", default-features = false, features = ["experi
 
 [lints]
 workspace = true
+
+# Prerelease fails on its own `TODO` catching rules.
+[package.metadata.rbmt.prerelease]
+enabled = false
