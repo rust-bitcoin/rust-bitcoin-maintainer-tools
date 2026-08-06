@@ -8,69 +8,8 @@ jobs:
   label-pr:
     runs-on: debian-trixie
     steps:
+      - uses: actions/checkout@v4
       - name: Label PR based on changed files
         env:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          pr="${FORGEJO_PULL_REQUEST}"
-          api="${FORGEJO_SERVER_URL}/api/v1/repos/${FORGEJO_REPOSITORY}"
-          auth="Authorization: token ${FORGEJO_TOKEN}"
-
-          declare -A label_map=(
-            [bitcoind/]="C-bitcoind"
-            [bitreq/]="C-bitreq"
-            [client/]="C-client"
-            [electrsd/]="C-electrsd"
-            [integration_test/]="C-integration-test"
-            [jsonrpc/]="C-jsonrpc"
-            [types/]="C-types"
-            [verify/]="C-verify"
-          )
-
-          # Collect labels that apply to this PR's changed files.
-          declare -A to_add
-          while IFS= read -r filename; do
-            for prefix in "${!label_map[@]}"; do
-              if [[ "$filename" == "$prefix"* ]]; then
-                to_add["${label_map[$prefix]}"]=1
-                break
-              fi
-            done
-          done < <(curl -sf -H "$auth" "${api}/pulls/${pr}/files" | grep -o '"filename":"[^"]*"' | cut -d'"' -f4)
-
-          # Fetch labels currently on the issue.
-          declare -A current
-          while IFS= read -r name; do
-            current["$name"]=1
-          done < <(curl -sf -H "$auth" "${api}/issues/${pr}/labels" | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
-
-          # Add labels that should be present but aren't.
-          for label in "${!to_add[@]}"; do
-            if [[ -z "${current[$label]+x}" ]]; then
-              # Resolve label ID from its name.
-              label_id=$(curl -sf -H "$auth" "${api}/labels" | grep -A2 "\"name\":\"${label}\"" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-              if [[ -n "$label_id" ]]; then
-                curl -sf -X POST -H "$auth" -H "Content-Type: application/json" \
-                  -d "{\"labels\":[${label_id}]}" "${api}/issues/${pr}/labels" > /dev/null
-              fi
-            fi
-          done
-
-          # Remove known labels that no longer apply.
-          for label in "${!current[@]}"; do
-            skip=0
-            for known in "${!label_map[@]}"; do
-              if [[ "${label_map[$known]}" == "$label" ]]; then
-                skip=1
-                break
-              fi
-            done
-            if [[ "$skip" -eq 1 ]] && [[ -z "${to_add[$label]+x}" ]]; then
-              label_id=$(curl -sf -H "$auth" "${api}/issues/${pr}/labels" | grep -B1 "\"name\":\"${label}\"" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-              if [[ -n "$label_id" ]]; then
-                curl -sf -X DELETE -H "$auth" "${api}/issues/${pr}/labels/${label_id}" > /dev/null
-              fi
-            fi
-          done
+        run: bash contrib/label-pr.sh
