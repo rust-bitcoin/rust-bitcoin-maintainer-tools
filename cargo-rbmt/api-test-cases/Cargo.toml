@@ -1,6 +1,10 @@
 [workspace]
 members = ["internal"]
 
+# Test fixture, lockfile is intentionally not synced by `cargo rbmt lock`.
+[workspace.metadata.rbmt.lock]
+enabled = false
+
 [package]
 name = "api-test-cases"
 version = "0.1.0"

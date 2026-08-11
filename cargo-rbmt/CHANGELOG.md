@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* `lock` now also conservatively syncs the `Cargo.lock` of nested workspaces (e.g. embedded test crates) via `cargo fetch`. Only tracked lockfiles are managed. Opt out per nested workspace root with `[workspace.metadata.rbmt.lock] enabled = false` (`[package.metadata.rbmt.lock]` fallback for packages without a `[workspace]` table).
+
 ## [0.5.2] - 2026-08-03
 
 * Add `--no-update` to toolchain install to avoid network requests speeding up test matrix execution.
