@@ -150,7 +150,7 @@ allowed_duplicates = [
 
 ### lock
 
-To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` can generate lock files for different version scenarios.
+To ensure your package works with the full range of declared dependency versions, `cargo-rbmt` can generate lockfiles for different version scenarios.
 
 * `Cargo-minimal.lock` - Minimum versions that satisfy your dependency constraints. Verifies that direct dependency versions aren't being bumped by transitive dependencies.
 * `Cargo-maximum.lock` - Maximum versions that satisfy your dependency constraints. Verifies new updates do not break.
@@ -161,11 +161,18 @@ The `lock` command generates and maintains these files for you. You can then use
 ```bash
 # Generate minimal and recent (default for backward compatibility).
 cargo rbmt lock
-# Generate all three lock files.
+# Generate all three lockfiles.
 cargo rbmt lock --lockfiles minimal,maximum,recent
 ```
 
-When you specify `--lockfile`, the tool copies that lock file to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
+The `lock` command also keeps the single `Cargo.lock` of any nested workspaces (e.g. embedded test crates excluded from the main workspace) in sync using the same conservative strategy as `Cargo-recent.lock`. Only git-tracked lockfiles are managed. A nested workspace can opt-out via its configuration.
+
+```toml
+[workspace.metadata.rbmt.lock]
+enabled = false
+```
+
+When you specify `--lockfile`, the tool copies that lockfile to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
 
 ```bash
 # Test with minimal versions.

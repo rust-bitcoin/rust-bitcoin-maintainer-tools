@@ -1,26 +1,29 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
-//! Manage cargo lock files for minimal and recent dependency versions.
+//! Manage cargo lockfiles for minimal and recent dependency versions.
 //!
 //! Note: These commands intentionally omit `--locked` because they need to
 //! generate and modify lockfiles. Using `--locked` would prevent the dependency
 //! resolution we need here.
 
+use std::ffi::OsStr;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
 use xshell::Shell;
 
-use crate::environment::{get_workspace_root, CmdExt, ProgressGuard};
+use crate::environment::{get_workspace_root, CmdExt, ProgressGuard, WorkspaceManifest};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// The standard Cargo lockfile name.
 const CARGO_LOCK: &str = "Cargo.lock";
 /// The temporary backup file for Cargo.lock.
 const CARGO_LOCK_BACKUP: &str = "Cargo.lock.backup";
+/// The null character, used as the record delimiter of `git ls-files -z` output.
+const NUL: char = '\0';
 
-/// RAII guard that backs up and restores the original Cargo.lock file.
+/// RAII guard that backs up and restores the original Cargo.lock.
 pub struct LockFileGuard {
     backup_path: PathBuf,
     restore_path: PathBuf,
@@ -32,7 +35,7 @@ impl LockFileGuard {
         let source = workspace_root.join(CARGO_LOCK);
         let backup = workspace_root.join(CARGO_LOCK_BACKUP);
 
-        // Backup the existing Cargo.lock file if it exists.
+        // Backup the existing Cargo.lock if it exists.
         if source.exists() {
             fs::copy(&source, &backup)?;
         }
@@ -43,7 +46,7 @@ impl LockFileGuard {
 
 impl Drop for LockFileGuard {
     fn drop(&mut self) {
-        // Restore the existing Cargo.lock file from backup (best effort).
+        // Restore the existing Cargo.lock from backup (best effort).
         if self.backup_path.exists() {
             if let Err(e) = fs::copy(&self.backup_path, &self.restore_path) {
                 eprintln!("Warning: Failed to restore Cargo.lock from backup: {}", e);
@@ -56,7 +59,7 @@ impl Drop for LockFileGuard {
     }
 }
 
-/// Represents the different types of managed lock files.
+/// Represents the different types of managed lockfiles.
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
 pub enum LockFile {
     /// Minimal (oldest) dependency versions that satisfy dependency constraints.
@@ -70,7 +73,7 @@ pub enum LockFile {
     Existing,
 }
 
-/// Lock file types that can be generated via CLI (excludes `Existing`).
+/// Lockfile types that can be generated via CLI (excludes `Existing`).
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
 pub enum GeneratableLockFile {
     /// Uses minimal versions that satisfy dependency constraints.
@@ -93,7 +96,7 @@ impl From<GeneratableLockFile> for LockFile {
 }
 
 impl LockFile {
-    /// Get the filename for this lock file type.
+    /// Get the filename for this lockfile type.
     pub fn filename(self) -> &'static str {
         match self {
             Self::Minimal => "Cargo-minimal.lock",
@@ -156,7 +159,24 @@ impl LockFile {
     }
 }
 
-/// Update lock files for dependency version testing.
+/// The `[*.metadata.rbmt]` table of a nested workspace manifest, lock sync configuration only.
+#[derive(serde::Deserialize, Default)]
+struct RbmtLockConfig {
+    lock: Option<LockConfig>,
+}
+
+/// The `[*.metadata.rbmt.lock]` table of a nested workspace manifest.
+#[derive(serde::Deserialize)]
+struct LockConfig {
+    enabled: Option<bool>,
+}
+
+impl RbmtLockConfig {
+    /// Whether lockfile syncing is enabled, if configured at this table level.
+    fn enabled(&self) -> Option<bool> { self.lock.as_ref().and_then(|lock| lock.enabled) }
+}
+
+/// Update lockfiles for dependency version testing.
 ///
 /// * `Cargo-minimal.lock` - Uses minimal versions that satisfy dependency constraints.
 /// * `Cargo-maximum.lock` - Uses maximum versions that satisfy dependency constraints.
@@ -169,9 +189,14 @@ impl LockFile {
 /// The original Cargo.lock is preserved and restored after generation in case
 /// it is being tracked for publication.
 ///
+/// Additionally, the single `Cargo.lock` of every nested workspace in the
+/// repository is conservatively synced (see [`sync_nested_lockfiles`]). These
+/// are usally helper packages for fuzzing or embedded tests and don't require as
+/// much lockfile managment.
+///
 /// # Arguments
 ///
-/// * `lockfiles` - Lock file types to generate (minimal, maximum, recent).
+/// * `lockfiles` - Lockfile types to generate (minimal, maximum, recent).
 pub fn run(
     sh: &Shell,
     lockfiles: &[GeneratableLockFile],
@@ -180,7 +205,7 @@ pub fn run(
     prepare_toolchain(sh, Toolchain::Nightly)?;
 
     let workspace_root = get_workspace_root(sh)?;
-    rbmt_eprintln!("Updating lock files in: {}", workspace_root.display());
+    rbmt_eprintln!("Updating lockfiles in: {}", workspace_root.display());
 
     // Create guard to back up and ensure restoration, even on error.
     let _lockfile_guard = LockFileGuard::new(sh)?;
@@ -188,8 +213,107 @@ pub fn run(
         LockFile::from(lockfile).derive(sh)?;
     }
 
-    rbmt_eprintln!("Lock files updated successfully");
+    sync_nested_lockfiles(sh)?;
+
+    rbmt_eprintln!("Lockfiles updated successfully");
     Ok(())
+}
+
+/// Conservatively sync the `Cargo.lock` files of nested workspaces.
+///
+/// Cargo only writes `Cargo.lock` at workspace roots, so each tracked lockfile below the workspace
+/// root represents a nested workspace (e.g. embedded test crates). Only tracked lockfiles are
+/// managed, as reported by the git index.
+///
+/// A nested workspace can opt out with `[workspace.metadata.rbmt.lock]` `enabled = false`
+/// (`[package.metadata.rbmt.lock]` fallback for nested packages without a `[workspace]` table).
+fn sync_nested_lockfiles(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+    let workspace_root = get_workspace_root(sh)?;
+    let lockfiles = find_nested_lockfiles(sh, &workspace_root);
+    if lockfiles.is_empty() {
+        return Ok(());
+    }
+
+    rbmt_eprintln!("Syncing nested workspace lockfiles...");
+    for lockfile in lockfiles {
+        let dir = lockfile.parent().ok_or("Cargo.lock has no parent directory")?;
+        let relative_path = lockfile.strip_prefix(&workspace_root).unwrap_or(&lockfile);
+        let manifest = dir.join("Cargo.toml");
+
+        if !manifest.exists() {
+            rbmt_eprintln!("Skipping {}: no adjacent Cargo.toml", relative_path.display());
+            continue;
+        }
+
+        // Run cargo commands from the lockfile's directory.
+        let _dir = sh.push_dir(dir);
+        match get_workspace_root(sh) {
+            Ok(root) if root == dir => {}
+            Ok(_) => {
+                rbmt_eprintln!(
+                    "Skipping {}: directory is not a workspace root (stray lockfile?)",
+                    relative_path.display()
+                );
+                continue;
+            }
+            Err(e) => {
+                rbmt_eprintln!(
+                    "Skipping {}: failed to read cargo metadata: {}",
+                    relative_path.display(),
+                    e
+                );
+                continue;
+            }
+        }
+
+        // Syncing is enabled by default.
+        let contents = fs::read_to_string(&manifest)?;
+        let toml: WorkspaceManifest<RbmtLockConfig> = toml::from_str(&contents)?;
+        let enabled = toml
+            .workspace
+            .metadata
+            .rbmt
+            .enabled()
+            .or(toml.package.metadata.rbmt.enabled())
+            .unwrap_or(true);
+        if !enabled {
+            rbmt_eprintln!("Skipping {}: disabled by rbmt.lock metadata", relative_path.display());
+            continue;
+        }
+
+        rbmt_eprintln!("Syncing {}...", relative_path.display());
+        // fetch does the bare minimum amount of work to conservatively update a lockfile.
+        rbmt_cmd!(sh, "cargo fetch").run_with_capture()?;
+    }
+    Ok(())
+}
+
+/// Collect tracked `Cargo.lock` files below the workspace root.
+///
+/// Uses the git index instead of walking the filesystem so that only tracked files are considered.
+fn find_nested_lockfiles(sh: &Shell, workspace_root: &Path) -> Vec<PathBuf> {
+    let _dir = sh.push_dir(workspace_root);
+    // Use more robust nul character terminator option `-z`.
+    let output = match rbmt_cmd!(sh, "git ls-files --cached -z -- .").read() {
+        Ok(output) => output,
+        Err(e) => {
+            rbmt_eprintln!("Skipping nested lockfile sync: git ls-files failed: {}", e);
+            return Vec::new();
+        }
+    };
+
+    let mut lockfiles: Vec<PathBuf> = output
+        .split_terminator(NUL)
+        .map(PathBuf::from)
+        .filter(|path| path.file_name() == Some(OsStr::new(CARGO_LOCK)))
+        .map(|path| workspace_root.join(path))
+        // Excude the workspace root lockfile.
+        .filter(|path| path.parent() != Some(workspace_root))
+        // Skip stale entries deleted in the worktree.
+        .filter(|path| path.exists())
+        .collect();
+    lockfiles.sort();
+    lockfiles
 }
 
 /// Derive a minimal versions lockfile.
@@ -211,18 +335,18 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
     // Check that all explicit direct dependency versions are not lying,
     // as in, they are not being bumped up by transitive dependency constraints.
     rbmt_eprintln!("Checking direct minimal versions...");
-    remove_lock_file(sh)?;
+    remove_lockfile(sh)?;
     rbmt_cmd!(sh, "cargo check --all-features -Z direct-minimal-versions").run_with_capture()?;
 
     // Now that our own direct dependency versions can be trusted, check
     // against the lowest versions of the dependency tree which still
     // satisfy constraints.
     rbmt_eprintln!("Generating minimal versions lockfile...");
-    remove_lock_file(sh)?;
+    remove_lockfile(sh)?;
     rbmt_cmd!(sh, "cargo check --all-features -Z minimal-versions").run_with_capture()?;
 
     // Save a copy to Cargo-minimal.lock for workspace tracking.
-    copy_lock_file(sh, LockFile::Minimal)?;
+    copy_lockfile(sh, LockFile::Minimal)?;
 
     Ok(())
 }
@@ -235,12 +359,12 @@ fn derive_minimal_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>>
 fn derive_maximum_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Generating maximum versions lockfile...");
 
-    // Remove existing lock file and generate a fresh one with maximum compatible versions.
-    remove_lock_file(sh)?;
+    // Remove existing lockfile and generate a fresh one with maximum compatible versions.
+    remove_lockfile(sh)?;
     rbmt_cmd!(sh, "cargo generate-lockfile").run_with_capture()?;
 
     // Save a copy to Cargo-maximum.lock for workspace tracking.
-    copy_lock_file(sh, LockFile::Maximum)?;
+    copy_lockfile(sh, LockFile::Maximum)?;
 
     Ok(())
 }
@@ -256,18 +380,18 @@ fn update_recent_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> 
 
     // Try to restore existing Cargo-recent.lock for conservative updates.
     // If it doesn't exist cargo check will create a fresh one.
-    remove_lock_file(sh)?;
+    remove_lockfile(sh)?;
     let _ = LockFile::Recent.restore(sh);
     rbmt_cmd!(sh, "cargo check --all-features").run_with_capture()?;
 
     // Save a copy to Cargo-recent.lock for workspace tracking.
-    copy_lock_file(sh, LockFile::Recent)?;
+    copy_lockfile(sh, LockFile::Recent)?;
 
     Ok(())
 }
 
-/// Remove Cargo.lock file if it exists.
-fn remove_lock_file(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+/// Remove Cargo.lock if it exists.
+fn remove_lockfile(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     let lock_path = get_workspace_root(sh)?.join(CARGO_LOCK);
     if lock_path.exists() {
         fs::remove_file(&lock_path)?;
@@ -275,8 +399,8 @@ fn remove_lock_file(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Copy Cargo.lock to a specific lock file.
-fn copy_lock_file(sh: &Shell, target: LockFile) -> Result<(), Box<dyn std::error::Error>> {
+/// Copy Cargo.lock to a specific lockfile.
+fn copy_lockfile(sh: &Shell, target: LockFile) -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = get_workspace_root(sh)?;
     fs::copy(workspace_root.join(CARGO_LOCK), workspace_root.join(target.filename()))?;
     Ok(())
