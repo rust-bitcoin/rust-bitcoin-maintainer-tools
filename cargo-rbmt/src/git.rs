@@ -78,6 +78,14 @@ impl Drop for GitSwitchGuard<'_> {
     }
 }
 
+/// Get the current git commit ID.
+///
+/// Returns `None` if the working directory is not inside a git repository or
+/// if git is not available.
+pub fn current_commit_id(sh: &Shell) -> Option<String> {
+    sh.cmd("git").args(["rev-parse", "HEAD"]).quiet().read().ok().map(|s| s.trim().to_owned())
+}
+
 /// Returns `true` if any file under the given path differs from the baseline git ref.
 pub fn has_changes_since(
     sh: &Shell,
