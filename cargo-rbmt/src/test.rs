@@ -15,8 +15,8 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    cargo_cmd, discover_features, get_workspace_packages, git_commit_id, CmdExt, Package,
-    PackageManifest, ProgressGuard,
+    cargo_cmd, get_workspace_packages, git_commit_id, CmdExt, Package, PackageManifest,
+    ProgressGuard,
 };
 use crate::git;
 use crate::lock::LockFile;
@@ -512,9 +512,11 @@ fn do_feature_matrix(
     test_features(sh, toolchain, Some(&[]), cargo_args, &config.msrv_overrides)?;
 
     // Test each discovered feature in isolation, plus subsets.
-    let features: Vec<String> = discover_features(sh, package)?
-        .into_iter()
-        .filter(|f| !config.exclude_features.contains(f))
+    let features: Vec<String> = package
+        .features
+        .iter()
+        .filter(|f| !config.exclude_features.contains(*f))
+        .cloned()
         .collect();
     if !features.is_empty() {
         rbmt_eprintln!(

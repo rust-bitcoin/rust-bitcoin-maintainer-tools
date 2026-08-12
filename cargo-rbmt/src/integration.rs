@@ -8,8 +8,7 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    cargo_cmd, discover_features, get_workspace_packages, CmdExt, Package, PackageManifest,
-    ProgressGuard,
+    cargo_cmd, get_workspace_packages, CmdExt, PackageManifest, ProgressGuard,
 };
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -54,13 +53,6 @@ impl IntegrationConfig {
     fn package_name(&self) -> &str { self.package.as_deref().unwrap_or("bitcoind-tests") }
 }
 
-/// Get the package ID by running `cargo pkgid` in the given directory.
-fn get_package_id(sh: &Shell, dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
-    let _dir = sh.push_dir(dir);
-    let id = rbmt_cmd!(sh, "cargo pkgid").read()?;
-    Ok(id.trim().to_string())
-}
-
 /// Run integration tests for all packages that contain an integration tests subpackage.
 ///
 /// # Arguments
@@ -88,13 +80,18 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
         let _dir = sh.push_dir(&integration_dir);
         // The integration package must defines its own [package.metadata.rbmt.toolchains].
         prepare_toolchain(sh, Toolchain::Stable)?;
-
-        let integration_package = Package {
-            name: config.package_name().to_string(),
-            dir: integration_dir.clone(),
-            id: get_package_id(sh, &integration_dir)?,
-        };
-        let available_versions = discover_features(sh, &integration_package)?;
+        let integration_packages = get_workspace_packages(sh, &[])?;
+        let integration_package = integration_packages
+            .iter()
+            .find(|p| p.name == config.package_name())
+            .ok_or_else(|| {
+                format!(
+                    "Integration package '{}' not found in {}",
+                    config.package_name(),
+                    integration_dir.display()
+                )
+            })?;
+        let available_versions = &integration_package.features;
         if available_versions.is_empty() {
             rbmt_eprintln!("  No version features found in Cargo.toml");
             continue;
@@ -118,7 +115,7 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
             filtered
         } else {
             // No config, test all available versions.
-            available_versions
+            available_versions.clone()
         };
 
         // Run tests for each version.

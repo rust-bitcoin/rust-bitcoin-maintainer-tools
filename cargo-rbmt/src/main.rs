@@ -19,6 +19,7 @@ mod test;
 mod toolchain;
 mod toolchains;
 mod tools;
+mod tree;
 mod version;
 
 use std::process;
@@ -158,6 +159,12 @@ enum Commands {
     Version,
     /// Generate files and check for changes.
     Generate,
+    /// Show internal workspace packages in release order (deepest dependency chain first).
+    Tree {
+        /// Git ref to use as baseline; only show packages with changes since this ref (tag, branch, or commit).
+        #[arg(long)]
+        baseline: Option<String>,
+    },
 }
 
 fn main() {
@@ -245,6 +252,11 @@ fn main() {
         Commands::Generate =>
             if let Err(e) = generate::run(&sh, &cli.packages) {
                 eprintln!("Error running file generation: {}", e);
+                process::exit(1);
+            },
+        Commands::Tree { baseline } =>
+            if let Err(e) = tree::run(&sh, &cli.packages, baseline.as_deref()) {
+                eprintln!("Error generating dependency tree: {}", e);
                 process::exit(1);
             },
     }

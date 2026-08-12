@@ -95,7 +95,7 @@ impl Drop for ProgressGuard {
     }
 }
 
-/// A workspace package: its manifest name, directory path, and unique identifier.
+/// A workspace package as reported by `cargo metadata`.
 #[derive(Clone, Debug)]
 pub struct Package {
     /// The package name from the manifest.
@@ -104,6 +104,15 @@ pub struct Package {
     pub dir: PathBuf,
     /// The unique package identifier.
     pub id: String,
+    /// Names of the package's direct, non-dev (normal and build), external and internal
+    /// dependencies.
+    pub deps: Vec<String>,
+    /// Features defined in the package's `[features]` table, excluding `"default"`
+    /// since it cannot be passed directly to `--features`. Optional dependencies
+    /// appear as implicit features.
+    pub features: Vec<String>,
+    /// Whether the package can be published (`false` if the manifest sets `publish = false`).
+    pub publish: bool,
 }
 
 /// Wrap commands to respect rbmt output mode.
@@ -189,11 +198,37 @@ pub fn get_workspace_packages(
         .ok_or("Missing 'packages' field in cargo metadata")?
         .iter()
         .filter_map(|package| {
+            // Malformed entries are silently skipped.
             let manifest_path = PathBuf::from(package["manifest_path"].as_str()?);
+            // Metadata lists one entry per (dependency, kind, target)
+            // combination, so the same crate can appear multiple times; sort
+            // and dedup for deterministic output. Dev-dependencies are excluded.
+            let mut deps: Vec<String> = package["dependencies"]
+                .as_array()?
+                .iter()
+                .filter(|d| d["kind"].as_str() != Some("dev"))
+                .filter_map(|d| d["name"].as_str().map(String::from))
+                .collect();
+            deps.sort();
+            deps.dedup();
+            // Includes implicit features cargo synthesizes for optional dependencies,
+            // `default` is excluded.
+            let features: Vec<String> = package["features"]
+                .as_object()?
+                .keys()
+                .filter(|k| *k != "default")
+                .cloned()
+                .collect();
+
             Some(Package {
                 name: package["name"].as_str()?.to_string(),
                 dir: manifest_path.parent()?.to_path_buf(),
                 id: package["id"].as_str()?.to_string(),
+                deps,
+                features,
+                // `publish = false` in a manifest is an empty array in metadata;
+                // a missing field or a list of registries both mean publishable.
+                publish: package["publish"].as_array() != Some(&vec![]),
             })
         })
         .collect();
@@ -286,37 +321,6 @@ pub fn get_target_dir(sh: &Shell) -> Result<PathBuf, Box<dyn std::error::Error>>
     let target_dir =
         json["target_directory"].as_str().ok_or("Missing target_directory in cargo metadata")?;
     Ok(PathBuf::from(target_dir))
-}
-
-/// Discover the features defined for a package.
-///
-/// Returns all keys from the package's `[features]` table, excluding `"default"` since
-/// it is not a feature that can be passed directly to `--features`. Optional dependencies
-/// are included automatically.
-pub fn discover_features(
-    sh: &Shell,
-    package: &Package,
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let metadata = rbmt_cmd!(sh, "cargo metadata --format-version 1 --no-deps").read()?;
-    let json: serde_json::Value = serde_json::from_str(&metadata)?;
-
-    let packages =
-        json["packages"].as_array().ok_or("Missing 'packages' field in cargo metadata")?;
-
-    // Match by manifest path so this works regardless of the shell's cwd.
-    let manifest_path = package.dir.join("Cargo.toml");
-    let pkg = packages
-        .iter()
-        .find(|p| p["manifest_path"].as_str().is_some_and(|path| Path::new(path) == manifest_path))
-        .ok_or_else(|| format!("Package not found in cargo metadata: {}", package.dir.display()))?;
-
-    let mut features: Vec<String> = pkg["features"]
-        .as_object()
-        .map(|f| f.keys().filter(|k| *k != "default").cloned().collect())
-        .unwrap_or_default();
-
-    features.sort();
-    Ok(features)
 }
 
 /// Get the current git commit ID.
