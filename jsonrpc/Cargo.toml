@@ -4,7 +4,6 @@ version = "0.20.1"
 authors = ["Andrew Poelstra <apoelstra@wpsoftware.net>"]
 license = "CC0-1.0"
 repository = "https://git.rust-bitcoin.org/rust-bitcoin/corepc/"
-documentation = "https://docs.rs/jsonrpc/"
 description = "Rust support for the JSON-RPC 2.0 protocol"
 keywords = [ "protocol", "json", "http", "jsonrpc" ]
 readme	 = "README.md"
