@@ -37,6 +37,10 @@ struct Cli {
     #[arg(short = 'p', long = "package", global = true)]
     packages: Vec<String>,
 
+    /// Ignore the workspace's pinned rbmt version constraint.
+    #[arg(short = 'i', long, global = true)]
+    ignore_version: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -177,10 +181,12 @@ fn main() {
     let cli = Cli::parse_from(args);
     let sh = Shell::new().unwrap();
 
-    // Check version requirement early before running any commands
-    if let Err(e) = version::check(&sh) {
-        eprintln!("Error: {}", e);
-        process::exit(1);
+    // Check version requirement early before running any commands.
+    if !cli.ignore_version {
+        if let Err(e) = version::check(&sh) {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
     }
 
     match cli.command {

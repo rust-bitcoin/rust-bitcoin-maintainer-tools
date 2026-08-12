@@ -42,7 +42,7 @@ Configuration for `cargo-rbmt` is stored in `[package.metadata.rbmt]` in a packa
 
 ### Version Pinning
 
-Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup.
+Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup. Pass `--ignore-version` (`-i`) to skip the check and run anyway (e.g. when testing a local `cargo-rbmt` build against a pinned workspace).
 
 ```toml
 [workspace.metadata]
