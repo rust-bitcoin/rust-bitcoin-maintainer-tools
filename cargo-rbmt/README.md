@@ -21,6 +21,7 @@ A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) th
     - [no_std](#no_std)
   - [toolchains](#toolchains)
   - [tools](#tools)
+  - [tree](#tree)
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
@@ -41,7 +42,7 @@ Configuration for `cargo-rbmt` is stored in `[package.metadata.rbmt]` in a packa
 
 ### Version Pinning
 
-Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup.
+Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup. Pass `--ignore-version` (`-i`) to skip the check and run anyway (e.g. when testing a local `cargo-rbmt` build against a pinned workspace).
 
 ```toml
 [workspace.metadata]
@@ -319,6 +320,19 @@ cargo rbmt tools --update cargo-public-api
 The `--update` flag installs each tool without a version constraint, then reads the resolved version back from `cargo install --list` and writes it into `Cargo.toml`. The resulting diff can be reviewed and committed as a deliberate version bump.
 
 > **Note:** Tools are installed via `cargo install`. Installing or updating a tool overwrites any previously installed version of that binary system-wide. If you rely on a specific version of a tool outside of this workflow, be aware that running `cargo rbmt tools` will replace it with the pinned version.
+
+### tree
+
+The `tree` command shows the internal workspace dependency tree flattened into release order. It exists to help plan "waves" of releases: a package can only be published once all of its internal (workspace member) dependencies are published.
+
+```bash
+# Release order for all publishable packages in the workspace.
+cargo rbmt tree
+# Release order restricted to the internal dependencies of one package root.
+cargo rbmt tree -p bitcoin
+# Only show packages with changes since a git ref.
+cargo rbmt tree --baseline bitcoin-0.33.0-beta
+```
 
 ## Workspace Integration
 

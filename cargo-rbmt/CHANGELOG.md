@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Add `tree` command which shows internal workspace packages in release order (deepest dependency chain first) to help plan release waves.
+* Add global `--ignore-version` (`-i`) flag to skip the startup `rbmt.version` check.
 * `lock` now also conservatively syncs the `Cargo.lock` of nested workspaces (e.g. embedded test crates) via `cargo fetch`. Only tracked lockfiles are managed. Opt out per nested workspace root with `[workspace.metadata.rbmt.lock] enabled = false` (`[package.metadata.rbmt.lock]` fallback for packages without a `[workspace]` table).
 
 ## [0.5.2] - 2026-08-03

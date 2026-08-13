@@ -19,6 +19,7 @@ mod test;
 mod toolchain;
 mod toolchains;
 mod tools;
+mod tree;
 mod version;
 
 use std::process;
@@ -35,6 +36,10 @@ struct Cli {
     /// Filter which packages are operated on in the workspace. Can be a package's manifest name or directory.
     #[arg(short = 'p', long = "package", global = true)]
     packages: Vec<String>,
+
+    /// Ignore the workspace's pinned rbmt version constraint.
+    #[arg(short = 'i', long, global = true)]
+    ignore_version: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -158,6 +163,12 @@ enum Commands {
     Version,
     /// Generate files and check for changes.
     Generate,
+    /// Show internal workspace packages in release order (deepest dependency chain first).
+    Tree {
+        /// Git ref to use as baseline; only show packages with changes since this ref (tag, branch, or commit).
+        #[arg(long)]
+        baseline: Option<String>,
+    },
 }
 
 fn main() {
@@ -170,10 +181,12 @@ fn main() {
     let cli = Cli::parse_from(args);
     let sh = Shell::new().unwrap();
 
-    // Check version requirement early before running any commands
-    if let Err(e) = version::check(&sh) {
-        eprintln!("Error: {}", e);
-        process::exit(1);
+    // Check version requirement early before running any commands.
+    if !cli.ignore_version {
+        if let Err(e) = version::check(&sh) {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
     }
 
     match cli.command {
@@ -245,6 +258,11 @@ fn main() {
         Commands::Generate =>
             if let Err(e) = generate::run(&sh, &cli.packages) {
                 eprintln!("Error running file generation: {}", e);
+                process::exit(1);
+            },
+        Commands::Tree { baseline } =>
+            if let Err(e) = tree::run(&sh, &cli.packages, baseline.as_deref()) {
+                eprintln!("Error generating dependency tree: {}", e);
                 process::exit(1);
             },
     }

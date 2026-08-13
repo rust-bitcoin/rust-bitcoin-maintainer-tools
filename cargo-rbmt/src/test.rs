@@ -15,8 +15,7 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    cargo_cmd, discover_features, get_workspace_packages, git_commit_id, CmdExt, Package,
-    PackageManifest, ProgressGuard,
+    cargo_cmd, get_workspace_packages, CmdExt, Package, PackageManifest, ProgressGuard,
 };
 use crate::git;
 use crate::lock::LockFile;
@@ -380,7 +379,7 @@ pub fn run(
     git::for_each_commit(sh, lockfile, baseline, |sh| {
         // Resolve packages for each commit, so we only test packages that exist in that commit.
         let resolved_packages = get_workspace_packages(sh, packages)?;
-        let sha = git_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
+        let sha = git::current_commit_id(sh).unwrap_or_else(|| "unknown".to_owned());
         let pkg_summaries = test_commit(sh, toolchain, &resolved_packages, cargo_args)?;
         summary.commits.push((sha, pkg_summaries));
         Ok(())
@@ -512,9 +511,11 @@ fn do_feature_matrix(
     test_features(sh, toolchain, Some(&[]), cargo_args, &config.msrv_overrides)?;
 
     // Test each discovered feature in isolation, plus subsets.
-    let features: Vec<String> = discover_features(sh, package)?
-        .into_iter()
-        .filter(|f| !config.exclude_features.contains(f))
+    let features: Vec<String> = package
+        .features
+        .iter()
+        .filter(|f| !config.exclude_features.contains(*f))
+        .cloned()
         .collect();
     if !features.is_empty() {
         rbmt_eprintln!(
@@ -574,7 +575,7 @@ fn discovered_feature_matrix(
     }
 
     // Generate and test feature subsets according to strategy.
-    let commit = git_commit_id(sh);
+    let commit = git::current_commit_id(sh);
     for subset in strategy.generate_subsets(features, commit) {
         rbmt_eprintln!("Testing feature set in {}: {:?}", summary.name, subset);
         test_features(sh, toolchain, Some(&subset), cargo_args, msrv_overrides)?;

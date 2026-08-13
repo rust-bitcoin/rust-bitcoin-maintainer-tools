@@ -3,6 +3,7 @@
 //! Git utilities for switching refs and enumerating commits.
 
 use std::fmt;
+use std::path::Path;
 
 use xshell::Shell;
 
@@ -75,6 +76,24 @@ impl Drop for GitSwitchGuard<'_> {
         // Panic on failure because we're in a bad state.
         git_switch.run().expect("Failed to switch back to previous ref");
     }
+}
+
+/// Get the current git commit ID.
+///
+/// Returns `None` if the working directory is not inside a git repository or
+/// if git is not available.
+pub fn current_commit_id(sh: &Shell) -> Option<String> {
+    sh.cmd("git").args(["rev-parse", "HEAD"]).quiet().read().ok().map(|s| s.trim().to_owned())
+}
+
+/// Returns `true` if any file under the given path differs from the baseline git ref.
+pub fn has_changes_since(
+    sh: &Shell,
+    baseline: &str,
+    path: &Path,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let output = rbmt_cmd!(sh, "git diff --name-only {baseline} -- {path}").read()?;
+    Ok(!output.trim().is_empty())
 }
 
 /// List the commits between the given base ref and HEAD, oldest first.
