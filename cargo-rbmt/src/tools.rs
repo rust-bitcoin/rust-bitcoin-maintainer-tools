@@ -135,7 +135,7 @@ fn install_tool(sh: &Shell, name: &str, version: &str) -> Result<(), Box<dyn std
 /// Install a single tool at the latest version and return the resolved version.
 fn install_tool_latest(sh: &Shell, name: &str) -> Result<String, Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing {} (latest)", name);
-    rbmt_cmd!(sh, "cargo install {name}").run_with_capture()?;
+    rbmt_cmd!(sh, "cargo install {name} --locked").run_with_capture()?;
 
     installed_version(sh, name)?
         .ok_or_else(|| format!("{} not found in `cargo install --list` after install", name).into())
