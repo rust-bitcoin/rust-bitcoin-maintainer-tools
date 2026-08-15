@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Add signal handling for more robust git and lockfile state management.
+
 ## [0.5.3] - 2026-08-14
 
 * Add `tree` command which shows internal workspace packages in release order (deepest dependency chain first) to help plan release waves.

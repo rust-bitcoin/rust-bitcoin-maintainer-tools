@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use clap::ValueEnum;
 use xshell::Shell;
 
+use crate::cleanup;
 use crate::environment::{get_workspace_root, CmdExt, ProgressGuard, WorkspaceManifest};
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -24,12 +25,30 @@ const CARGO_LOCK_BACKUP: &str = "Cargo.lock.backup";
 const NUL: char = '\0';
 
 /// RAII guard that backs up and restores the original Cargo.lock.
+///
+/// Registers a signal-time cleanup so the lockfile is restored even when the
+/// process is terminated by a signal and `Drop` does not run.
 pub struct LockFileGuard {
     backup_path: PathBuf,
     restore_path: PathBuf,
+    // Signal is deregistered after drop, leaving no window for neither to run.
+    _registration: cleanup::Registration,
 }
 
 impl LockFileGuard {
+    /// Restore Cargo.lock from its backup and remove the backup (best effort).
+    fn restore_lockfile(backup_path: &Path, restore_path: &Path) {
+        if backup_path.exists() {
+            if let Err(e) = fs::copy(backup_path, restore_path) {
+                eprintln!("Warning: Failed to restore Cargo.lock from backup: {}", e);
+                return;
+            }
+            if let Err(e) = fs::remove_file(backup_path) {
+                eprintln!("Warning: Failed to remove Cargo.lock backup: {}", e);
+            }
+        }
+    }
+
     pub fn new(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
         let workspace_root = get_workspace_root(sh)?;
         let source = workspace_root.join(CARGO_LOCK);
@@ -40,23 +59,18 @@ impl LockFileGuard {
             fs::copy(&source, &backup)?;
         }
 
-        Ok(Self { backup_path: backup, restore_path: source })
+        let registration = cleanup::register({
+            let backup = backup.clone();
+            let source = source.clone();
+            move || Self::restore_lockfile(&backup, &source)
+        });
+
+        Ok(Self { backup_path: backup, restore_path: source, _registration: registration })
     }
 }
 
 impl Drop for LockFileGuard {
-    fn drop(&mut self) {
-        // Restore the existing Cargo.lock from backup (best effort).
-        if self.backup_path.exists() {
-            if let Err(e) = fs::copy(&self.backup_path, &self.restore_path) {
-                eprintln!("Warning: Failed to restore Cargo.lock from backup: {}", e);
-                return;
-            }
-            if let Err(e) = fs::remove_file(&self.backup_path) {
-                eprintln!("Warning: Failed to remove Cargo.lock backup: {}", e);
-            }
-        }
-    }
+    fn drop(&mut self) { Self::restore_lockfile(&self.backup_path, &self.restore_path); }
 }
 
 /// Represents the different types of managed lockfiles.

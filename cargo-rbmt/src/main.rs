@@ -5,6 +5,7 @@
 mod environment;
 
 mod api;
+mod cleanup;
 mod docs;
 mod fmt;
 mod generate;
