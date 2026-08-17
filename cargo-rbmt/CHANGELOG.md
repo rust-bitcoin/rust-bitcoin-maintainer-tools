@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-08-14
+
 * Add `tree` command which shows internal workspace packages in release order (deepest dependency chain first) to help plan release waves.
 * Add global `--ignore-version` (`-i`) flag to skip the startup `rbmt.version` check.
-* `lock` now also conservatively syncs the `Cargo.lock` of nested workspaces (e.g. embedded test crates) via `cargo fetch`. Only tracked lockfiles are managed. Opt out per nested workspace root with `[workspace.metadata.rbmt.lock] enabled = false` (`[package.metadata.rbmt.lock]` fallback for packages without a `[workspace]` table).
+* Add `lock` now also conservatively syncs the `Cargo.lock` of nested workspaces (e.g. embedded test crates) via `cargo fetch`. Only tracked lockfiles are managed. Opt out per nested workspace root with `[workspace.metadata.rbmt.lock] enabled = false` (`[package.metadata.rbmt.lock]` fallback for packages without a `[workspace]` table).
+* Fix `tools --update` to lock install.
 
 ## [0.5.2] - 2026-08-03
 
@@ -79,7 +82,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.2...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.3...HEAD
+[0.5.3]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.2...cargo-rbmt-0.5.3
 [0.5.2]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.1...cargo-rbmt-0.5.2
 [0.5.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.0...cargo-rbmt-0.5.1
 [0.5.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.4.1...cargo-rbmt-0.5.0
