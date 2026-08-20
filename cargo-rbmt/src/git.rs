@@ -3,9 +3,13 @@
 //! Git utilities for switching refs and enumerating commits.
 
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use xshell::Shell;
+
+use crate::cleanup;
+use crate::environment::get_workspace_root;
 
 /// A git reference.
 #[derive(Debug, Clone)]
@@ -43,38 +47,82 @@ impl Ref {
 ///
 /// Switches to the given ref on construction and switches back to the
 /// original ref on drop, preserving whether you were on a branch or detached.
-pub struct GitSwitchGuard<'a> {
-    sh: &'a Shell,
+///
+/// Registers a signal-time cleanup so the original ref is restored even when
+/// the process is terminated by a signal and `Drop` does not run.
+pub struct GitSwitchGuard {
+    repo_root: PathBuf,
     original_ref: Ref,
+    // Signal is deregistered after drop, leaving no window for neither to run.
+    _registration: cleanup::Registration,
 }
 
-impl<'a> GitSwitchGuard<'a> {
+impl GitSwitchGuard {
+    /// Switch the repository at `repo_root` to the given ref.
+    ///
+    /// Uses `std::process::Command` directly (rather than xshell) so it can
+    /// also run from the signal-time cleanup path, which requires `'static`
+    /// state. Shared between [`Drop`] and the signal-time cleanup, so it
+    /// takes the ref and path directly rather than `&self`.
+    fn switch_ref(repo_root: &Path, git_ref: &Ref) -> Result<(), Box<dyn std::error::Error>> {
+        let mut cmd = Command::new("git");
+        cmd.current_dir(repo_root).arg("switch");
+        match git_ref {
+            // For branches, use normal switch (no --detach).
+            Ref::Branch(name) => {
+                cmd.arg(name);
+            }
+            // For commits, use --detach to enter detached HEAD state.
+            Ref::Commit(sha) => {
+                cmd.arg("--detach").arg(sha);
+            }
+        }
+        // Capture output so a successful switch is silent, but stderr is there message on failure.
+        let output = cmd.output()?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "git switch to {} failed: {}\n{}",
+                git_ref,
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into())
+        }
+    }
+
     /// Create a new guard and switch to the specified ref.
-    pub fn new(sh: &'a Shell, git_ref: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(sh: &Shell, git_ref: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let original_ref = Ref::current(sh)?;
+        let repo_root = get_workspace_root(sh)?;
         rbmt_eprintln!("Switching from {} to {}", original_ref, git_ref);
         rbmt_cmd!(sh, "git switch --detach").arg(git_ref).run()?;
-        Ok(Self { sh, original_ref })
+
+        let registration = cleanup::register({
+            let repo_root = repo_root.clone();
+            let original_ref = original_ref.clone();
+            move || {
+                if let Err(e) = Self::switch_ref(&repo_root, &original_ref) {
+                    eprintln!(
+                        "Warning: {}. You may need to run `git switch {}` manually.",
+                        e, original_ref
+                    );
+                }
+            }
+        });
+
+        Ok(Self { repo_root, original_ref, _registration: registration })
     }
 }
 
-impl Drop for GitSwitchGuard<'_> {
+impl Drop for GitSwitchGuard {
     fn drop(&mut self) {
         rbmt_eprintln!("Returning to original ref {}", self.original_ref);
 
-        let git_switch = match &self.original_ref {
-            Ref::Branch(name) => {
-                // For branches, use normal switch (no --detach).
-                rbmt_cmd!(self.sh, "git switch").arg(name)
-            }
-            Ref::Commit(sha) => {
-                // For commits, use --detach to enter detached HEAD state.
-                rbmt_cmd!(self.sh, "git switch --detach").arg(sha)
-            }
-        };
-
         // Panic on failure because we're in a bad state.
-        git_switch.run().expect("Failed to switch back to previous ref");
+        Self::switch_ref(&self.repo_root, &self.original_ref)
+            .expect("Failed to switch back to previous ref");
     }
 }
 
