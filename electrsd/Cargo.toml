@@ -4,7 +4,6 @@ version = "0.41.0"
 authors = ["Riccardo Casatta <riccardo@casatta.it>"]
 description = "Utility to run a regtest electrs process, useful in integration testing environment"
 repository = "https://git.rust-bitcoin.org/rust-bitcoin/corepc"
-documentation = "https://docs.rs/electrsd/"
 license = "MIT"
 edition = "2021"
 rust-version = "1.75.0"
