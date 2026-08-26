@@ -9,7 +9,9 @@ use std::time::Duration;
 use self::setup::*;
 
 #[tokio::test]
-#[cfg(feature = "rustls")]
+// example.com only validates with a trust store configured; without one rustls
+// correctly returns an untrusted-certificate error, so skip the assertion then.
+#[cfg(all(feature = "rustls", any(feature = "webpki-roots", feature = "https-rustls-probe")))]
 async fn test_https() {
     // TODO: Implement this locally.
     assert_eq!(get_status_code(bitreq::get("https://example.com")).await, 200);
