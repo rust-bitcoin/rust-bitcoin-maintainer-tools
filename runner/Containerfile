@@ -9,11 +9,14 @@ FROM rust:1.85
 # * pkg-config: crates that require external system libraries.
 # * libssl-dev: crates that require external system libraries.
 # * gcc-arm-none-eabi: thumbv7m-none-eabi no-std tests.
+# * qemu-user-static: execute cross-compiled test binaries in CI without
+#   relying on the host's binfmt_misc configuration.
 RUN apt-get update && apt-get install -y \
     git \
     pkg-config \
     libssl-dev \
     gcc-arm-none-eabi \
+    qemu-user-static \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up environment for ARM no-std tests.
