@@ -14,7 +14,7 @@ exclude = ["tests", "contrib"]
 
 [dependencies]
 anyhow = { version = "1.0.103", default-features = false, features = ["std"] }
-corepc-client = { version = "0.16.0", path = "../client", features = ["client-sync"] }
+corepc-regtest-client = { version = "0.16.0", path = "../regtest-client" }
 log = { version = "0.4", default-features = false }
 serde_json = { version = "1.0.117", default-features = false }
 tempfile = { version = "3", default-features = false }

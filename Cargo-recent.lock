@@ -155,7 +155,7 @@ dependencies = [
  "anyhow",
  "bitcoin_hashes",
  "bitreq",
- "corepc-client",
+ "corepc-regtest-client",
  "env_logger 0.9.3",
  "flate2",
  "log",
@@ -292,6 +292,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "corepc-regtest-client"
+version = "0.16.0"
+dependencies = [
+ "bitcoin",
+ "corepc-types",
+ "jsonrpc",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "corepc-types"
 version = "0.15.0"
 dependencies = [
@@ -323,7 +335,7 @@ dependencies = [
  "bitcoin_hashes",
  "bitcoind",
  "bitreq",
- "corepc-client",
+ "corepc-regtest-client",
  "electrum-client",
  "env_logger 0.10.2",
  "log",
