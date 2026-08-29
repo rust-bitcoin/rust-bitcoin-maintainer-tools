@@ -31,6 +31,7 @@ jobs:
           cargo rbmt test --lockfile ${{ matrix.dep }} --toolchain ${{ matrix.toolchain }} \
             -p bitreq \
             -p corepc-client \
+            -p corepc-regtest-client \
             -p jsonrpc-fuzz \
             -p jsonrpc \
             -p corepc-types
@@ -54,6 +55,7 @@ jobs:
           cargo rbmt lint \
             -p bitreq \
             -p corepc-client \
+            -p corepc-regtest-client \
             -p jsonrpc-fuzz \
             -p jsonrpc \
             -p corepc-types
