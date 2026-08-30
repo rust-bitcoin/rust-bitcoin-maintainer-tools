@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 * Add signal handling for more robust git and lockfile state management.
+* Manage rbmt version with `tools`.
 
 ## [0.5.3] - 2026-08-14
 
