@@ -8,7 +8,7 @@ mod ext;
 mod versions;
 
 pub extern crate bitcoind;
-pub extern crate corepc_client;
+pub extern crate corepc_regtest_client;
 pub extern crate electrum_client;
 
 use std::env;

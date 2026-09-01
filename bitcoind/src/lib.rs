@@ -6,7 +6,7 @@
 
 #![cfg_attr(docsrs, cfg_attr(all(), doc = include_str!("../README.md")))]
 
-pub extern crate corepc_client as client;
+pub extern crate corepc_regtest_client as client;
 
 #[rustfmt::skip]
 mod client_versions;
@@ -20,7 +20,7 @@ use std::time::Duration;
 use std::{env, fmt, fs, thread};
 
 use anyhow::Context;
-use corepc_client::client_sync::{self, Auth};
+use corepc_regtest_client::Auth;
 use tempfile::TempDir;
 pub use {anyhow, serde_json, tempfile, which};
 
@@ -123,7 +123,7 @@ pub enum Error {
     /// Wrapper of io Error.
     Io(std::io::Error),
     /// Wrapper of bitcoincore_rpc Error.
-    Rpc(client_sync::Error),
+    Rpc(corepc_regtest_client::Error),
     /// Returned when calling methods requiring a feature to be activated, but it's not.
     NoFeature,
     /// Returned when calling methods requiring a env var to exist, but it's not.
@@ -618,8 +618,8 @@ impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self { Error::Io(e) }
 }
 
-impl From<client_sync::Error> for Error {
-    fn from(e: client_sync::Error) -> Self { Error::Rpc(e) }
+impl From<corepc_regtest_client::Error> for Error {
+    fn from(e: corepc_regtest_client::Error) -> Self { Error::Rpc(e) }
 }
 
 /// Provide the bitcoind executable path if a version feature has been specified.
@@ -817,7 +817,7 @@ mod test {
     #[cfg(feature = "0_19_1")]
     #[test]
     fn test_multi_wallet() {
-        use corepc_client::bitcoin::Amount;
+        use corepc_regtest_client::bitcoin::Amount;
 
         let exe = init();
         let node = BitcoinD::new(exe).unwrap();

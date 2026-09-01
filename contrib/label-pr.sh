@@ -21,6 +21,7 @@ declare -A label_map=(
     [bitcoind/]="C-bitcoind"
     [bitreq/]="C-bitreq"
     [client/]="C-client"
+    [regtest-client/]="C-regtest-client"
     [electrsd/]="C-electrsd"
     [integration_test/]="C-integration-test"
     [jsonrpc/]="C-jsonrpc"

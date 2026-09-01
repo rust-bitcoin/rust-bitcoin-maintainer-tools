@@ -9,7 +9,7 @@ set -euo pipefail
 REPO_DIR="$(git rev-parse --show-toplevel)"
 
 # Targets where `--all-features` is used.
-ALL_FEATURE_CRATES=(bitreq client fuzz jsonrpc types verify)
+ALL_FEATURE_CRATES=(bitreq client regtest-client fuzz jsonrpc types verify)
 
 SPECIFIC_FEATURES_CRATES=(integration_test bitcoind)
 SPECIFIC_FEATURES=(latest)

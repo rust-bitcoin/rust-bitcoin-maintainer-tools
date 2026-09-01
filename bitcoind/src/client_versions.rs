@@ -7,51 +7,51 @@
 #![allow(unused_imports)] // Not all users need the json types.
 
 #[cfg(feature = "31_0")]
-pub use corepc_client::{client_sync::v31::*, types::v31 as vtype};
+pub use corepc_regtest_client::{v31::*, types::v31 as vtype};
 
 #[cfg(all(feature = "30_2", not(feature = "31_0")))]
-pub use corepc_client::{client_sync::v30::*, types::v30 as vtype};
+pub use corepc_regtest_client::{v30::*, types::v30 as vtype};
 
 #[cfg(all(feature = "29_0", not(feature = "30_2")))]
-pub use corepc_client::{client_sync::v29::*, types::v29 as vtype};
+pub use corepc_regtest_client::{v29::*, types::v29 as vtype};
 
 #[cfg(all(feature = "28_2", not(feature = "29_0")))]
-pub use corepc_client::{client_sync::v28::*, types::v28 as vtype};
+pub use corepc_regtest_client::{v28::*, types::v28 as vtype};
 
 #[cfg(all(feature = "27_2", not(feature = "28_2")))]
-pub use corepc_client::{client_sync::v27::*, types::v27 as vtype};
+pub use corepc_regtest_client::{v27::*, types::v27 as vtype};
 
 #[cfg(all(feature = "26_2", not(feature = "27_2")))]
-pub use corepc_client::{client_sync::v26::*, types::v26 as vtype};
+pub use corepc_regtest_client::{v26::*, types::v26 as vtype};
 
 #[cfg(all(feature = "25_2", not(feature = "26_2")))]
-pub use corepc_client::{client_sync::v25::*, types::v25 as vtype};
+pub use corepc_regtest_client::{v25::*, types::v25 as vtype};
 
 #[cfg(all(feature = "24_2", not(feature = "25_2")))]
-pub use corepc_client::{client_sync::v24::*, types::v24 as vtype};
+pub use corepc_regtest_client::{v24::*, types::v24 as vtype};
 
 #[cfg(all(feature = "23_2", not(feature = "24_2")))]
-pub use corepc_client::{client_sync::v23::*, types::v23 as vtype};
+pub use corepc_regtest_client::{v23::*, types::v23 as vtype};
 
 #[cfg(all(feature = "22_1", not(feature = "23_2")))]
-pub use corepc_client::{client_sync::v22::*, types::v22 as vtype};
+pub use corepc_regtest_client::{v22::*, types::v22 as vtype};
 
 #[cfg(all(feature = "0_21_2", not(feature = "22_1")))]
-pub use corepc_client::{client_sync::v21::*, types::v21 as vtype};
+pub use corepc_regtest_client::{v21::*, types::v21 as vtype};
 
 #[cfg(all(feature = "0_20_2", not(feature = "0_21_2")))]
-pub use corepc_client::{client_sync::v20::*, types::v20 as vtype};
+pub use corepc_regtest_client::{v20::*, types::v20 as vtype};
 
 #[cfg(all(feature = "0_19_1", not(feature = "0_20_2")))]
-pub use corepc_client::{client_sync::v19::*, types::v19 as vtype};
+pub use corepc_regtest_client::{v19::*, types::v19 as vtype};
 
 #[cfg(all(feature = "0_18_1", not(feature = "0_19_1")))]
-pub use corepc_client::{client_sync::v18::*, types::v18 as vtype};
+pub use corepc_regtest_client::{v18::*, types::v18 as vtype};
 
 #[cfg(all(feature = "0_17_2", not(feature = "0_18_1")))]
-pub use corepc_client::{client_sync::v17::*, types::v17 as vtype};
+pub use corepc_regtest_client::{v17::*, types::v17 as vtype};
 
 /// This is meaningless but we need it otherwise we can't get far enough into
 /// the build process to trigger the `compile_error!` in `./versions.rs`.
 #[cfg(not(feature = "0_17_2"))] // Remember: later version features enable earlier ones.
-pub use corepc_client::{client_sync::v28::*, types::v28 as vtype};
+pub use corepc_regtest_client::{v28::*, types::v28 as vtype};
