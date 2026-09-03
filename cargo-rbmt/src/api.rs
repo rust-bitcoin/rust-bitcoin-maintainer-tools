@@ -154,7 +154,7 @@ struct PackageDiff {
 }
 
 /// Error type for when API diffs are detected.
-struct ApiDiffError {
+pub(crate) struct ApiDiffError {
     package_diffs: Vec<PackageDiff>,
 }
 
@@ -236,6 +236,17 @@ fn check_private_deps(
     Ok(())
 }
 
+/// Outcome of the API check.
+///
+/// Distinguished from hard errors (I/O, build failures, private dep leaks) so callers
+/// can map API diffs to a different exit code (e.g. 2) vs hard failures (1).
+pub enum ApiOutcome {
+    /// No API changes detected; all checks passed.
+    Success,
+    /// API diffs detected against the baseline.
+    DiffDetected(ApiDiffError),
+}
+
 /// Run the API task to check or generate API snapshots for packages.
 ///
 /// # Arguments
@@ -243,13 +254,19 @@ fn check_private_deps(
 /// * `packages` - Optional list of packages to check. If empty, checks all packages in the workspace.
 /// * `baseline` - Git ref for optional baseline diff comparison. When not provided, outputs APIs to stdout.
 /// * `snapshot` - Whether to generate API snapshot files to disk.
+///
+/// # Returns
+///
+/// * `Ok(ApiOutcome::Success)` - No API diffs detected.
+/// * `Ok(ApiOutcome::DiffDetected(ApiDiffError))` - API diffs found vs baseline.
+/// * `Err(_)` - Hard failure (build error, I/O error, private dep leak, etc.).
 pub fn run(
     sh: &Shell,
     lockfile: LockFile,
     packages: &[String],
     baseline: Option<&str>,
     snapshot: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<ApiOutcome, Box<dyn std::error::Error>> {
     let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let mut progress = ProgressGuard::new();
@@ -284,7 +301,7 @@ pub fn run(
     }
 
     if !package_diffs.is_empty() {
-        return Err(Box::new(ApiDiffError { package_diffs }));
+        return Ok(ApiOutcome::DiffDetected(ApiDiffError { package_diffs }));
     }
 
     // Output all APIs by default.
@@ -301,7 +318,7 @@ pub fn run(
         }
     }
 
-    Ok(())
+    Ok(ApiOutcome::Success)
 }
 
 /// Get the public APIs for a single package across all feature configurations.
