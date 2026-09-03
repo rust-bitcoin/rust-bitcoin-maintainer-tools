@@ -42,7 +42,7 @@ Configuration for `cargo-rbmt` is stored in `[package.metadata.rbmt]` in a packa
 
 ### Version Pinning
 
-Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup. Pass `--ignore-version` (`-i`) to skip the check and run anyway (e.g. when testing a local `cargo-rbmt` build against a pinned workspace).
+Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup. Pass `--ignore-version` (`-i`) to skip the check and run anyway (e.g. when testing a local `cargo-rbmt` build against a pinned workspace). This version can be automatically updated with the `tools` command.
 
 ```toml
 [workspace.metadata]
@@ -293,7 +293,9 @@ The `--update-nightly` and `--update-stable` flags each install the correspondin
 
 ### tools
 
-The `tools` command installs external cargo tools whose versions are pinned in the *root* `Cargo.toml` manifest. The preferred location is `[workspace.metadata.rbmt.tools]`.
+The `tools` command installs external cargo tools whose versions are pinned in the *root* `Cargo.toml` manifest. The preferred location is `[workspace.metadata.rbmt.tools]`. This also manages the version of rbmt itself if set at `workspace.metadata.rbmt.version`.
+
+> **Note:** Tools are installed via `cargo install`. Installing or updating a tool overwrites any previously installed version of that binary system-wide. If you rely on a specific version of a tool outside of this workflow, be aware that running `cargo rbmt tools` will replace it with the pinned version.
 
 ```toml
 [workspace.metadata.rbmt.tools]
@@ -316,10 +318,6 @@ cargo rbmt tools --update
 # Update only a specific tool.
 cargo rbmt tools --update cargo-public-api
 ```
-
-The `--update` flag installs each tool without a version constraint, then reads the resolved version back from `cargo install --list` and writes it into `Cargo.toml`. The resulting diff can be reviewed and committed as a deliberate version bump.
-
-> **Note:** Tools are installed via `cargo install`. Installing or updating a tool overwrites any previously installed version of that binary system-wide. If you rely on a specific version of a tool outside of this workflow, be aware that running `cargo rbmt tools` will replace it with the pinned version.
 
 ### tree
 

@@ -152,12 +152,12 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
-    /// Install tools pinned in [workspace.metadata.rbmt.tools].
+    /// Install tools pinned in [workspace.metadata.rbmt.tools] and manage the cargo-rbmt version.
     Tools {
-        /// Install each tool at its latest version and update pins in the root manifest.
+        /// Install each tool at its latest version, update pins, and sync the cargo-rbmt version.
         #[arg(long)]
         update: bool,
-        /// Only operate on these tools (default: all tools in the manifest).
+        /// Only operate on these tools (default: all tools).
         tools: Vec<String>,
     },
     /// Print version and build information.
