@@ -1,3 +1,9 @@
+# Unreleased
+
+- Add a production-ready async Bitcoin Core JSON-RPC client, with `Client`, `Auth`, and typed RPC
+    errors exported from the crate root.
+- Deprecate the `client_sync` module in favor of `corepc-regtest-client`.
+
 # 0.16.0 - 2026-06-18
 
 - Upgrade to latest `corepc-types 0.15.0`

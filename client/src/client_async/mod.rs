@@ -9,7 +9,7 @@
 //! # Examples
 //!
 //! ```rust,no_run
-//! use corepc_client::client_async::GetBlockError;
+//! use corepc_client::GetBlockError;
 //!
 //! fn handle_get_block_error(err: GetBlockError) {
 //!     if err.is_not_found_error() {
@@ -76,7 +76,7 @@ pub struct Client {
 
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> core::fmt::Result {
-        write!(f, "corepc_client::client_async::Client({:?})", self.inner)
+        write!(f, "corepc_client::Client({:?})", self.inner)
     }
 }
 

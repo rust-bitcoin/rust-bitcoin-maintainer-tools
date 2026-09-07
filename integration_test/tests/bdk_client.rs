@@ -8,7 +8,7 @@
 use bitcoin::address::KnownHrp;
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::{Address, CompressedPublicKey, Network, PrivateKey};
-use corepc_client::client_async::{Auth, Client};
+use corepc_client::{Auth, Client};
 use integration_test::{BitcoinD, BitcoinDExt as _, Wallet};
 
 fn async_client_for(node: &BitcoinD) -> Client {
