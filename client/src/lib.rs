@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: CC0-1.0
 
 //! Support for connecting to Bitcoin Core via JSON-RPC.
+//!
+//! The production client is async:
+//!
+//! ```rust,no_run
+//! use corepc_client::{Auth, Client};
+//!
+//! let client = Client::new_with_auth("http://127.0.0.1:8332", Auth::None)?;
+//! # Ok::<(), corepc_client::Error>(())
+//! ```
 
 /// Re-export the `rust-bitcoin` crate.
 pub extern crate bitcoin;
@@ -13,11 +22,12 @@ pub extern crate types;
 #[macro_use]
 pub mod client_sync;
 
-#[cfg(feature = "client-async")]
-pub mod client_async;
+mod client_async;
+
+/// Async JSON-RPC client and error types.
+pub use client_async::*;
 
 /// Shorthand for converting a variable into a `serde_json::Value`.
-#[cfg(any(feature = "client-sync", feature = "client-async"))]
 fn into_json<T>(val: T) -> Result<serde_json::Value, serde_json::Error>
 where
     T: serde::ser::Serialize,
@@ -26,7 +36,6 @@ where
 }
 
 /// Helper to log an RPC response.
-#[cfg(any(feature = "client-sync", feature = "client-async"))]
 fn log_response<E: std::fmt::Debug>(
     method: &str,
     resp: &std::result::Result<jsonrpc::Response, E>,

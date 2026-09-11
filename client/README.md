@@ -4,13 +4,19 @@ Rust client for the Bitcoin Core daemon's JSON-RPC API.
 
 This crate provides:
 
-- A blocking client intended for integration testing (`client-sync`).
+- (deprecated) A  blocking client intended for integration testing (`client-sync`).
 - An async client intended for production (`client-async`).
 
 ## Features
 
-- `client-sync`: Blocking JSON-RPC client.
-- `client-async`: Async JSON-RPC client.
+- `client-sync`: Deprecated blocking JSON-RPC client under the `client_sync` module.
+
+```rust,no_run
+use corepc_client::{Auth, Client};
+
+let client = Client::new_with_auth("http://127.0.0.1:8332", Auth::None)?;
+# Ok::<(), corepc_client::Error>(())
+```
 
 ## Minimum Supported Rust Version (MSRV)
 
