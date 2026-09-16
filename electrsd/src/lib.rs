@@ -292,16 +292,12 @@ impl ElectrsD {
     /// terminate the electrs process
     pub fn kill(&mut self) -> anyhow::Result<()> {
         match self.work_dir {
-            DataDir::Persistent(_) => {
-                self.inner_kill()?;
-                // Wait for the process to exit
-                match self.process.wait() {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(e.into()),
-                }
-            }
-            DataDir::Temporary(_) => Ok(self.process.kill()?),
+            DataDir::Persistent(_) => self.inner_kill()?,
+            DataDir::Temporary(_) => self.process.kill()?,
         }
+        // Wait for the process to exit
+        self.process.wait()?;
+        Ok(())
     }
 
     #[cfg(not(target_os = "windows"))]
