@@ -1,6 +1,6 @@
 [package]
 name = "electrsd"
-version = "0.41.0"
+version = "0.42.0"
 authors = ["Riccardo Casatta <riccardo@casatta.it>"]
 description = "Utility to run a regtest electrs process, useful in integration testing environment"
 repository = "https://git.rust-bitcoin.org/rust-bitcoin/corepc"
@@ -11,8 +11,8 @@ categories = ["cryptography::cryptocurrencies", "development-tools::testing"]
 exclude = ["tests", "contrib"]
 
 [dependencies]
-bitcoind = { version = "0.41.0", path = "../bitcoind" }
-corepc-regtest-client = { version = "0.16.0", path = "../regtest-client" }
+bitcoind = { version = "0.42.0", path = "../bitcoind" }
+corepc-regtest-client = { version = "0.17.0", path = "../regtest-client" }
 electrum-client = { version = "0.25.0", default-features = false }
 log = { version = "0.4" }
 
@@ -29,7 +29,7 @@ zip = { version = "0.6", default-features = false, optional = true, features = [
   "bzip2",
   "deflate",
 ] }
-bitreq = { version = "0.3.5", path = "../bitreq", optional = true, features = ["https"] }
+bitreq = { version = "0.4.0", path = "../bitreq", optional = true, features = ["https"] }
 
 [features]
 default = ["electrs_0_10_6"]
