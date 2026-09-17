@@ -1,4 +1,4 @@
-// An explicit version of Bitcoin Core must be selected by enabling some feature.
+// An explicit version of Electrs must be selected by enabling some feature.
 // We check this here instead of in `lib.rs` because this file is included in `build.rs`.
 #[cfg(not(any(
     feature = "electrs_0_8_10",
