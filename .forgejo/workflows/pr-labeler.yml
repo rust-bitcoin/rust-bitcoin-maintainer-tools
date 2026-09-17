@@ -11,5 +11,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Label PR based on changed files
         env:
-          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          FORGEJO_TOKEN: ${{ secrets.LABELER_TOKEN }}
         run: bash contrib/label-pr.sh
