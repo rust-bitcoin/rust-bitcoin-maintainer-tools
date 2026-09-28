@@ -1,3 +1,7 @@
+# 0.16.0 - 2026-09-17
+
+- Drop `model::GetBlockCount`, `model::GetDifficulty`, and `model::RescanBlockchain` newtypes on Rust primitive types [#666](https://github.com/rust-bitcoin/corepc/pull/666)
+
 # 0.15.0 - 2026-06-18
 
 - Finish off support for Bitcoin Core v31.0 [#615](https://github.com/rust-bitcoin/corepc/pull/615)

@@ -1,7 +1,8 @@
-# Unreleased
+# 0.4.0 - 2026-09-17
 
 * Use `Duration` for `Request::with_timeout` [#642](https://github.com/rust-bitcoin/corepc/pull/642)
 * Add SOCKS5 proxy support [#533](https://github.com/rust-bitcoin/corepc/pull/533)
+* Bump `rustls` to `v0.23.45` and `rustls-webpki` to `v0.103.15` to address RUSTSEC-2026-0285 [#713](https://gitea.bitcoin.ninja/rust-bitcoin/corepc/pulls/713)
 
 # 0.3.7 - 2026-05-28
 
@@ -32,7 +33,7 @@
 * Handle async pipelined request cancellation correctly [#488](https://github.com/rust-bitcoin/corepc/pull/488)
 * Check utf-8 while deserializing JSON body [#486](https://github.com/rust-bitcoin/corepc/pull/486)
 * Add `Url` type for parsing and validating URLs [#467](https://github.com/rust-bitcoin/corepc/pull/467)
-* Expose all features in `docs.rs` builds [#466](https://github.com/rust-bitcoin/corepc/pull/466) 
+* Expose all features in `docs.rs` builds [#466](https://github.com/rust-bitcoin/corepc/pull/466)
 
 # 0.3.1 - 2026-01-19
 

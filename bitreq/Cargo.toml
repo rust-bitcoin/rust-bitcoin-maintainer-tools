@@ -1,6 +1,6 @@
 [package]
 name = "bitreq"
-version = "0.3.7"
+version = "0.4.0"
 authors = ["Jens Pitkanen <jens@neon.moe>", "Tobin C. Harding <me@tobin.cc>", "Matt Corallo", "Elias Rohrer <dev@tnull.de>"]
 description = "Simple, minimal-dependency HTTP client"
 repository = "https://git.rust-bitcoin.org/rust-bitcoin/corepc"

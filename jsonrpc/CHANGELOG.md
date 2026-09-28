@@ -1,3 +1,10 @@
+# 0.21.0 - 2026-09-17
+
+* Update to use latest `bitreq v0.4.0`.
+* This is a semver-breaking release because `bitreq::Error` is part of the public API via
+  `Error::Bitreq`, and `bitreq v0.4.0` is a semver-breaking release.
+* Use `Duration` internally for request timeouts [#642](https://github.com/rust-bitcoin/corepc/pull/642)
+
 # 0.20.1 - 2026-05-26
 
 * Set host header to URL hostname instead of resolved IP [#578](https://github.com/rust-bitcoin/corepc/pull/578)
