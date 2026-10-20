@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
@@ -7,6 +8,8 @@ use xshell::{Cmd, Shell};
 
 /// Environment variable to control output verbosity.
 const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
+/// Progress message output symbols (flair).
+pub const PROGRESS_SYMBOLS: &[&str] = &["b", "B", "$", "#"];
 
 /// Controls how much output is shown during command execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,6 +29,35 @@ impl OutputMode {
             Ok("progress") => Self::Progress,
             Ok("quiet") => Self::Quiet,
             _ => Self::Verbose,
+        }
+    }
+
+    /// Print a progress message respecting terminal state.
+    pub(crate) fn print_progress(self, msg: &str) {
+        use std::io::IsTerminal;
+
+        match self {
+            Self::Verbose => eprintln!("{msg}"),
+            Self::Progress => {
+                // Show a symbol based on message hash.
+                let hash = msg
+                    .as_bytes()
+                    .iter()
+                    .fold(0usize, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize));
+                let symbol = PROGRESS_SYMBOLS[hash % PROGRESS_SYMBOLS.len()];
+
+                if std::io::stderr().is_terminal() {
+                    // Disable line wrapping to prevent long messages from
+                    // wrapping and breaking carriage return. Use carriage
+                    // return to overwrite the same line, and ANSI escape
+                    // to clear to EOL.
+                    eprint!("\x1b[?7l\r[{}] {}\x1b[K", symbol, msg);
+                } else {
+                    // Non-terminal (CI / pipe): plain output, no escapes.
+                    eprintln!("[{symbol}] {msg}");
+                }
+            }
+            Self::Quiet => {}
         }
     }
 }
@@ -77,8 +109,11 @@ impl ProgressGuard {
     pub fn disable(&mut self) {
         self.disabled = true;
         if OutputMode::from_env() == OutputMode::Progress {
-            // Re-enable line wrapping and move to new line to clean up progress output.
-            eprintln!("\x1b[?7h");
+            // Re-enable line wrapping on real terminals to clean up progress output.
+            // On non-terminals (CI / pipes) there's nothing to clean up.
+            if std::io::stderr().is_terminal() {
+                eprintln!("\x1b[?7h");
+            }
         }
     }
 }
@@ -146,34 +181,15 @@ pub fn cargo_cmd(sh: &Shell) -> Cmd<'_> {
     cmd
 }
 
-/// Progress message output symbols (flair).
-pub const PROGRESS_SYMBOLS: &[&str] = &["b", "B", "$", "#"];
-
 /// Progress output macro that respects [`OutputMode`] settings.
 ///
 /// Wraps eprintln! so that the underlying macro's vararg handling is exposed.
 #[macro_export]
 macro_rules! rbmt_eprintln {
-    ($($arg:tt)*) => {{
-        match $crate::environment::OutputMode::from_env() {
-            $crate::environment::OutputMode::Verbose => {
-                eprintln!($($arg)*);
-            }
-            $crate::environment::OutputMode::Progress => {
-                let msg = format!($($arg)*);
-                // Show a symbol based on message hash.
-                let hash = msg
-                    .as_bytes()
-                    .iter()
-                    .fold(0usize, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize));
-                let symbol = $crate::environment::PROGRESS_SYMBOLS[hash % $crate::environment::PROGRESS_SYMBOLS.len()];
-                // Disable line wrapping to prevent long messages from wrapping and breaking carriage return.
-                // Use carriage return to overwrite the same line, and ANSI escape to clear to EOL.
-                eprint!("\x1b[?7l\r[{}] {}\x1b[K", symbol, msg);
-            }
-            $crate::environment::OutputMode::Quiet => {}
-        }
-    }};
+    ($($arg:tt)*) => {
+        $crate::environment::OutputMode::from_env()
+            .print_progress(&format!($($arg)*));
+    };
 }
 
 /// Get list of package names and their directories in the workspace using cargo metadata.
