@@ -30,11 +30,14 @@ const CARGO_TREE_ARGS: &[&str] = &[
     "depth",
 ];
 
+/// Maps each duplicate crate name to its versions and the workspace members pulling each in.
+type DuplicatesMap = BTreeMap<String, BTreeMap<String, BTreeSet<String>>>;
+
 /// Custom error type for lint failures with detailed information.
 #[derive(Debug)]
 enum LintError {
     /// Duplicate dependencies found in package dependency tree.
-    DuplicateDependencies(Vec<(String, String)>), // (package_name, tree_output)
+    DuplicateDependencies(Vec<(String, DuplicatesMap)>), // (package_name, structured_dupes)
     /// Stale entries in `allowed_duplicates` configuration.
     StaleAllowedDuplicates(Vec<(String, Vec<String>)>), // (package_name, stale_entries)
     /// Deprecated MSRV settings found in clippy.toml files.
@@ -45,9 +48,28 @@ impl std::fmt::Display for LintError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DuplicateDependencies(duplicates) => {
-                write!(f, "Error: Found duplicate dependencies")?;
-                for (pkg_name, output) in duplicates {
-                    write!(f, "\n  {}: {}", pkg_name, output)?;
+                writeln!(f, "Error: Found duplicate dependencies")?;
+                for (pkg_name, deps) in duplicates {
+                    writeln!(f, "{:indent$}In package '{}':", "", pkg_name, indent = 2)?;
+                    for (crate_name, versions) in deps {
+                        writeln!(f, "{:indent$}{}", "", crate_name, indent = 4)?;
+                        for (version, members) in versions {
+                            let member_list =
+                                members.iter().map(String::as_str).collect::<Vec<_>>().join(", ");
+                            if member_list.is_empty() {
+                                writeln!(f, "{:indent$}{}", "", version, indent = 6)?;
+                            } else {
+                                writeln!(
+                                    f,
+                                    "{:indent$}{} ({})",
+                                    "",
+                                    version,
+                                    member_list,
+                                    indent = 6
+                                )?;
+                            }
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -204,7 +226,7 @@ fn check_duplicate_deps(
 ) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Checking for duplicate dependencies...");
 
-    let mut duplicate_deps: Vec<(String, String)> = Vec::new();
+    let mut duplicate_deps: Vec<(String, DuplicatesMap)> = Vec::new();
     let mut stale_entries: Vec<(String, Vec<String>)> = Vec::new();
 
     for package in packages {
@@ -228,7 +250,7 @@ fn check_duplicate_deps(
         }
 
         if !tree.duplicates().is_empty() {
-            duplicate_deps.push((package.name.clone(), output));
+            duplicate_deps.push((package.name.clone(), tree.duplicates().clone()));
         }
         if !tree.stale_allowed_duplicates().is_empty() {
             stale_entries.push((package.name.clone(), tree.stale_allowed_duplicates().to_vec()));
