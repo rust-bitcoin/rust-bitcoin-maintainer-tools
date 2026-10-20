@@ -48,12 +48,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Check for public API changes in stabilizing crates.
+    /// Check for public API changes.
     Api {
         /// Lockfile to use for dependencies.
         #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
         lockfile: LockFile,
-        /// Git ref to use as baseline for semver comparison (tag, branch, or commit).
+        /// Git ref to use as baseline for semver comparison (tag, branch, or commit), exits with 2 if diff detected.
         #[arg(long)]
         baseline: Option<String>,
         /// Write API snapshot files.
@@ -192,12 +192,18 @@ fn main() {
 
     match cli.command {
         Commands::Version => println!("{}", env!("RBMT_BUILD_VERSION")),
-        Commands::Api { lockfile, baseline, snapshot } => {
-            if let Err(e) = api::run(&sh, lockfile, &cli.packages, baseline.as_deref(), snapshot) {
-                eprintln!("Error running API check: {}", e);
-                process::exit(1);
-            }
-        }
+        Commands::Api { lockfile, baseline, snapshot } =>
+            match api::run(&sh, lockfile, &cli.packages, baseline.as_deref(), snapshot) {
+                Ok(api::ApiOutcome::Success) => {}
+                Ok(api::ApiOutcome::DiffDetected(e)) => {
+                    eprintln!("{}", e);
+                    process::exit(2);
+                }
+                Err(e) => {
+                    eprintln!("Error running API check: {}", e);
+                    process::exit(1);
+                }
+            },
         Commands::Fmt { check } =>
             if let Err(e) = fmt::run(&sh, check, &cli.packages) {
                 eprintln!("Error running fmt task: {}", e);
