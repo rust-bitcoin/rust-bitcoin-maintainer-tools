@@ -367,12 +367,13 @@ fn test_features(
 /// * `cargo_args` - Additional arguments to pass to cargo build and test commands.
 pub fn run(
     sh: &Shell,
-    lockfile: LockFile,
+    lockfile: Option<LockFile>,
     toolchain: Toolchain,
     baseline: Option<&str>,
     packages: &[String],
     cargo_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::min(sh)? };
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
 

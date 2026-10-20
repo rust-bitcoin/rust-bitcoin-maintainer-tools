@@ -6,6 +6,7 @@
 //! generate and modify lockfiles. Using `--locked` would prevent the dependency
 //! resolution we need here.
 
+use std::cmp::Ordering;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -88,7 +89,7 @@ pub enum LockFile {
 }
 
 /// Lockfile types that can be generated via CLI (excludes `Existing`).
-#[derive(Debug, Clone, Copy, ValueEnum, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, ValueEnum, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum GeneratableLockFile {
     /// Uses minimal versions that satisfy dependency constraints.
@@ -98,6 +99,24 @@ pub enum GeneratableLockFile {
     /// Uses recent/updated versions of dependencies.
     #[default]
     Recent,
+}
+
+impl Ord for GeneratableLockFile {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Order by dependency version recency: minimal < recent < maximum.
+        fn order(l: GeneratableLockFile) -> u8 {
+            match l {
+                GeneratableLockFile::Minimal => 0,
+                GeneratableLockFile::Recent => 1,
+                GeneratableLockFile::Maximum => 2,
+            }
+        }
+        order(*self).cmp(&order(*other))
+    }
+}
+
+impl PartialOrd for GeneratableLockFile {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 
 impl From<GeneratableLockFile> for LockFile {
@@ -171,6 +190,22 @@ impl LockFile {
         let guard = LockFileGuard::new(sh)?;
         self.restore(sh)?;
         Ok(guard)
+    }
+
+    /// The minimum (oldest) lockfile the workspace declares.
+    pub fn min(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
+        let workspace_root = get_workspace_root(sh)?;
+        let declared = LockConfig::load(&workspace_root)?.lockfiles;
+        let lockfile = declared.iter().copied().min().ok_or("no lockfiles declared")?;
+        Ok(Self::from(lockfile))
+    }
+
+    /// The maximum (newest) lockfile the workspace declares.
+    pub fn max(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
+        let workspace_root = get_workspace_root(sh)?;
+        let declared = LockConfig::load(&workspace_root)?.lockfiles;
+        let lockfile = declared.iter().copied().max().ok_or("no lockfiles declared")?;
+        Ok(Self::from(lockfile))
     }
 }
 

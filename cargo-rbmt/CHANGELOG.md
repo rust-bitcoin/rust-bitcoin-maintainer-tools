@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 * Add `[workspace.metadata.rbmt.lock.lockfiles]` to declare which lockfiles `lock` generates by default.
+* Derive subcommand `--lockfile` defaults from the declared lockfiles, maximum (new) for all commands except minimum (old) for `test`.
 * Add `-V` and `--version` to print cargo-rbmt version.
 * Add signal handling for more robust git and lockfile state management.
 * Manage rbmt version with `tools`.

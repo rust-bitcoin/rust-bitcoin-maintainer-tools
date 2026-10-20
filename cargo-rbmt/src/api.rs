@@ -251,6 +251,7 @@ pub enum ApiOutcome {
 ///
 /// # Arguments
 ///
+/// * `lockfile` - Optional lockfile variant to use.
 /// * `packages` - Optional list of packages to check. If empty, checks all packages in the workspace.
 /// * `baseline` - Git ref for optional baseline diff comparison. When not provided, outputs APIs to stdout.
 /// * `snapshot` - Whether to generate API snapshot files to disk.
@@ -262,11 +263,12 @@ pub enum ApiOutcome {
 /// * `Err(_)` - Hard failure (build error, I/O error, private dep leak, etc.).
 pub fn run(
     sh: &Shell,
-    lockfile: LockFile,
+    lockfile: Option<LockFile>,
     packages: &[String],
     baseline: Option<&str>,
     snapshot: bool,
 ) -> Result<ApiOutcome, Box<dyn std::error::Error>> {
+    let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::max(sh)? };
     let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let mut progress = ProgressGuard::new();

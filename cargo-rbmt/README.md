@@ -65,7 +65,7 @@ cargo install --locked --git https://git.rust-bitcoin.org/rust-bitcoin/rust-bitc
 
 ## Commands
 
-All of `cargo-rbmt`'s subcommands use one of the existing lockfiles (minimal, maximum, recent, or existing) through the `--lockfile` flag. The lockfiles are generated and managed with the [`lock`](#lock) command.
+All of `cargo-rbmt`'s subcommands use one of the lockfiles (minimal, maximum, recent, or existing) through the `--lockfile` flag. The lockfiles are generated and managed with the [`lock`](#lock) command. With no `--lockfile`, a command uses the maximum declared lockfile by default, except `test`, which uses the minimum.
 
 ### api
 
@@ -159,7 +159,7 @@ To ensure your package works with the full range of declared dependency versions
 
 The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against any version set.
 
-Declare which lockfiles your workspace maintains so `lock` generates them by default:
+Declare which lockfiles your workspace maintains. `lock` generates them by default, and subcommands pick their default `--lockfile` from this set (maximum for most commands, minimum for `test`):
 
 ```toml
 [workspace.metadata.rbmt.lock]
