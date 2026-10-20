@@ -32,7 +32,7 @@ jobs:
           git config --global user.email "bot@example.com"
       - name: Generate lockfiles and commit
         run: |
-          cargo rbmt lock --lockfiles minimal,maximum,recent
+          cargo rbmt lock
           if git add Cargo-*.lock && git commit -m "Update lockfiles"; then
             echo "LOCKFILE_UPDATE=true" >> $GITHUB_ENV
           fi
