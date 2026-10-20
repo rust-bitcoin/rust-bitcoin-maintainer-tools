@@ -159,10 +159,17 @@ To ensure your package works with the full range of declared dependency versions
 
 The `lock` command generates and maintains these files for you. You can then use `--lockfile` with any command to test against any version set.
 
+Declare which lockfiles your workspace maintains so `lock` generates them by default:
+
+```toml
+[workspace.metadata.rbmt.lock]
+lockfiles = ["minimal", "maximum", "recent"]
+```
+
 ```bash
-# Generate minimal and recent (default for backward compatibility).
+# Generate minimal and maximum (default when no lockfiles are configured).
 cargo rbmt lock
-# Generate all three lockfiles.
+# Override the configured lockfiles for a one-off run.
 cargo rbmt lock --lockfiles minimal,maximum,recent
 ```
 
