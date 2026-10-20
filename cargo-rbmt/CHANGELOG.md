@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Add `-V` and `--version` to print cargo-rbmt version.
 * Add signal handling for more robust git and lockfile state management.
 * Manage rbmt version with `tools`.
 * Add error code 2 to `api` on API diff detection.

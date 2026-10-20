@@ -33,6 +33,7 @@ use xshell::Shell;
 #[derive(Parser)]
 #[command(name = "cargo-rbmt")]
 #[command(about = "Rust Bitcoin Maintainer Tools", long_about = None)]
+#[command(version = env!("RBMT_BUILD_VERSION"))]
 struct Cli {
     /// Filter which packages are operated on in the workspace. Can be a package's manifest name or directory.
     #[arg(short = 'p', long = "package", global = true)]
@@ -191,7 +192,7 @@ fn main() {
     }
 
     match cli.command {
-        Commands::Version => println!("{}", env!("RBMT_BUILD_VERSION")),
+        Commands::Version => println!("cargo-rbmt {}", env!("RBMT_BUILD_VERSION")),
         Commands::Api { lockfile, baseline, snapshot } =>
             match api::run(&sh, lockfile, &cli.packages, baseline.as_deref(), snapshot) {
                 Ok(api::ApiOutcome::Success) => {}
