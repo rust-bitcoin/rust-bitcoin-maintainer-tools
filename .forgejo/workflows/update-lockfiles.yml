@@ -1,16 +1,10 @@
 name: Update Lockfiles
 
 on:
+  schedule:
+    - cron: "0 0 * * 1" # Run every Monday at midnight
   # Manually triggerable.
   workflow_dispatch:
-
-permissions:
-  contents: write
-
-# Use a custom rustup home on the same filesystem to avoid cross-device link errors
-# in container environments with layered filesystems (e.g., Docker/overlayfs).
-env:
-  RUSTUP_HOME: /home/ci/tmp
 
 jobs:
   update-lockfiles:
@@ -21,8 +15,6 @@ jobs:
           # Use a token associated with a user account, they open the pull request.
           # The ephemeral workflow token is sometimes user-less.
           token: ${{ secrets.RBMT }}
-      - name: Install a default toolchain
-        run: rustup default stable
       - uses: ./actions/setup-rbmt
         with:
           rbmt-path: cargo-rbmt
