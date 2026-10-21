@@ -104,9 +104,9 @@ enum Commands {
     Integration,
     /// Update dependency versions in lockfiles.
     Lock {
-        /// Lockfile types to generate.
-        #[arg(long, value_delimiter = ',', default_values = ["minimal", "recent"])]
-        lockfiles: Vec<GeneratableLockFile>,
+        /// Lockfile types to generate. Defaults to the workspace's configured lockfiles.
+        #[arg(long, value_delimiter = ',')]
+        lockfiles: Option<Vec<GeneratableLockFile>>,
     },
     /// Run arbitrary cargo commands with toolchain and lockfile management.
     Run {
@@ -235,7 +235,7 @@ fn main() {
                 process::exit(1);
             },
         Commands::Lock { lockfiles } =>
-            if let Err(e) = lock::run(&sh, &lockfiles) {
+            if let Err(e) = lock::run(&sh, lockfiles) {
                 eprintln!("Error updating lockfiles: {}", e);
                 process::exit(1);
             },

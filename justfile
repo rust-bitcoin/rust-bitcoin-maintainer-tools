@@ -20,8 +20,8 @@ tools:
 rbmt *args: tools
   cargo rbmt {{args}}
 
-# Update minimal and maximum lockfiles
-lock: (rbmt "lock --lockfiles recent,minimal,maximum")
+# Update lockfiles
+lock: (rbmt "lock")
 
 # Check docs
 docs: (rbmt "docs --lockfile maximum")

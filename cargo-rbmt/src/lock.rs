@@ -88,7 +88,8 @@ pub enum LockFile {
 }
 
 /// Lockfile types that can be generated via CLI (excludes `Existing`).
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, ValueEnum, Default, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum GeneratableLockFile {
     /// Uses minimal versions that satisfy dependency constraints.
     Minimal,
@@ -173,21 +174,47 @@ impl LockFile {
     }
 }
 
-/// The `[*.metadata.rbmt]` table of a nested workspace manifest, lock sync configuration only.
+/// The `[*.metadata.rbmt]` table of a workspace manifest, lock configuration only.
 #[derive(serde::Deserialize, Default)]
 struct RbmtLockConfig {
     lock: Option<LockConfig>,
 }
 
-/// The `[*.metadata.rbmt.lock]` table of a nested workspace manifest.
+/// The `[*.metadata.rbmt.lock]` table of a workspace manifest.
 #[derive(serde::Deserialize)]
+#[serde(default)]
 struct LockConfig {
-    enabled: Option<bool>,
+    /// Whether nested lockfile syncing is enabled. Defaults to `true`.
+    enabled: bool,
+    /// The lockfiles this workspace maintains, used as the `lock` command's default.
+    lockfiles: Vec<GeneratableLockFile>,
 }
 
-impl RbmtLockConfig {
-    /// Whether lockfile syncing is enabled, if configured at this table level.
-    fn enabled(&self) -> Option<bool> { self.lock.as_ref().and_then(|lock| lock.enabled) }
+impl Default for LockConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            lockfiles: vec![GeneratableLockFile::Minimal, GeneratableLockFile::Maximum],
+        }
+    }
+}
+
+impl LockConfig {
+    /// Load lock configuration from the root `Cargo.toml`.
+    ///
+    /// Tries `[workspace.metadata.rbmt.lock]` first, then falls back to
+    /// `[package.metadata.rbmt.lock]`. Returns the default if neither is present.
+    fn load(workspace_root: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let contents = fs::read_to_string(workspace_root.join("Cargo.toml"))?;
+        let toml: WorkspaceManifest<RbmtLockConfig> = toml::from_str(&contents)?;
+        Ok(toml
+            .workspace
+            .metadata
+            .rbmt
+            .lock
+            .or(toml.package.metadata.rbmt.lock)
+            .unwrap_or_default())
+    }
 }
 
 /// Update lockfiles for dependency version testing.
@@ -210,10 +237,10 @@ impl RbmtLockConfig {
 ///
 /// # Arguments
 ///
-/// * `lockfiles` - Lockfile types to generate (minimal, maximum, recent).
+/// * `cli_lockfiles` - Lockfile types to generate (minimal, maximum, recent), overriding config.
 pub fn run(
     sh: &Shell,
-    lockfiles: &[GeneratableLockFile],
+    cli_lockfiles: Option<Vec<GeneratableLockFile>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, Toolchain::Nightly)?;
@@ -221,9 +248,16 @@ pub fn run(
     let workspace_root = get_workspace_root(sh)?;
     rbmt_eprintln!("Updating lockfiles in: {}", workspace_root.display());
 
+    // CLI flag wins; otherwise use the workspace's declared lockfiles.
+    let lockfiles = if let Some(lockfiles) = cli_lockfiles {
+        lockfiles
+    } else {
+        LockConfig::load(&workspace_root)?.lockfiles
+    };
+
     // Create guard to back up and ensure restoration, even on error.
     let _lockfile_guard = LockFileGuard::new(sh)?;
-    for &lockfile in lockfiles {
+    for &lockfile in &lockfiles {
         LockFile::from(lockfile).derive(sh)?;
     }
 
@@ -281,15 +315,7 @@ fn sync_nested_lockfiles(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Syncing is enabled by default.
-        let contents = fs::read_to_string(&manifest)?;
-        let toml: WorkspaceManifest<RbmtLockConfig> = toml::from_str(&contents)?;
-        let enabled = toml
-            .workspace
-            .metadata
-            .rbmt
-            .enabled()
-            .or(toml.package.metadata.rbmt.enabled())
-            .unwrap_or(true);
+        let enabled = LockConfig::load(dir)?.enabled;
         if !enabled {
             rbmt_eprintln!("Skipping {}: disabled by rbmt.lock metadata", relative_path.display());
             continue;
