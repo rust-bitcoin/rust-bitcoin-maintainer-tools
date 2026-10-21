@@ -10,7 +10,7 @@ runs:
       run: cargo install cargo-rbmt --locked
     - name: Install tools (including pinned cargo-rbmt)
       shell: bash
-      run: cargo rbmt tools
+      run: cargo rbmt --ignore-rbmt-version tools
     - name: Install toolchains
       shell: bash
       run: cargo rbmt toolchains

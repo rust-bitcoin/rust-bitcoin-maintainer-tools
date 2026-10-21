@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-21
+
 * Add `[workspace.metadata.rbmt.lock.lockfiles]` to declare which lockfiles `lock` generates by default.
 * Derive subcommand `--lockfile` defaults from the declared lockfiles, maximum (new) for all commands except minimum (old) for `test`.
 * Add `-V` and `--version` to print cargo-rbmt version.
@@ -90,7 +92,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.3...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.4...HEAD
+[0.5.4]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.3...cargo-rbmt-0.5.4
 [0.5.3]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.2...cargo-rbmt-0.5.3
 [0.5.2]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.1...cargo-rbmt-0.5.2
 [0.5.1]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.0...cargo-rbmt-0.5.1
