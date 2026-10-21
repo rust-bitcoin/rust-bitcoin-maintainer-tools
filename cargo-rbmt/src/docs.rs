@@ -54,11 +54,12 @@ impl DocsMode {
 /// * `open` - Whether to open the documentation in a browser after building.
 pub fn run(
     sh: &Shell,
-    lockfile: LockFile,
+    lockfile: Option<LockFile>,
     packages: &[String],
     mode: DocsMode,
     open: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::max(sh)? };
     let packages = get_workspace_packages(sh, packages)?;
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();

@@ -51,9 +51,9 @@ struct Cli {
 enum Commands {
     /// Check for public API changes.
     Api {
-        /// Lockfile to use for dependencies.
-        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
-        lockfile: LockFile,
+        /// Lockfile to use for dependencies. Defaults to the maximum declared lockfile.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum)]
+        lockfile: Option<LockFile>,
         /// Git ref to use as baseline for semver comparison (tag, branch, or commit), exits with 2 if diff detected.
         #[arg(long)]
         baseline: Option<String>,
@@ -69,15 +69,15 @@ enum Commands {
     },
     /// Run the linter (clippy) for workspace and all crates.
     Lint {
-        /// Lockfile to use for dependencies.
-        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
-        lockfile: LockFile,
+        /// Lockfile to use for dependencies. Defaults to the maximum declared lockfile.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum)]
+        lockfile: Option<LockFile>,
     },
     /// Build documentation at rust-bitcoin standards.
     Docs {
-        /// Lockfile to use for dependencies.
-        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
-        lockfile: LockFile,
+        /// Lockfile to use for dependencies. Defaults to the maximum declared lockfile.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum)]
+        lockfile: Option<LockFile>,
         /// Build with stable toolchain instead of nightly and skip docs.rs validation.
         #[arg(long)]
         no_docsrs: bool,
@@ -87,9 +87,9 @@ enum Commands {
     },
     /// Run tests with specified toolchain.
     Test {
-        /// Lockfile to use for dependencies.
-        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
-        lockfile: LockFile,
+        /// Lockfile to use for dependencies. Defaults to the minimum declared lockfile.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum)]
+        lockfile: Option<LockFile>,
         /// Toolchain to use: stable, nightly, or msrv.
         #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
         toolchain: Toolchain,
@@ -110,9 +110,9 @@ enum Commands {
     },
     /// Run arbitrary cargo commands with toolchain and lockfile management.
     Run {
-        /// Lockfile to use for dependencies.
-        #[arg(long = "lockfile", alias = "lock-file", value_enum, default_value_t = LockFile::Recent)]
-        lockfile: LockFile,
+        /// Lockfile to use for dependencies. Defaults to the maximum declared lockfile.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum)]
+        lockfile: Option<LockFile>,
         /// Toolchain to use: stable, nightly, or msrv.
         #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
         toolchain: Toolchain,

@@ -21,12 +21,13 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 /// * `cargo_args` - Arguments to pass to cargo (everything after `--`).
 pub fn run(
     sh: &Shell,
-    lockfile: LockFile,
+    lockfile: Option<LockFile>,
     toolchain: Toolchain,
     baseline: Option<&str>,
     packages: &[String],
     cargo_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::max(sh)? };
     let _progress = ProgressGuard::new();
 
     git::for_each_commit(sh, lockfile, baseline, |sh| {
