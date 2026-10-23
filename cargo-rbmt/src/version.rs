@@ -3,7 +3,8 @@
 //! Runtime version checking for cargo-rbmt.
 //!
 //! This module reads `rbmt.version` from the workspace/package Cargo.toml and validates
-//! that the running cargo-rbmt version matches any pinned version requirement.
+//! that the running cargo-rbmt version matches any pinned version requirement. This currently
+//! only supports semantic versions, it doesn't play nice with git hashes.
 
 use std::fs;
 
@@ -12,6 +13,18 @@ use xshell::Shell;
 
 use crate::environment::{get_workspace_root, WorkspaceManifest};
 
+/// Exit code returned when auto-install completes successfully but the requested command was not
+/// run. Callers should re-run the command so the newly-installed version executes it.
+pub const AUTO_INSTALL_EXIT_CODE: i32 = 79;
+
+/// Outcome of the version check.
+pub enum VersionOutcome {
+    /// Version matched (or no pin configured).
+    Ok,
+    /// Auto-install completed successfully.
+    Installed,
+}
+
 /// RBMT configuration read from Cargo.toml.
 #[derive(Deserialize, Default)]
 struct RbmtConfig {
@@ -19,57 +32,42 @@ struct RbmtConfig {
     version: Option<String>,
 }
 
-/// Check if the workspace has a version requirement and validate it against the running
-/// `cargo-rbmt` version.
+/// Check the pinned version against the running `cargo-rbmt` binary.
 ///
-/// This reads `rbmt.version` from `[workspace.metadata]` or `[package.metadata]` and validates
-/// that the running cargo-rbmt version matches any pinned version requirement. Users can pin to
-/// either a semantic version (`rbmt.version = "0.4.1"`) a full git commit hash (`rbmt.version =
-/// "abc123def..."`).
+/// Reads `rbmt.version` from `[workspace.metadata]` (falling back to `[package.metadata]`) and
+/// validates it against the running binary.
 ///
-/// If no version requirement is specified, the check is skipped.
-pub fn check(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
+/// When `update` is `false` any mismatch is returned as an error. When `true` the correct version
+/// is installed via `cargo install` and [`VersionOutcome::Installed`] is returned.
+pub fn check(sh: &Shell, update: bool) -> Result<VersionOutcome, Box<dyn std::error::Error>> {
     let manifest_path = get_workspace_root(sh)?.join("Cargo.toml");
-    let contents = fs::read_to_string(manifest_path)?;
+    let contents = fs::read_to_string(&manifest_path)?;
     let toml: WorkspaceManifest<RbmtConfig> = toml::from_str(&contents)?;
 
-    // Check workspace namespace first, fallback to package namespace.
     let expected_version =
         toml.workspace.metadata.rbmt.version.or(toml.package.metadata.rbmt.version);
 
-    if let Some(expected) = expected_version {
-        let actual_version = env!("CARGO_PKG_VERSION");
-        let actual_hash = env!("RBMT_GIT_HASH");
+    let Some(expected) = expected_version else {
+        rbmt_eprintln!("No rbmt version pin in manifest, continuing");
+        return Ok(VersionOutcome::Ok);
+    };
 
-        // If expected looks like a git hash (40+ hex chars), compare against commit hash,
-        // otherwise compare as a semantic version string.
-        if expected.len() >= 40 && expected.chars().all(|c| c.is_ascii_hexdigit()) {
-            // If actual_hash is empty (e.g., installed from crates.io registry),
-            // we cannot validate against a git hash requirement.
-            if actual_hash.is_empty() {
-                return Err(format!(
-                    "cargo-rbmt version mismatch: expected commit {}, but git hash unavailable (likely installed from registry)",
-                    expected
-                )
-                .into());
-            }
-            if !actual_hash.starts_with(&expected) {
-                return Err(format!(
-                    "cargo-rbmt version mismatch: expected commit {}, found {}",
-                    expected, actual_hash
-                )
-                .into());
-            }
-        } else {
-            if expected != actual_version {
-                return Err(format!(
-                    "cargo-rbmt version mismatch: expected {}, found {}",
-                    expected, actual_version
-                )
-                .into());
-            }
+    let actual = env!("CARGO_PKG_VERSION");
+
+    if expected != actual {
+        rbmt_eprintln!("cargo-rbmt version mismatch!");
+        if !update {
+            return Err(format!(
+                "cargo-rbmt version mismatch: expected {}, found {}",
+                expected, actual
+            )
+            .into());
         }
+
+        crate::tools::install_tool(sh, crate::tools::RBMT_NAME, &expected)?;
+        rbmt_eprintln!("Installed cargo-rbmt {}. Re-run your command.", expected);
+        return Ok(VersionOutcome::Installed);
     }
 
-    Ok(())
+    Ok(VersionOutcome::Ok)
 }

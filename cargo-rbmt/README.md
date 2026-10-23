@@ -33,6 +33,9 @@ A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) th
   * `verbose`: [DEFAULT] Print out underlying cargo commands and all their output, good for CI.
   * `quiet`: Suppress both cargo and rbmt stderr to reduce all noise.
   * `progress`: Show rbmt stderr on a single line with a visual indicator, for interactive use.
+* `RBMT_INSTALL_RBMT_VERSION`
+  * `false`: [DEFAULT] Does not attempt to update version.
+  * `true`: Attempts to update to pinned version of cargo-rbmt.
 
 ## Configuration
 
@@ -42,26 +45,19 @@ Configuration for `cargo-rbmt` is stored in `[package.metadata.rbmt]` in a packa
 
 ### Version Pinning
 
-Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version requirement is specified, either with a semantic version or git hash, `cargo-rbmt` will check its own version on startup. Pass `--ignore-version` (`-i`) to skip the check and run anyway (e.g. when testing a local `cargo-rbmt` build against a pinned workspace). This version can be automatically updated with the `tools` command.
+Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[workspace.metadata]` or `[package.metadata]` section. When a version pin is configured, `cargo-rbmt` checks its own version on startup and refuses to run if it doesn't match.
 
 ```toml
 [workspace.metadata]
-rbmt.version = "0.4.1"
+rbmt.version = "0.5.3"
 ```
 
-The TOML metadata is grep-able for a simple bootstrap script for `cargo-rbmt`.
+Two global flags control the behaviour on mismatch.
 
-```bash
-VERSION=$(grep "^rbmt.version" Cargo.toml | cut -d'"' -f2)
-cargo install cargo-rbmt --version $VERSION
-```
+* `--ignore-rbmt-version` (`-i`): Skip the check and run with whatever version is installed.
+* `--install-rbmt-version` (`-I`) (`RBMT_INSTALL_RBMT_VERSION=true`): Install the pinned version via `cargo install`, then exit with code `79` so the caller can re-run.
 
-For git hashes, you'll need to install from the repository instead.
-
-```bash
-HASH=$(grep "^rbmt.version" Cargo.toml | cut -d'"' -f2)
-cargo install --locked --git https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools --rev $HASH cargo-rbmt
-```
+The pinned version can be automatically bumped with `cargo rbmt tools --update`.
 
 ## Commands
 
