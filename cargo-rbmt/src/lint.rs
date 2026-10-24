@@ -158,7 +158,7 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         .arg("--all-targets")
         .arg("--all-features")
         .arg("--keep-going")
-        .args(&["--", "-D", "warnings"])
+        .args(["--", "-D", "warnings"])
         .run_with_capture()?;
 
     // Run clippy on workspace without features.
@@ -167,7 +167,7 @@ fn lint_workspace(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
         .arg("--workspace")
         .arg("--all-targets")
         .arg("--keep-going")
-        .args(&["--", "-D", "warnings"])
+        .args(["--", "-D", "warnings"])
         .run_with_capture()?;
 
     Ok(())
@@ -198,7 +198,7 @@ fn lint_packages(sh: &Shell, packages: &[Package]) -> Result<(), Box<dyn std::er
             .arg("--all-targets")
             .arg("--no-default-features")
             .arg("--keep-going")
-            .args(&["--", "-D", "warnings"])
+            .args(["--", "-D", "warnings"])
             .run_with_capture()?;
     }
 
@@ -402,7 +402,7 @@ impl DuplicateTree {
                 // Skip crates that are explicitly allowed to have duplicate versions,
                 // but record that they were actually seen as duplicates.
                 if allowed_duplicates.iter().any(|a| a == &dep.name) {
-                    seen_allowed_duplicate.insert(dep.name.clone());
+                    seen_allowed_duplicate.insert(dep.name);
                     current_duplicate = None;
                     continue;
                 }
@@ -432,7 +432,7 @@ impl DuplicateTree {
                         .get_mut(duplicate_name)
                         .and_then(|versions| versions.get_mut(duplicate_version))
                     {
-                        members.insert(dep.name.clone());
+                        members.insert(dep.name);
                     }
                 }
             }

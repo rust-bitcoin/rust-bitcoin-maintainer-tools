@@ -74,7 +74,7 @@ pub fn run(
 
     // Add package filters if specified.
     for package in packages {
-        cmd = cmd.args(&["-p", &package.id]);
+        cmd = cmd.args(["-p", &package.id]);
     }
 
     if open {
