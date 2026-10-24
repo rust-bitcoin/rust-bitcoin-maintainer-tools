@@ -35,6 +35,8 @@ jobs:
       - name: Create pull request using agit
         if: ${{ env.TOOL_UPDATE == 'true' }}
         run: |
+          # force-push keeps the agit virtual branch replaceable across weekly runs.
           git push origin HEAD:refs/for/master/update-tools \
+            -o force-push=true \
             -o title="Update tools" \
             -o description="Automated update to tool versions by update-tools workflow."
