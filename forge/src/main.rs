@@ -984,20 +984,6 @@ fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>
         anyhow::bail!("Merge author not confirmed by user");
     }
 
-    // Interactive shell for manual inspection
-    println!("\nDropping you into a shell to test the merge.");
-    println!("Run 'git diff HEAD~' to see changes.");
-    println!("Type 'exit' when done.");
-
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".to_string());
-    Command::new(shell).arg("-i").status().context("Failed to spawn shell")?;
-
-    // Verify tree hash unchanged
-    let second_sha512 = compute_tree_sha512(std::path::Path::new("."))?;
-    if first_sha512 != second_sha512 {
-        anyhow::bail!("ERROR: Tree hash changed unexpectedly");
-    }
-
     // Ask for sign-off
     loop {
         let reply = ask_user("Type 's' to sign off on the merge, or 'x' to reject:")?;
