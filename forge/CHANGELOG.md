@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Use SSH for all git fetch/push operations. HTTPS is now used only for the Forgejo API.
 * Update the default hostnames to `https://git.rust-bitcoin.org` and `git-ssh.rust-bitcoin.org`.
 
 ## 0.1.0 - 2026-10-21
