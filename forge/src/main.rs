@@ -141,8 +141,8 @@ enum PrCommands {
     /// Merge a pull request locally with signing
     #[command(alias = "m")]
     Merge {
-        /// Pull request number
-        pr_number: u64,
+        /// Pull request number (defaults to the current branch if following the pr-number convention)
+        pr_number: Option<u64>,
         /// Repository in format "owner/repo" (optional, uses current repo if not specified)
         #[arg(short, long)]
         repo: Option<String>,
@@ -783,7 +783,15 @@ fn ask_user(prompt: &str) -> Result<String> {
 }
 
 #[allow(clippy::too_many_lines)]
-fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Result<()> {
+fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>) -> Result<()> {
+    // Resolve the PR number from the current branch when not provided.
+    let pr_number = if let Some(n) = pr_number {
+        n
+    } else {
+        let branch = get_current_branch()?;
+        extract_pr_number_from_branch(&branch)?
+    };
+
     // Load config
     let config = load_config()?;
 
