@@ -22,10 +22,10 @@ struct Config {
 }
 
 /// Default URL to use for HTTPS requests.
-fn default_https_url() -> String { "https://gitea.bitcoin.ninja".to_string() }
+fn default_https_url() -> String { "https://git.rust-bitcoin.org".to_string() }
 
 /// Default URL to use for SSH requests.
-fn default_ssh_url() -> String { "gitea-ssh.bitcoin.ninja".to_string() }
+fn default_ssh_url() -> String { "git-ssh.rust-bitcoin.org".to_string() }
 
 impl Config {
     fn api_url(&self) -> String { format!("{}/api/v1", self.https_url) }
