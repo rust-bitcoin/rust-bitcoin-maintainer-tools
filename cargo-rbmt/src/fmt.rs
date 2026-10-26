@@ -27,7 +27,7 @@ pub fn run(sh: &Shell, check: bool, packages: &[String]) -> Result<(), Box<dyn s
         cmd = cmd.arg("--all");
     } else {
         for package in &packages {
-            cmd = cmd.args(&["-p", &package.name]);
+            cmd = cmd.args(["-p", &package.name]);
         }
     }
 

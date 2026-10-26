@@ -298,7 +298,7 @@ pub fn run(
                 package_diffs.push(package_diff);
             }
         } else {
-            package_apis.push((package.name.clone(), current_apis));
+            package_apis.push((package.name, current_apis));
         }
     }
 
@@ -351,7 +351,7 @@ fn get_package_apis(
         for arg in config.cargo_args() {
             cmd = cmd.arg(arg);
         }
-        cmd = cmd.args(&["--", "-Z", "unstable-options", "--output-format", "json"]);
+        cmd = cmd.args(["--", "-Z", "unstable-options", "--output-format", "json"]);
         cmd.env("RUSTDOCFLAGS", RUSTDOCFLAGS_ALLOW_BROKEN_LINKS).run_with_capture()?;
 
         // Change back to workspace root and parse JSON.
