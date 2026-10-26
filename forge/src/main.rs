@@ -17,29 +17,25 @@ struct Config {
     username: String,
     /// API token with read/write repository and read issue permissions.
     token: String,
-    /// Base HTTPS URL for the Forgejo API.
-    #[serde(default = "default_https_url")]
-    https_url: String,
-    /// SSH hostname used for git fetch/push operations.
-    #[serde(default = "default_ssh_url")]
-    ssh_url: String,
+    /// Forgejo HTTPS API host, e.g. `git.rust-bitcoin.org`.
+    #[serde(default = "default_https_host")]
+    https_host: String,
+    /// Forgejo SSH host, e.g. `git-ssh.rust-bitcoin.org`.
+    #[serde(default = "default_ssh_host")]
+    ssh_host: String,
 }
 
-/// Default base HTTPS URL for the Forgejo API.
-fn default_https_url() -> String { "https://git.rust-bitcoin.org".to_string() }
-/// Default SSH hostname for git operations.
-fn default_ssh_url() -> String { "git-ssh.rust-bitcoin.org".to_string() }
+/// Default Forgejo HTTPS API host.
+fn default_https_host() -> String { "git.rust-bitcoin.org".to_string() }
+/// Default Forgejo SSH host for git operations.
+fn default_ssh_host() -> String { "git-ssh.rust-bitcoin.org".to_string() }
 
 impl Config {
-    fn api_url(&self) -> String { format!("{}/api/v1", self.https_url) }
-
+    /// Base URL for the Forgejo REST API.
+    fn forge_api_url(&self) -> String { format!("https://{}/api/v1", self.https_host) }
     /// SSH URL for git operations on `owner/repo`.
-    fn ssh_repo_url(&self, repo: &str) -> String {
-        format!("ssh://git@{}/{}.git", self.ssh_url, repo)
-    }
-
-    fn https_host(&self) -> &str {
-        self.https_url.trim_start_matches("https://").trim_start_matches("http://")
+    fn repo_ssh_url(&self, repo: &str) -> String {
+        format!("ssh://git@{}/{}.git", self.ssh_host, repo)
     }
 }
 
@@ -218,7 +214,7 @@ fn list_prs(repo: Option<String>) -> Result<()> {
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
     let prs: Vec<ListItem> = api_get(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/pulls?state=open&limit=100", repo),
     )?;
@@ -236,7 +232,7 @@ fn list_prs(repo: Option<String>) -> Result<()> {
 }
 
 fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
-    api_get(&config.api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
+    api_get(&config.forge_api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
 }
 
 #[derive(Deserialize, Debug)]
@@ -266,7 +262,7 @@ fn fetch_github_issue(github_repo: &str, issue_number: u64) -> Result<GithubIssu
 }
 
 fn create_forgejo_issue(repo: &str, issue: &CreateIssueOptions, config: &Config) -> Result<()> {
-    api_post(&config.api_url(), &config.token, &format!("/repos/{}/issues", repo), issue)
+    api_post(&config.forge_api_url(), &config.token, &format!("/repos/{}/issues", repo), issue)
 }
 
 fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
@@ -296,7 +292,7 @@ fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
 }
 
 fn fetch_pr_refs(repo: &str, refspecs: &[&str], config: &Config) -> Result<()> {
-    let url = config.ssh_repo_url(repo);
+    let url = config.repo_ssh_url(repo);
     let mut args = vec!["fetch", &url];
     args.extend_from_slice(refspecs);
     let out = Command::new("git").args(&args).output().context("Failed to fetch PR refs")?;
@@ -338,26 +334,25 @@ fn get_current_repo(config: &Config) -> Result<String> {
         .to_string();
 
     // Check for full SSH format: ssh://git@host/owner/repo
-    let ssh_url_prefix = format!("ssh://git@{}/", config.ssh_url);
+    let ssh_url_prefix = format!("ssh://git@{}/", config.ssh_host);
     if let Some(path) = url.strip_prefix(&ssh_url_prefix) {
         return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
     }
 
     // Check for SSH format: git@host:owner/repo
-    let ssh_prefix = format!("git@{}:", config.ssh_url);
+    let ssh_prefix = format!("git@{}:", config.ssh_host);
     if let Some(path) = url.strip_prefix(&ssh_prefix) {
         return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
     }
 
     // Check for HTTPS format: https://host/owner/repo
-    let https_host = config.https_host();
-    let https_prefix = format!("https://{}/", https_host);
+    let https_prefix = format!("https://{}/", config.https_host);
     if let Some(path) = url.strip_prefix(&https_prefix) {
         return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
     }
 
     // Check for base host in URL (fallback)
-    let host_slash = format!("{}/", https_host);
+    let host_slash = format!("{}/", config.https_host);
     if url.contains(&host_slash) {
         if let Some(path) = url.split(&host_slash).nth(1) {
             return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
@@ -450,7 +445,7 @@ fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     let branch_name = format!("pr-{}", pr_number);
     let refspec = format!("refs/pull/{}/head", pr_number);
 
-    println!("Fetching {} from {}...", refspec, config.ssh_repo_url(&repo));
+    println!("Fetching {} from {}...", refspec, config.repo_ssh_url(&repo));
     fetch_pr_refs(&repo, &[&refspec], &config)?;
 
     checkout_or_reset(&branch_name)?;
@@ -459,7 +454,7 @@ fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
         .args([
             "config",
             &format!("branch.{}.pushRemote", branch_name),
-            &config.ssh_repo_url(&pr.head.repo.full_name),
+            &config.repo_ssh_url(&pr.head.repo.full_name),
         ])
         .output()
         .context("Failed to set branch.pushRemote config")?;
@@ -542,7 +537,7 @@ struct Comment {
 
 fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
     api_get(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/issues/{}/comments", repo, pr_number),
     )
@@ -550,7 +545,7 @@ fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Co
 
 fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
     api_get(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
     )
@@ -576,7 +571,7 @@ fn submit_pr_review(
     config: &Config,
 ) -> Result<()> {
     api_post(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
         body,
@@ -1054,7 +1049,7 @@ fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>
     Command::new("git").args(["branch", "-D", &base_branch]).output().ok();
     Command::new("git").args(["branch", "-D", &local_merge_branch]).output().ok();
 
-    let push_url = config.ssh_repo_url(&repo);
+    let push_url = config.repo_ssh_url(&repo);
 
     // Ask about pushing
     loop {
