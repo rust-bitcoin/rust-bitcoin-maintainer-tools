@@ -1037,7 +1037,7 @@ fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>
         .output()
         .context("Failed to reset branch")?;
 
-    println!("\nMerge complete! Branch {} updated.", target_branch);
+    println!("Merge complete! Branch {} updated.", target_branch);
 
     // Clean up temporary branches
     Command::new("git").args(["branch", "-D", &head_branch]).output().ok();
