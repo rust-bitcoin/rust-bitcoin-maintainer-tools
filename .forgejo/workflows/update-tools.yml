@@ -16,8 +16,6 @@ jobs:
           # The ephemeral workflow token is sometimes user-less.
           token: ${{ secrets.RBMT }}
       - uses: ./actions/setup-rbmt
-        with:
-          rbmt-path: cargo-rbmt
       - name: Configure git
         run: |
           git config user.name "RBMT Bot"

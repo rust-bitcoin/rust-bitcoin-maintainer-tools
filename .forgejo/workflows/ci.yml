@@ -1,5 +1,8 @@
 name: CI
 
+# Jobs install cargo-rbmt from the local source tree (`cargo install --locked --path cargo-rbmt`)
+# rather than using the setup-rbmt action in order to dogfood changes.
+#
 # Several jobs use `forgejo.event.pull_request.base.sha || forgejo.event.before` as a baseline ref.
 # On PRs, `base.sha` is the merge base, which is equivalent to master. On pushes to master,
 # `event.before` is the commit just before the push using `master` instead would compare HEAD
@@ -17,10 +20,9 @@ jobs:
       - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
         with:
           persist-credentials: false
-      - name: Dogfood with cargo-rbmt
-        uses: ./actions/setup-rbmt
-        with:
-          rbmt-path: cargo-rbmt
+      - name: Install cargo-rbmt from local source
+        run: cargo install --locked --path cargo-rbmt
+      - run: cargo rbmt toolchains
       - run: cargo rbmt lint --lockfile existing
       - run: cargo rbmt docs --lockfile existing
       - run: cargo rbmt fmt --check
@@ -32,9 +34,9 @@ jobs:
         with:
           fetch-depth: 0 # Context required for version bump detection.
           persist-credentials: false
-      - uses: ./actions/setup-rbmt
-        with:
-          rbmt-path: cargo-rbmt
+      - name: Install cargo-rbmt from local source
+        run: cargo install --locked --path cargo-rbmt
+      - run: cargo rbmt toolchains
       - run: cargo rbmt prerelease --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
 
   dogfood-api:
@@ -44,9 +46,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0 # Context for baseline API comparison.
-      - uses: ./actions/setup-rbmt
-        with:
-          rbmt-path: cargo-rbmt
+      - name: Install cargo-rbmt from local source
+        run: cargo install --locked --path cargo-rbmt
       - name: Setup api-test-cases toolchains and check API fails as expected
         working-directory: cargo-rbmt/api-test-cases
         run: |
@@ -64,9 +65,8 @@ jobs:
         with:
           fetch-depth: 0 # Context required for bisectability tests.
           persist-credentials: false
-      - name: Dogfood with cargo-rbmt
-        uses: ./actions/setup-rbmt
-        with:
-          rbmt-path: cargo-rbmt
+      - name: Install cargo-rbmt from local source
+        run: cargo install --locked --path cargo-rbmt
+      - run: cargo rbmt toolchains
       - name: Run tests
         run: cargo rbmt test --lockfile ${{ matrix.lockfile }} --toolchain ${{ matrix.toolchain }} --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
