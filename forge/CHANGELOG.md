@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+* `pr merge` no longer drops into an interactive shell for manual inspection.
+* Rename config fields to `https_host` and `ssh_host` (the HTTPS value no longer includes a scheme).
+* `pr merge` now defaults the PR number to the currently checked out `pr-<number>` branch.
+* Use SSH for all git fetch/push operations. HTTPS is now used only for the Forgejo API.
+* Update the default hostnames to `https://git.rust-bitcoin.org` and `git-ssh.rust-bitcoin.org`.
+
 ## 0.1.0 - 2026-10-21
 
 Initial release of `forge`, a CLI tool for common rust-bitcoin Forgejo patterns.

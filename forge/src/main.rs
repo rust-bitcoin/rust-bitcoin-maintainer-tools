@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
+//! A git orchestrator for the rust-bitcoin Forgejo instance.
+//!
+//! `forge` coordinates git operations locally and through the central host's HTTP API.
+
 use std::fs;
 use std::process::Command;
 
@@ -9,29 +13,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 struct Config {
-    /// Forgegjo user/account name.
+    /// Forgejo user/account name.
     username: String,
-    /// API token with required permissions.
+    /// API token with read/write repository and read issue permissions.
     token: String,
-    /// URL to use for HTTPS requests.
-    #[serde(default = "default_https_url")]
-    https_url: String,
-    /// URL to use for SSH requests.
-    #[serde(default = "default_ssh_url")]
-    ssh_url: String,
+    /// Forgejo HTTPS API host, e.g. `git.rust-bitcoin.org`.
+    #[serde(default = "default_https_host")]
+    https_host: String,
+    /// Forgejo SSH host, e.g. `git-ssh.rust-bitcoin.org`.
+    #[serde(default = "default_ssh_host")]
+    ssh_host: String,
 }
 
-/// Default URL to use for HTTPS requests.
-fn default_https_url() -> String { "https://gitea.bitcoin.ninja".to_string() }
-
-/// Default URL to use for SSH requests.
-fn default_ssh_url() -> String { "gitea-ssh.bitcoin.ninja".to_string() }
+/// Default Forgejo HTTPS API host.
+fn default_https_host() -> String { "git.rust-bitcoin.org".to_string() }
+/// Default Forgejo SSH host for git operations.
+fn default_ssh_host() -> String { "git-ssh.rust-bitcoin.org".to_string() }
 
 impl Config {
-    fn api_url(&self) -> String { format!("{}/api/v1", self.https_url) }
-
-    fn https_host(&self) -> &str {
-        self.https_url.trim_start_matches("https://").trim_start_matches("http://")
+    /// Base URL for the Forgejo REST API.
+    fn forge_api_url(&self) -> String { format!("https://{}/api/v1", self.https_host) }
+    /// SSH URL for git operations on `owner/repo`.
+    fn repo_ssh_url(&self, repo: &str) -> String {
+        format!("ssh://git@{}/{}.git", self.ssh_host, repo)
     }
 }
 
@@ -85,10 +89,10 @@ enum Commands {
         #[command(subcommand)]
         command: PrCommands,
     },
-    /// Fetch from all remotes using HTTPS (avoids SSH deploy key issues)
+    /// Fetch from all remotes
     #[command(alias = "f")]
     Fetch,
-    /// Push using jj with HTTPS authentication (avoids SSH deploy key issues)
+    /// Push using jj
     Push {
         /// Push only current change (@) with -c flag
         #[arg(short = 'c', long)]
@@ -133,8 +137,8 @@ enum PrCommands {
     /// Merge a pull request locally with signing
     #[command(alias = "m")]
     Merge {
-        /// Pull request number
-        pr_number: u64,
+        /// Pull request number (defaults to the current branch if following the pr-number convention)
+        pr_number: Option<u64>,
         /// Repository in format "owner/repo" (optional, uses current repo if not specified)
         #[arg(short, long)]
         repo: Option<String>,
@@ -162,7 +166,6 @@ struct BranchInfo {
 
 #[derive(Deserialize, Debug)]
 struct RepoInfo {
-    clone_url: String,
     full_name: String,
 }
 
@@ -205,61 +208,13 @@ fn api_post<B: Serialize>(api_url: &str, token: &str, path: &str, body: &B) -> R
     Ok(())
 }
 
-/// RAII guard that configures `git config --local url.<https-with-token>.insteadOf`
-/// for the configured host on construction, and removes the entries on drop.
-///
-/// Rewrites all three forms — `git@host:`, `ssh://git@host/`, and plain
-/// `https://host/` — to a tokenized `https://<token>@host/` URL. Lets `git`
-/// and `jj` (and any sub-command resolving URLs through git) transparently
-/// authenticate over HTTPS without permanently mutating repo config — even
-/// on early return or panic.
-struct AuthHttpsGuard {
-    key: String,
-    added: Vec<String>,
-}
-
-impl AuthHttpsGuard {
-    fn new(config: &Config) -> Result<Self> {
-        let https_url = format!("https://{}@{}/", config.token, config.https_host());
-        let key = format!("url.{}.insteadOf", https_url);
-        let mut guard = Self { key: key.clone(), added: Vec::new() };
-
-        for value in [
-            format!("git@{}:", config.ssh_url),
-            format!("ssh://git@{}/", config.ssh_url),
-            format!("https://{}/", config.https_host()),
-        ] {
-            let out = Command::new("git")
-                .args(["config", "--local", "--add", &key, &value])
-                .output()
-                .with_context(|| format!("Failed to configure git URL rewriting for {}", value))?;
-            if !out.status.success() {
-                // Drop will unset whatever made it in.
-                anyhow::bail!("git config failed: {}", String::from_utf8_lossy(&out.stderr));
-            }
-            guard.added.push(value);
-        }
-        Ok(guard)
-    }
-}
-
-impl Drop for AuthHttpsGuard {
-    fn drop(&mut self) {
-        for value in &self.added {
-            let _ = Command::new("git")
-                .args(["config", "--local", "--unset", &self.key, value])
-                .output();
-        }
-    }
-}
-
 fn list_prs(repo: Option<String>) -> Result<()> {
     let config = load_config()?;
 
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
 
     let prs: Vec<ListItem> = api_get(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/pulls?state=open&limit=100", repo),
     )?;
@@ -277,7 +232,7 @@ fn list_prs(repo: Option<String>) -> Result<()> {
 }
 
 fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
-    api_get(&config.api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
+    api_get(&config.forge_api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
 }
 
 #[derive(Deserialize, Debug)]
@@ -307,7 +262,7 @@ fn fetch_github_issue(github_repo: &str, issue_number: u64) -> Result<GithubIssu
 }
 
 fn create_forgejo_issue(repo: &str, issue: &CreateIssueOptions, config: &Config) -> Result<()> {
-    api_post(&config.api_url(), &config.token, &format!("/repos/{}/issues", repo), issue)
+    api_post(&config.forge_api_url(), &config.token, &format!("/repos/{}/issues", repo), issue)
 }
 
 fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
@@ -337,7 +292,7 @@ fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
 }
 
 fn fetch_pr_refs(repo: &str, refspecs: &[&str], config: &Config) -> Result<()> {
-    let url = format!("{}/{}.git", config.https_url, repo);
+    let url = config.repo_ssh_url(repo);
     let mut args = vec!["fetch", &url];
     args.extend_from_slice(refspecs);
     let out = Command::new("git").args(&args).output().context("Failed to fetch PR refs")?;
@@ -379,26 +334,25 @@ fn get_current_repo(config: &Config) -> Result<String> {
         .to_string();
 
     // Check for full SSH format: ssh://git@host/owner/repo
-    let ssh_url_prefix = format!("ssh://git@{}/", config.ssh_url);
+    let ssh_url_prefix = format!("ssh://git@{}/", config.ssh_host);
     if let Some(path) = url.strip_prefix(&ssh_url_prefix) {
         return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
     }
 
     // Check for SSH format: git@host:owner/repo
-    let ssh_prefix = format!("git@{}:", config.ssh_url);
+    let ssh_prefix = format!("git@{}:", config.ssh_host);
     if let Some(path) = url.strip_prefix(&ssh_prefix) {
         return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
     }
 
     // Check for HTTPS format: https://host/owner/repo
-    let https_host = config.https_host();
-    let https_prefix = format!("https://{}/", https_host);
+    let https_prefix = format!("https://{}/", config.https_host);
     if let Some(path) = url.strip_prefix(&https_prefix) {
         return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
     }
 
     // Check for base host in URL (fallback)
-    let host_slash = format!("{}/", https_host);
+    let host_slash = format!("{}/", config.https_host);
     if url.contains(&host_slash) {
         if let Some(path) = url.split(&host_slash).nth(1) {
             return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
@@ -475,7 +429,6 @@ fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
 
     // Load config
     let config = load_config()?;
-    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get repository
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
@@ -492,13 +445,17 @@ fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     let branch_name = format!("pr-{}", pr_number);
     let refspec = format!("refs/pull/{}/head", pr_number);
 
-    println!("Fetching {} from {}/{}...", refspec, config.https_url, repo);
+    println!("Fetching {} from {}...", refspec, config.repo_ssh_url(&repo));
     fetch_pr_refs(&repo, &[&refspec], &config)?;
 
     checkout_or_reset(&branch_name)?;
 
     Command::new("git")
-        .args(["config", &format!("branch.{}.pushRemote", branch_name), &pr.head.repo.clone_url])
+        .args([
+            "config",
+            &format!("branch.{}.pushRemote", branch_name),
+            &config.repo_ssh_url(&pr.head.repo.full_name),
+        ])
         .output()
         .context("Failed to set branch.pushRemote config")?;
 
@@ -580,7 +537,7 @@ struct Comment {
 
 fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
     api_get(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/issues/{}/comments", repo, pr_number),
     )
@@ -588,7 +545,7 @@ fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Co
 
 fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
     api_get(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
     )
@@ -614,7 +571,7 @@ fn submit_pr_review(
     config: &Config,
 ) -> Result<()> {
     api_post(
-        &config.api_url(),
+        &config.forge_api_url(),
         &config.token,
         &format!("/repos/{}/pulls/{}/reviews", repo, pr_number),
         body,
@@ -821,10 +778,17 @@ fn ask_user(prompt: &str) -> Result<String> {
 }
 
 #[allow(clippy::too_many_lines)]
-fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Result<()> {
+fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>) -> Result<()> {
+    // Resolve the PR number from the current branch when not provided.
+    let pr_number = if let Some(n) = pr_number {
+        n
+    } else {
+        let branch = get_current_branch()?;
+        extract_pr_number_from_branch(&branch)?
+    };
+
     // Load config
     let config = load_config()?;
-    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Get repository
     let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
@@ -1020,20 +984,6 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
         anyhow::bail!("Merge author not confirmed by user");
     }
 
-    // Interactive shell for manual inspection
-    println!("\nDropping you into a shell to test the merge.");
-    println!("Run 'git diff HEAD~' to see changes.");
-    println!("Type 'exit' when done.");
-
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".to_string());
-    Command::new(shell).arg("-i").status().context("Failed to spawn shell")?;
-
-    // Verify tree hash unchanged
-    let second_sha512 = compute_tree_sha512(std::path::Path::new("."))?;
-    if first_sha512 != second_sha512 {
-        anyhow::bail!("ERROR: Tree hash changed unexpectedly");
-    }
-
     // Ask for sign-off
     loop {
         let reply = ask_user("Type 's' to sign off on the merge, or 'x' to reject:")?;
@@ -1085,7 +1035,7 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
     Command::new("git").args(["branch", "-D", &base_branch]).output().ok();
     Command::new("git").args(["branch", "-D", &local_merge_branch]).output().ok();
 
-    let push_url = format!("{}/{}.git", config.https_url, repo);
+    let push_url = config.repo_ssh_url(&repo);
 
     // Ask about pushing
     loop {
@@ -1138,10 +1088,6 @@ fn merge_pr(pr_number: u64, repo: Option<String>, branch: Option<String>) -> Res
 }
 
 fn fetch_all() -> Result<()> {
-    // Load config
-    let config = load_config()?;
-    let _guard = AuthHttpsGuard::new(&config)?;
-
     // Get all remotes
     let output =
         Command::new("git").args(["remote"]).output().context("Failed to get git remotes")?;
@@ -1194,16 +1140,10 @@ fn fetch_all() -> Result<()> {
 }
 
 fn push_with_jj(current_only: bool) -> Result<()> {
-    // Load config
-    let config = load_config()?;
-
     // Check if jj is available
     if !Command::new("jj").arg("--version").output().is_ok_and(|o| o.status.success()) {
         anyhow::bail!("jj command not found. Please install jj (jujutsu) first.");
     }
-
-    println!("Setting up HTTPS authentication for push...");
-    let _guard = AuthHttpsGuard::new(&config)?;
 
     // Build jj command
     let mut args = vec!["git", "push"];

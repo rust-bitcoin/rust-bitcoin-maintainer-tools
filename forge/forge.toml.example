@@ -10,8 +10,8 @@ username = "your-username"
 # Your Forgejo API token
 token = "your-api-token"
 
-# HTTPS base URL for the Forgejo instance (optional, defaults to https://gitea.bitcoin.ninja)
-# https_url = "https://gitea.bitcoin.ninja"
+# Forgejo HTTPS API host (optional, defaults to git.rust-bitcoin.org)
+# https_host = "git.rust-bitcoin.org"
 
-# SSH hostname for git operations (optional, defaults to gitea-ssh.bitcoin.ninja)
-# ssh_url = "gitea-ssh.bitcoin.ninja"
+# Forgejo SSH host for git fetch/push operations (optional, defaults to git-ssh.rust-bitcoin.org)
+# ssh_host = "git-ssh.rust-bitcoin.org"
