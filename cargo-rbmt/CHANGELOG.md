@@ -8,6 +8,7 @@
 * Add signal handling for more robust git and lockfile state management.
 * Manage rbmt version with `tools`.
 * Add error code 2 to `api` on API diff detection.
+* Add `--install-rbmt-version` (`-I`, env `RBMT_INSTALL_RBMT_VERSION`) to auto-install the pinned rbmt version on mismatch then exit with code 79 so callers can re-run.
 
 ## [0.5.3] - 2026-08-14
 

@@ -20,8 +20,6 @@ jobs:
           # the org can use it. It is associated with a bot account for this purpose.
           token: ${{ secrets.RBMT }}
       - uses: ./actions/setup-rbmt
-        with:
-          rbmt-path: cargo-rbmt
       - name: Configure git
         run: |
           git config --global user.name "RBMT Bot"

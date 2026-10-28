@@ -40,8 +40,22 @@ struct Cli {
     packages: Vec<String>,
 
     /// Ignore the workspace's pinned rbmt version constraint.
-    #[arg(short = 'i', long, global = true)]
-    ignore_version: bool,
+    #[arg(
+        short = 'i',
+        long = "ignore-rbmt-version",
+        global = true,
+        conflicts_with = "install_rbmt_version"
+    )]
+    ignore_rbmt_version: bool,
+
+    /// Automatically install the pinned cargo-rbmt version on mismatch, exits with code 79 on update.
+    #[arg(
+        short = 'I',
+        long = "install-rbmt-version",
+        global = true,
+        env = "RBMT_INSTALL_RBMT_VERSION"
+    )]
+    install_rbmt_version: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -184,10 +198,15 @@ fn main() {
     let sh = Shell::new().unwrap();
 
     // Check version requirement early before running any commands.
-    if !cli.ignore_version {
-        if let Err(e) = version::check(&sh) {
-            eprintln!("Error: {}", e);
-            process::exit(1);
+    if !cli.ignore_rbmt_version {
+        match version::check(&sh, cli.install_rbmt_version) {
+            Ok(version::VersionOutcome::Ok) => {}
+            Ok(version::VersionOutcome::Installed) =>
+                process::exit(version::AUTO_INSTALL_EXIT_CODE),
+            Err(e) => {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
         }
     }
 

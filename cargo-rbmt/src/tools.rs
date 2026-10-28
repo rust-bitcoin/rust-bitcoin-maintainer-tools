@@ -196,7 +196,11 @@ fn installed_version(
 }
 
 /// Install a single tool at a pinned version using `cargo install`.
-fn install_tool(sh: &Shell, name: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn install_tool(
+    sh: &Shell,
+    name: &str,
+    version: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Installing {}@{}", name, version);
     rbmt_cmd!(sh, "cargo install {name} --version {version} --locked").run_with_capture()?;
     Ok(())

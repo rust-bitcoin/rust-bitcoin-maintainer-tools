@@ -1,26 +1,16 @@
 name: 'Setup rbmt'
 description: |
-  Install cargo-rbmt.
-inputs:
-  rbmt-path:
-    description: 'Filesystem path to cargo-rbmt crate to install from. If provided, installs from this path.'
-    required: false
+  Install cargo-rbmt, tools, and toolchains.
 
 runs:
   using: "composite"
   steps:
     - name: Install cargo-rbmt
       shell: bash
-      env:
-        RBMT_PATH: ${{ inputs.rbmt-path }}
-      run: |
-        if [ -n "$RBMT_PATH" ]; then
-          cargo install --locked --path "$RBMT_PATH"
-        else
-          VERSION=$(grep "^rbmt.version" Cargo.toml | cut -d'"' -f2)
-          cargo install cargo-rbmt --version $VERSION
-        fi
-
+      run: cargo install cargo-rbmt --locked
+    - name: Install tools (including pinned cargo-rbmt)
+      shell: bash
+      run: cargo rbmt tools
     - name: Install toolchains
       shell: bash
       run: cargo rbmt toolchains
