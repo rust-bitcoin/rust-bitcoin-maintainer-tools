@@ -22,6 +22,7 @@ mod toolchains;
 mod tools;
 mod tree;
 mod version;
+mod with;
 
 use std::process;
 
@@ -137,6 +138,18 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Run a command with the selected lockfile and toolchain.
+    With {
+        /// Lockfile to use for dependencies. Defaults to the maximum declared lockfile.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum)]
+        lockfile: Option<LockFile>,
+        /// Toolchain to use: stable, nightly, or msrv.
+        #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
+        toolchain: Toolchain,
+        /// Command and arguments to run (everything after `--`).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Run pre-release readiness checks.
     Prerelease {
         /// Run checks even for packages that have pre-release checks disabled.
@@ -187,6 +200,7 @@ enum Commands {
     },
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() {
     // Cargo automatically adds the subcommand name as an extra argument.
     // `cargo rbmt test` becomes `cargo-rbmt rbmt test`, so filter it out.
@@ -264,6 +278,14 @@ fn main() {
             {
                 eprintln!("Error running cargo command: {}", e);
                 process::exit(1);
+            },
+        Commands::With { lockfile, toolchain, args } =>
+            match with::run(&sh, lockfile, toolchain, &args) {
+                Ok(code) => process::exit(code),
+                Err(e) => {
+                    eprintln!("Error running command: {}", e);
+                    process::exit(1);
+                }
             },
         Commands::Prerelease { force, baseline } =>
             if let Err(e) = prerelease::run(&sh, &cli.packages, force, &baseline) {

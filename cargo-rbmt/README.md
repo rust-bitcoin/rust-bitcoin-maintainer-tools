@@ -22,6 +22,7 @@ A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) th
   - [toolchains](#toolchains)
   - [tools](#tools)
   - [tree](#tree)
+  - [with](#with)
 - [Workspace Integration](#workspace-integration)
   - [1. Install on system](#1-install-on-system)
   - [2. Add as a dev-dependency](#2-add-as-a-dev-dependency)
@@ -333,6 +334,14 @@ cargo rbmt tree
 cargo rbmt tree -p bitcoin
 # Only show packages with changes since a git ref.
 cargo rbmt tree --baseline bitcoin-0.33.0-beta
+```
+
+### with
+
+The `with` command runs an arbitrary command with the selected lockfile and toolchain, transparently inheriting stdio and relaying the child's exit code. Unlike [`run`](#run), it does *not* resolve workspace packages, iterate commits, or capture/redirect output.
+
+```bash
+cargo rbmt with --lockfile maximum --toolchain nightly -- cargo mutants --in-place
 ```
 
 ## Workspace Integration
