@@ -37,40 +37,40 @@ impl Config {
     fn repo_ssh_url(&self, repo: &Repo) -> String {
         format!("ssh://git@{}/{}.git", self.ssh_host, repo)
     }
-}
 
-fn load_config() -> Result<Config> {
-    // Try multiple config file locations in order
-    let home = std::env::var("HOME").ok();
-    let config_paths = vec![
-        "./.forge.toml".to_string(),
-        home.as_ref().map(|h| format!("{}/.config/forge.toml", h)).unwrap_or_default(),
-        home.as_ref().map(|h| format!("{}/.forge.toml", h)).unwrap_or_default(),
-    ];
+    /// Load configuration from the first available config file.
+    fn load() -> Result<Self> {
+        let home = std::env::var("HOME").ok();
+        let config_paths = vec![
+            "./.forge.toml".to_string(),
+            home.as_ref().map(|h| format!("{}/.config/forge.toml", h)).unwrap_or_default(),
+            home.as_ref().map(|h| format!("{}/.forge.toml", h)).unwrap_or_default(),
+        ];
 
-    let mut last_error = None;
-    for path in &config_paths {
-        if path.is_empty() {
-            continue;
+        let mut last_error = None;
+        for path in &config_paths {
+            if path.is_empty() {
+                continue;
+            }
+
+            match fs::read_to_string(path) {
+                Ok(config_str) => {
+                    let config: Self = toml::from_str(&config_str)
+                        .with_context(|| format!("Failed to parse config file at {}", path))?;
+                    return Ok(config);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
         }
 
-        match fs::read_to_string(path) {
-            Ok(config_str) => {
-                let config: Config = toml::from_str(&config_str)
-                    .with_context(|| format!("Failed to parse config file at {}", path))?;
-                return Ok(config);
-            }
-            Err(e) => {
-                last_error = Some(e);
-            }
-        }
+        anyhow::bail!(
+            "Failed to read config file. Tried locations: {}\nLast error: {}",
+            config_paths.join(", "),
+            last_error.map_or_else(|| "unknown".to_string(), |e| e.to_string())
+        )
     }
-
-    anyhow::bail!(
-        "Failed to read config file. Tried locations: {}\nLast error: {}",
-        config_paths.join(", "),
-        last_error.map_or_else(|| "unknown".to_string(), |e| e.to_string())
-    )
 }
 
 /// A Forgejo repository, identified as `owner/name`.
@@ -278,7 +278,7 @@ fn api_post<B: Serialize>(api_url: &str, token: &str, path: &str, body: &B) -> R
 }
 
 fn list_prs(repo: Option<String>) -> Result<()> {
-    let config = load_config()?;
+    let config = Config::load()?;
 
     let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
 
@@ -335,7 +335,7 @@ fn create_forgejo_issue(repo: &Repo, issue: &CreateIssueOptions, config: &Config
 }
 
 fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
-    let config = load_config()?;
+    let config = Config::load()?;
 
     let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
 
@@ -437,7 +437,7 @@ fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     }
 
     // Load config
-    let config = load_config()?;
+    let config = Config::load()?;
 
     // Get repository
     let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
@@ -589,7 +589,7 @@ fn submit_pr_review(
 
 fn ack_pr(repo: Option<String>) -> Result<()> {
     // Load config
-    let config = load_config()?;
+    let config = Config::load()?;
 
     // Get repository
     let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
@@ -797,7 +797,7 @@ fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>
     };
 
     // Load config
-    let config = load_config()?;
+    let config = Config::load()?;
 
     // Get repository
     let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
