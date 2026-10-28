@@ -33,44 +33,113 @@ fn default_ssh_host() -> String { "git-ssh.rust-bitcoin.org".to_string() }
 impl Config {
     /// Base URL for the Forgejo REST API.
     fn forge_api_url(&self) -> String { format!("https://{}/api/v1", self.https_host) }
-    /// SSH URL for git operations on `owner/repo`.
-    fn repo_ssh_url(&self, repo: &str) -> String {
+    /// SSH URL for git operations on `repo`.
+    fn repo_ssh_url(&self, repo: &Repo) -> String {
         format!("ssh://git@{}/{}.git", self.ssh_host, repo)
+    }
+
+    /// Load configuration from the first available config file.
+    fn load() -> Result<Self> {
+        let home = std::env::var("HOME").ok();
+        let config_paths = vec![
+            "./.forge.toml".to_string(),
+            home.as_ref().map(|h| format!("{}/.config/forge.toml", h)).unwrap_or_default(),
+            home.as_ref().map(|h| format!("{}/.forge.toml", h)).unwrap_or_default(),
+        ];
+
+        let mut last_error = None;
+        for path in &config_paths {
+            if path.is_empty() {
+                continue;
+            }
+
+            match fs::read_to_string(path) {
+                Ok(config_str) => {
+                    let config: Self = toml::from_str(&config_str)
+                        .with_context(|| format!("Failed to parse config file at {}", path))?;
+                    return Ok(config);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        anyhow::bail!(
+            "Failed to read config file. Tried locations: {}\nLast error: {}",
+            config_paths.join(", "),
+            last_error.map_or_else(|| "unknown".to_string(), |e| e.to_string())
+        )
     }
 }
 
-fn load_config() -> Result<Config> {
-    // Try multiple config file locations in order
-    let home = std::env::var("HOME").ok();
-    let config_paths = vec![
-        "./.forge.toml".to_string(),
-        home.as_ref().map(|h| format!("{}/.config/forge.toml", h)).unwrap_or_default(),
-        home.as_ref().map(|h| format!("{}/.forge.toml", h)).unwrap_or_default(),
-    ];
+/// A Forgejo repository, identified as `owner/name`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Repo {
+    owner: String,
+    name: String,
+}
 
-    let mut last_error = None;
-    for path in &config_paths {
-        if path.is_empty() {
-            continue;
-        }
+impl std::str::FromStr for Repo {
+    type Err = anyhow::Error;
 
-        match fs::read_to_string(path) {
-            Ok(config_str) => {
-                let config: Config = toml::from_str(&config_str)
-                    .with_context(|| format!("Failed to parse config file at {}", path))?;
-                return Ok(config);
-            }
-            Err(e) => {
-                last_error = Some(e);
-            }
-        }
+    fn from_str(s: &str) -> Result<Self> {
+        let (owner, name) = s
+            .split_once('/')
+            .filter(|(o, n)| !o.is_empty() && !n.is_empty() && !n.contains('/'))
+            .ok_or_else(|| anyhow::anyhow!("Invalid repository '{s}', expected 'owner/name'"))?;
+        Ok(Self { owner: owner.to_string(), name: name.to_string() })
     }
+}
 
-    anyhow::bail!(
-        "Failed to read config file. Tried locations: {}\nLast error: {}",
-        config_paths.join(", "),
-        last_error.map_or_else(|| "unknown".to_string(), |e| e.to_string())
-    )
+impl std::fmt::Display for Repo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
+    }
+}
+
+impl Repo {
+    /// The repository name (the part after the `/`).
+    fn name(&self) -> &str { &self.name }
+
+    /// Discover the current repository from the preferred local git remote.
+    fn from_remotes() -> Result<Self> {
+        let remote = if Command::new("git")
+            .args(["remote", "get-url", "upstream"])
+            .output()
+            .is_ok_and(|o| o.status.success())
+        {
+            "upstream"
+        } else {
+            "origin"
+        };
+
+        let output = Command::new("git")
+            .args(["remote", "get-url", remote])
+            .output()
+            .context("Failed to execute git command")?;
+
+        if !output.status.success() {
+            anyhow::bail!("Not in a git repository or no {remote} remote found");
+        }
+
+        let url = String::from_utf8(output.stdout)
+            .context("Invalid UTF-8 in git remote URL")?
+            .trim()
+            .to_string();
+
+        let without_suffix = url.strip_suffix(".git").unwrap_or(&url).trim_end_matches('/');
+
+        let repo_path = if without_suffix.contains("://") {
+            without_suffix.split_once("://").and_then(|(_, rest)| rest.split_once('/'))
+        } else {
+            without_suffix.split_once(':')
+        }
+        .map(|(_, path)| path)
+        .ok_or_else(|| anyhow::anyhow!("Could not parse remote URL: {url}"))?;
+
+        repo_path.parse()
+    }
 }
 
 #[derive(Parser)]
@@ -209,9 +278,9 @@ fn api_post<B: Serialize>(api_url: &str, token: &str, path: &str, body: &B) -> R
 }
 
 fn list_prs(repo: Option<String>) -> Result<()> {
-    let config = load_config()?;
+    let config = Config::load()?;
 
-    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
+    let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
 
     let prs: Vec<ListItem> = api_get(
         &config.forge_api_url(),
@@ -231,7 +300,7 @@ fn list_prs(repo: Option<String>) -> Result<()> {
     Ok(())
 }
 
-fn fetch_pr(repo: &str, pr_number: u64, config: &Config) -> Result<PullRequest> {
+fn fetch_pr(repo: &Repo, pr_number: u64, config: &Config) -> Result<PullRequest> {
     api_get(&config.forge_api_url(), &config.token, &format!("/repos/{}/pulls/{}", repo, pr_number))
 }
 
@@ -261,16 +330,16 @@ fn fetch_github_issue(github_repo: &str, issue_number: u64) -> Result<GithubIssu
     serde_json::from_slice(&output.stdout).context("Failed to parse GitHub issue JSON")
 }
 
-fn create_forgejo_issue(repo: &str, issue: &CreateIssueOptions, config: &Config) -> Result<()> {
+fn create_forgejo_issue(repo: &Repo, issue: &CreateIssueOptions, config: &Config) -> Result<()> {
     api_post(&config.forge_api_url(), &config.token, &format!("/repos/{}/issues", repo), issue)
 }
 
 fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
-    let config = load_config()?;
+    let config = Config::load()?;
 
-    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
+    let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
 
-    let repo_name = repo.rsplit('/').next().context("Invalid repository name")?;
+    let repo_name = repo.name();
     let github_repo = format!("rust-bitcoin/{}", repo_name);
 
     println!("Fetching issue #{} from github.com/{}...", issue_number, github_repo);
@@ -291,7 +360,7 @@ fn import_issue(issue_number: u64, repo: Option<String>) -> Result<()> {
     Ok(())
 }
 
-fn fetch_pr_refs(repo: &str, refspecs: &[&str], config: &Config) -> Result<()> {
+fn fetch_pr_refs(repo: &Repo, refspecs: &[&str], config: &Config) -> Result<()> {
     let url = config.repo_ssh_url(repo);
     let mut args = vec!["fetch", &url];
     args.extend_from_slice(refspecs);
@@ -300,66 +369,6 @@ fn fetch_pr_refs(repo: &str, refspecs: &[&str], config: &Config) -> Result<()> {
         anyhow::bail!("Failed to fetch: {}", String::from_utf8_lossy(&out.stderr));
     }
     Ok(())
-}
-
-fn get_preferred_remote() -> String {
-    // Prefer "upstream" over "origin" if it exists (for forks)
-    if Command::new("git")
-        .args(["remote", "get-url", "upstream"])
-        .output()
-        .is_ok_and(|o| o.status.success())
-    {
-        "upstream".to_string()
-    } else {
-        "origin".to_string()
-    }
-}
-
-fn get_current_repo(config: &Config) -> Result<String> {
-    // Try to get the current repo from git remote
-    let remote = get_preferred_remote();
-
-    let output = Command::new("git")
-        .args(["remote", "get-url", &remote])
-        .output()
-        .context("Failed to execute git command")?;
-
-    if !output.status.success() {
-        anyhow::bail!("Not in a git repository or no {} remote found", remote);
-    }
-
-    let url = String::from_utf8(output.stdout)
-        .context("Invalid UTF-8 in git remote URL")?
-        .trim()
-        .to_string();
-
-    // Check for full SSH format: ssh://git@host/owner/repo
-    let ssh_url_prefix = format!("ssh://git@{}/", config.ssh_host);
-    if let Some(path) = url.strip_prefix(&ssh_url_prefix) {
-        return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
-    }
-
-    // Check for SSH format: git@host:owner/repo
-    let ssh_prefix = format!("git@{}:", config.ssh_host);
-    if let Some(path) = url.strip_prefix(&ssh_prefix) {
-        return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
-    }
-
-    // Check for HTTPS format: https://host/owner/repo
-    let https_prefix = format!("https://{}/", config.https_host);
-    if let Some(path) = url.strip_prefix(&https_prefix) {
-        return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
-    }
-
-    // Check for base host in URL (fallback)
-    let host_slash = format!("{}/", config.https_host);
-    if url.contains(&host_slash) {
-        if let Some(path) = url.split(&host_slash).nth(1) {
-            return Ok(path.strip_suffix(".git").unwrap_or(path).to_string());
-        }
-    }
-
-    anyhow::bail!("Remote URL does not match configured hosts: {}", url)
 }
 
 /// Position the local branch `branch_name` at `FETCH_HEAD`, regardless of
@@ -428,10 +437,10 @@ fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
     }
 
     // Load config
-    let config = load_config()?;
+    let config = Config::load()?;
 
     // Get repository
-    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
+    let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
 
     println!("Fetching PR #{} from {}...", pr_number, repo);
 
@@ -454,7 +463,7 @@ fn review_pr(pr_number: u64, repo: Option<String>) -> Result<()> {
         .args([
             "config",
             &format!("branch.{}.pushRemote", branch_name),
-            &config.repo_ssh_url(&pr.head.repo.full_name),
+            &config.repo_ssh_url(&pr.head.repo.full_name.parse()?),
         ])
         .output()
         .context("Failed to set branch.pushRemote config")?;
@@ -535,7 +544,7 @@ struct Comment {
     user: CommentUser,
 }
 
-fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
+fn get_pr_comments(repo: &Repo, pr_number: u64, config: &Config) -> Result<Vec<Comment>> {
     api_get(
         &config.forge_api_url(),
         &config.token,
@@ -543,7 +552,7 @@ fn get_pr_comments(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<Co
     )
 }
 
-fn get_pr_reviews(repo: &str, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
+fn get_pr_reviews(repo: &Repo, pr_number: u64, config: &Config) -> Result<Vec<PullReview>> {
     api_get(
         &config.forge_api_url(),
         &config.token,
@@ -565,7 +574,7 @@ fn scrape_acks(body: &str, login: &str, head_abbrev: &str, acks: &mut Vec<(Strin
 }
 
 fn submit_pr_review(
-    repo: &str,
+    repo: &Repo,
     pr_number: u64,
     body: &CreatePullReviewOptions,
     config: &Config,
@@ -580,10 +589,10 @@ fn submit_pr_review(
 
 fn ack_pr(repo: Option<String>) -> Result<()> {
     // Load config
-    let config = load_config()?;
+    let config = Config::load()?;
 
     // Get repository
-    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
+    let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
 
     // Get current branch name
     let branch = get_current_branch()?;
@@ -788,10 +797,10 @@ fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>
     };
 
     // Load config
-    let config = load_config()?;
+    let config = Config::load()?;
 
     // Get repository
-    let repo = if let Some(r) = repo { r } else { get_current_repo(&config)? };
+    let repo: Repo = if let Some(r) = repo { r.parse()? } else { Repo::from_remotes()? };
 
     println!("Fetching PR #{} from {}...", pr_number, repo);
 
@@ -1028,7 +1037,7 @@ fn merge_pr(pr_number: Option<u64>, repo: Option<String>, branch: Option<String>
         .output()
         .context("Failed to reset branch")?;
 
-    println!("\nMerge complete! Branch {} updated.", target_branch);
+    println!("Merge complete! Branch {} updated.", target_branch);
 
     // Clean up temporary branches
     Command::new("git").args(["branch", "-D", &head_branch]).output().ok();
@@ -1289,5 +1298,15 @@ mod tests {
             PrReviewState::Other
         );
         assert_eq!(serde_json::from_str::<PrReviewState>("\"\"").unwrap(), PrReviewState::Other);
+    }
+
+    #[test]
+    fn repo_from_str_and_display() {
+        let repo = "rust-bitcoin/rust-bitcoin-maintainer-tools".parse::<super::Repo>().unwrap();
+        assert_eq!(repo.name(), "rust-bitcoin-maintainer-tools");
+        assert_eq!(repo.to_string(), "rust-bitcoin/rust-bitcoin-maintainer-tools");
+
+        assert!("not-a-repo".parse::<super::Repo>().is_err());
+        assert!("a/b/c".parse::<super::Repo>().is_err());
     }
 }
