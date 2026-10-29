@@ -23,8 +23,8 @@ jobs:
       - name: Install cargo-rbmt from local source
         run: cargo install --locked --path cargo-rbmt
       - run: cargo rbmt toolchains
-      - run: cargo rbmt lint --lockfile existing
-      - run: cargo rbmt docs --lockfile existing
+      - run: cargo rbmt lint
+      - run: cargo rbmt docs
       - run: cargo rbmt fmt --check
 
   dogfood-prerelease:
@@ -52,7 +52,7 @@ jobs:
         working-directory: cargo-rbmt/api-test-cases
         run: |
           cargo rbmt toolchains
-          ! cargo rbmt api --lockfile existing --baseline f1975147
+          ! cargo rbmt api --baseline f1975147
 
   dogfood-tests:
     runs-on: debian-trixie
