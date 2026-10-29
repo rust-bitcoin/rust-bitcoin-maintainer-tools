@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use xshell::Shell;
@@ -169,6 +170,8 @@ struct PackageSummary {
     feature_subsets: Vec<Vec<String>>,
     /// Whether the no-std cross-compilation check was run.
     no_std_checked: bool,
+    /// Total wall-clock time spent testing this package.
+    time: Duration,
 }
 
 impl fmt::Display for PackageSummary {
@@ -194,6 +197,7 @@ impl fmt::Display for PackageSummary {
             ("Individual features", fmt_list(&self.individual_features)),
             ("Feature subsets", fmt_sets(&self.feature_subsets)),
             ("No-std check", if self.no_std_checked { "ran" } else { "skipped" }.to_string()),
+            ("Time", format!("{:?}", self.time)),
         ];
 
         // Compute the column width from the longest label so values align.
@@ -411,9 +415,11 @@ fn test_commit(
 
         let mut pkg_summary = PackageSummary { name: package.name.clone(), ..Default::default() };
 
+        let test_start = Instant::now();
         do_examples(sh, toolchain, &config, &mut pkg_summary)?;
         do_feature_matrix(sh, toolchain, package, &config, cargo_args, &mut pkg_summary)?;
         do_no_std_check(sh, &package.dir, &mut pkg_summary)?;
+        pkg_summary.time = test_start.elapsed();
 
         pkg_summaries.push(pkg_summary);
     }
