@@ -1,5 +1,4 @@
 pub mod api_test_cases
-pub use api_test_cases::InternalHelper
 pub mod api_test_cases::associated_types
 pub struct api_test_cases::associated_types::Foo
 impl api_test_cases::associated_types::Container for api_test_cases::associated_types::Foo
@@ -292,3 +291,8 @@ pub trait api_test_cases::trait_default_methods::Bar
 pub fn api_test_cases::trait_default_methods::Bar::do_it()
 impl api_test_cases::trait_default_methods::Bar for api_test_cases::trait_default_methods::Foo
 pub fn api_test_cases::trait_default_methods::Foo::do_it() [impl: impl api_test_cases::trait_default_methods::Bar for api_test_cases::trait_default_methods::Foo]
+pub fn api_test_cases::generic_with_internal_bound<T: internal_helper::InternalTrait>()
+pub fn api_test_cases::nested_generic() -> alloc::vec::Vec<internal_helper::InternalHelper>
+pub fn api_test_cases::star_import_case() -> internal_helper::InternalHelper
+pub fn api_test_cases::use_internal_helper() -> internal_helper::InternalHelper
+pub type api_test_cases::InternalAlias = internal_helper::InternalHelper

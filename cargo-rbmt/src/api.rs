@@ -195,47 +195,6 @@ impl std::fmt::Debug for ApiDiffError {
 
 impl std::error::Error for ApiDiffError {}
 
-/// Check if any private dependencies are exposed in the public API.
-fn check_private_deps(
-    package_name: &str,
-    apis: &PackageApis,
-    private_deps: &[String],
-) -> Result<(), Box<dyn std::error::Error>> {
-    if private_deps.is_empty() {
-        return Ok(());
-    }
-
-    let mut leaked_items = Vec::new();
-
-    for (feature_config, api) in apis {
-        for item in api.items() {
-            // Check if any token is an identifier matching a private dependency.
-            for token in item.tokens() {
-                if let public_api::tokens::Token::Identifier(ident) = token {
-                    for private_dep in private_deps {
-                        if ident == private_dep || ident.starts_with(&format!("{}::", private_dep))
-                        {
-                            leaked_items.push((feature_config.name(), item.to_string()));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if !leaked_items.is_empty() {
-        let mut message =
-            format!("Private dependency exposed in public API of {}:\n", package_name);
-        for (feature, item) in leaked_items {
-            message.push_str(&format!("  [{}] {}\n", feature, item));
-        }
-        return Err(message.into());
-    }
-
-    Ok(())
-}
-
 /// Outcome of the API check.
 ///
 /// Distinguished from hard errors (I/O, build failures, private dep leaks) so callers
@@ -297,7 +256,12 @@ pub fn run(
         rbmt_eprintln!("API check enabled in {}", package.name);
 
         let current_apis = get_package_apis(sh, &package.name, &package.dir)?;
-        check_private_deps(&package.name, &current_apis, &api_config.private)?;
+        check_private_deps(
+            &package.name,
+            &current_apis,
+            &api_config.private,
+            &package.dep_aliases,
+        )?;
 
         if snapshot || api_config.snapshot {
             write_api_files(&package, &current_apis)?;
@@ -446,4 +410,80 @@ fn check_baseline(
     } else {
         Ok(Some(PackageDiff { package_name: package.name.clone(), feature_diffs }))
     }
+}
+
+/// Check if any private dependencies are exposed in the public API.
+///
+/// `dep_aliases` maps Cargo.toml dependency aliases (the `rename` field from cargo
+/// metadata) to their actual package names. This allows users to list either the
+/// alias or the package name in their `private` config.
+fn check_private_deps(
+    package_name: &str,
+    apis: &PackageApis,
+    private_deps: &[String],
+    dep_aliases: &HashMap<String, String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if private_deps.is_empty() {
+        return Ok(());
+    }
+
+    let resolved = resolve_private(private_deps, dep_aliases);
+    let mut leaked_items = Vec::new();
+
+    for (feature_config, api) in apis {
+        for item in api.items() {
+            // Check if any token is an identifier matching a private dependency.
+            for token in item.tokens() {
+                if let public_api::tokens::Token::Identifier(ident) = token {
+                    for private_dep in &resolved {
+                        if ident == private_dep || ident.starts_with(&format!("{}::", private_dep))
+                        {
+                            leaked_items.push((feature_config.name(), item.to_string()));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !leaked_items.is_empty() {
+        let mut message =
+            format!("Private dependency exposed in public API of {}:\n", package_name);
+        for (feature, item) in leaked_items {
+            message.push_str(&format!("  [{}] {}\n", feature, item));
+        }
+        return Err(message.into());
+    }
+
+    Ok(())
+}
+
+/// Resolve dependency aliases in a list of private dependency names.
+///
+/// When a dependency is aliased with `package = "..."` in `Cargo.toml`:
+///
+/// ```toml
+/// hex = { package = "hex-conservative", version = "0.2" }
+/// ```
+///
+/// The public API will contain the actual crate name (`hex_conservative`), but
+/// users may naturally put the alias (`hex`) in the `private` list. This function
+/// resolves aliases via `cargo metadata` data so both forms are accepted.
+///
+/// Also normalizes hyphens to underscores.
+fn resolve_private(private: &[String], dep_aliases: &HashMap<String, String>) -> Vec<String> {
+    private
+        .iter()
+        .map(|dep| {
+            let normalized = dep.replace('-', "_");
+            if let Some(actual) =
+                dep_aliases.get(&normalized).or_else(|| dep_aliases.get(dep.as_str()))
+            {
+                actual.replace('-', "_")
+            } else {
+                normalized
+            }
+        })
+        .collect()
 }

@@ -1,5 +1,5 @@
 [workspace]
-members = ["internal"]
+members = ["internal-helper"]
 
 [package]
 name = "api-test-cases"
@@ -9,7 +9,7 @@ publish = false
 exclude = ["api"]
 
 [dependencies]
-internal = { path = "internal" }
+internal = { package = "internal-helper", path = "internal-helper" }
 
 [package.metadata.rbmt]
 api = { enabled = true, snapshot = true, private = ["internal"] }
