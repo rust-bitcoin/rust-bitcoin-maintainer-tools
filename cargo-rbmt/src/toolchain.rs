@@ -300,6 +300,8 @@ pub fn prepare_toolchain_with_override(
     required: Toolchain,
     msrv_override: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    rbmt_eprintln!("Preparing {:?} toolchain", required);
+
     // Install the toolchain if we have a version and rustup is available.
     // MSRV override only applies when MSRV is required.
     if let Some(version) = &msrv_override

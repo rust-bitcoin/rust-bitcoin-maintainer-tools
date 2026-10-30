@@ -30,10 +30,17 @@ pub fn run(
     let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::max(sh)? };
     let _progress = ProgressGuard::new();
 
+    if !cargo_args.is_empty() {
+        rbmt_eprintln!("Command: cargo {}", cargo_args.join(" "));
+    }
+
     git::for_each_commit(sh, lockfile, baseline, |sh| {
         // Set toolchain and packages per-commit.
         prepare_toolchain(sh, toolchain)?;
         let resolved_packages = get_workspace_packages(sh, packages)?;
+
+        let package_names: Vec<_> = resolved_packages.iter().map(|p| p.name.as_str()).collect();
+        rbmt_eprintln!("Target packages: {}", package_names.join(", "));
 
         let mut cmd = cargo_cmd(sh);
         // Add cargo subcommand (first arg in cargo_args).

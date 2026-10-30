@@ -64,7 +64,11 @@ pub fn run(
     let _lockfile_guard = lockfile.activate(sh)?;
     let _progress = ProgressGuard::new();
     prepare_toolchain(sh, mode.toolchain())?;
-    rbmt_eprintln!("Building docs...");
+    let mode_label = match mode {
+        DocsMode::Docs => "docs (stable)",
+        DocsMode::DocsRs => "docs.rs (nightly)",
+    };
+    rbmt_eprintln!("Building {}...", mode_label);
 
     let mut cmd = cargo_cmd(sh)
         .arg("doc")
