@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 * Track per-package test time and show it in the `test` summary.
+* [BREAKING] Remove the `generate` command.
 
 ## [0.5.4] - 2026-10-21
 

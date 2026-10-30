@@ -8,7 +8,6 @@ mod api;
 mod cleanup;
 mod docs;
 mod fmt;
-mod generate;
 mod git;
 mod integration;
 mod lint;
@@ -177,8 +176,6 @@ enum Commands {
     },
     /// Print version and build information.
     Version,
-    /// Generate files and check for changes.
-    Generate,
     /// Show internal workspace packages in release order (deepest dependency chain first).
     Tree {
         /// Git ref to use as baseline; only show packages with changes since this ref (tag, branch, or commit).
@@ -280,11 +277,6 @@ fn main() {
         Commands::Tools { update, tools } =>
             if let Err(e) = tools::run(&sh, update, &tools) {
                 eprintln!("Error managing tools: {}", e);
-                process::exit(1);
-            },
-        Commands::Generate =>
-            if let Err(e) = generate::run(&sh, &cli.packages) {
-                eprintln!("Error running file generation: {}", e);
                 process::exit(1);
             },
         Commands::Tree { baseline } =>

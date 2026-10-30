@@ -11,7 +11,6 @@ A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) th
   - [api](#api)
   - [docs](#docs)
   - [fmt](#fmt)
-  - [generate](#generate)
   - [integration](#integration)
   - [lint](#lint)
   - [lock](#lock)
@@ -107,14 +106,6 @@ The `fmt` command formats all files in the workspace using `rustfmt` with the ni
 cargo rbmt fmt
 cargo rbmt fmt --check
 cargo rbmt fmt -p bitcoin
-```
-
-### generate
-
-The `generate` command detects changes to generated files by running the file generation script, which is assumed to be at `<package-root>/generate-files.sh`, and running a diff. The command fails if the file generation script is not present or a diff is present after file generation.
-
-```bash
-cargo rbmt generate -p fuzz
 ```
 
 ### integration
