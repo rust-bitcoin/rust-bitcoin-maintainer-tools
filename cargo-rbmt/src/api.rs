@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -261,6 +261,7 @@ pub fn run(
             &current_apis,
             &api_config.private,
             &package.dep_aliases,
+            &package.deps,
         )?;
 
         if snapshot || api_config.snapshot {
@@ -332,7 +333,7 @@ fn get_package_apis(
         let json_path = get_target_dir(sh)?
             .join("doc")
             // Rustdoc replaces hyphens with underscores in the filename.
-            .join(package_name.replace('-', "_"))
+            .join(normalize_crate_name(package_name))
             .with_extension("json");
 
         let public_api = public_api::Builder::from_rustdoc_json(&json_path).build()?;
@@ -422,12 +423,31 @@ fn check_private_deps(
     apis: &PackageApis,
     private_deps: &[String],
     dep_aliases: &HashMap<String, String>,
+    deps: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     if private_deps.is_empty() {
         return Ok(());
     }
 
     let resolved = resolve_private(private_deps, dep_aliases);
+
+    // Validate entries resolve to an actual dependency, else a typo in `private` silently
+    // passes giving false confidence.
+    let known: HashSet<String> = deps.iter().map(|d| normalize_crate_name(d)).collect();
+    for (entry, dep) in private_deps.iter().zip(&resolved) {
+        if !known.contains(dep.as_str()) {
+            let resolved_suffix = if *dep == normalize_crate_name(entry) {
+                String::new()
+            } else {
+                format!(" (resolved to '{dep}')")
+            };
+            return Err(format!(
+                "'{entry}'{resolved_suffix} in [package.metadata.rbmt.api] private list is not a dependency of {package_name}",
+            )
+            .into());
+        }
+    }
+
     let mut leaked_items = Vec::new();
 
     for (feature_config, api) in apis {
@@ -471,19 +491,61 @@ fn check_private_deps(
 /// users may naturally put the alias (`hex`) in the `private` list. This function
 /// resolves aliases via `cargo metadata` data so both forms are accepted.
 ///
-/// Also normalizes hyphens to underscores.
+/// Both the entries and the alias map keys are normalized here, so either form may be
+/// written with hyphens or underscores regardless of how the dependency is spelled in
+/// `Cargo.toml`.
 fn resolve_private(private: &[String], dep_aliases: &HashMap<String, String>) -> Vec<String> {
+    let aliases: HashMap<String, &str> = dep_aliases
+        .iter()
+        .map(|(alias, name)| (normalize_crate_name(alias), name.as_str()))
+        .collect();
+
     private
         .iter()
         .map(|dep| {
-            let normalized = dep.replace('-', "_");
-            if let Some(actual) =
-                dep_aliases.get(&normalized).or_else(|| dep_aliases.get(dep.as_str()))
-            {
-                actual.replace('-', "_")
-            } else {
-                normalized
-            }
+            let normalized = normalize_crate_name(dep);
+            aliases.get(&normalized).map_or(normalized.clone(), |name| normalize_crate_name(name))
         })
         .collect()
+}
+
+/// Normalize a crate name for comparison against public API tokens.
+///
+/// Rust identifiers use underscores; crate and package names from TOML or cargo
+/// metadata use hyphens. The public API tokenizer produces underscore form, so
+/// all names must be normalized before comparison.
+fn normalize_crate_name(name: &str) -> String { name.replace('-', "_") }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build an alias map in the shape `cargo metadata` reports it (raw strings).
+    fn aliases(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(alias, name)| (alias.to_string(), name.to_string())).collect()
+    }
+
+    #[test]
+    fn accepts_alias() {
+        let deps = aliases(&[("internal", "internal-helper")]);
+        assert_eq!(resolve_private(&["internal".to_string()], &deps), ["internal_helper"]);
+    }
+
+    #[test]
+    fn accepts_hyphenated_alias_written_with_underscores() {
+        let deps = aliases(&[("hex-lite", "hex-conservative")]);
+        assert_eq!(resolve_private(&["hex_lite".to_string()], &deps), ["hex_conservative"]);
+    }
+
+    #[test]
+    fn accepts_package_name() {
+        let deps = aliases(&[("internal", "internal-helper")]);
+        assert_eq!(resolve_private(&["internal-helper".to_string()], &deps), ["internal_helper"]);
+    }
+
+    #[test]
+    fn passes_through_unknown_name() {
+        let deps = aliases(&[("internal", "internal-helper")]);
+        assert_eq!(resolve_private(&["typo".to_string()], &deps), ["typo"]);
+    }
 }
