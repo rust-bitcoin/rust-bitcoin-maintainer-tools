@@ -1,16 +1,21 @@
 name: 'Setup rbmt'
 description: |
-  Install cargo-rbmt, tools, and toolchains.
+  Install cargo-rbmt, external tools, and toolchains.
 
 runs:
   using: "composite"
   steps:
-    - name: Install cargo-rbmt
+    # Unpinned bootstrap from crates.io.
+    - name: Bootstrap cargo-rbmt
       shell: bash
       run: cargo install cargo-rbmt --locked
-    - name: Install tools (including pinned cargo-rbmt)
+    # The --ignore-rbmt-version allows this to run even
+    # if it doesn't match the pinned rbmt version of the workspace.
+    - name: Sync pinned external tools (including cargo-rbmt)
       shell: bash
       run: cargo rbmt --ignore-rbmt-version tools
+    # --force ensures all components of a toolchain are installed, even when a toolchain
+    # already exists on a system (e.g. ensure the no-std target is installed).
     - name: Install toolchains
       shell: bash
-      run: cargo rbmt toolchains
+      run: cargo rbmt toolchains --force
