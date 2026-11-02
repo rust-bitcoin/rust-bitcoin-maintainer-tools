@@ -178,6 +178,7 @@ where
             return Ok(());
         }
 
+        rbmt_eprintln!("Iterating over {} commit(s) since {}", commits.len(), baseline);
         for sha in commits {
             rbmt_eprintln!("Running on commit {}...", &sha[..12]);
             let _git_guard = GitSwitchGuard::new(sh, &sha)?;

@@ -21,7 +21,11 @@ pub fn run(
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _progress = ProgressGuard::new();
+    if let Some(baseline) = baseline {
+        rbmt_eprintln!("Showing packages changed since baseline: {}", &baseline);
+    }
     let packages = internal_packages(sh, roots)?;
+    rbmt_eprintln!("Found {} publishable package(s)", packages.len());
     if packages.is_empty() {
         return Err("No publishable packages found".into());
     }
