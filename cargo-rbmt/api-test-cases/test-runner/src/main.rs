@@ -52,6 +52,13 @@ fn test_private_dep_leak(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
     Ok(output.status)
 }
 
+/// Verifies exit code 1 when a public re-export leaks a private dependency.
+fn test_private_reexport(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
+    let output =
+        cmd!(sh, "cargo rbmt api -p api-reexport --lockfile existing").ignore_status().output()?;
+    Ok(output.status)
+}
+
 /// Verifies `cargo rbmt api --baseline` has exit code 2 when the API changed.
 fn test_api_diff(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
     let _guard = TempBranchGuard::new(sh)?;
@@ -78,6 +85,7 @@ fn main() -> ExitCode {
 
     let tests = [
         Test { name: "API leak", expected_exit: 1, run: test_private_dep_leak },
+        Test { name: "API re-export leak", expected_exit: 1, run: test_private_reexport },
         Test { name: "API diff", expected_exit: 2, run: test_api_diff },
     ];
 

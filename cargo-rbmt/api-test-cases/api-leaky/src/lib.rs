@@ -3,7 +3,7 @@
 //! Every item in this package leaks `internal_helper` into the public API.
 //! The private check should catch all of them (exit 1).
 
-use internal::{InternalHelper, InternalTrait};
+use internal::InternalHelper;
 
 /// Leaks an internal type in the return type.
 pub fn use_internal_helper() -> InternalHelper {

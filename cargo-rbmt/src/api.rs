@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use public_api::rustdoc_types::Id;
+use public_api::rustdoc_types::{Crate, Id, ItemEnum};
 use xshell::Shell;
 
 use crate::environment::{
@@ -24,8 +24,43 @@ const API_DIR: &str = "api";
 /// This flag suppresses those warnings so we can focus on actual API changes.
 const RUSTDOCFLAGS_ALLOW_BROKEN_LINKS: &str = "-A rustdoc::broken_intra_doc_links";
 
-/// A collection of public APIs for a single package across different feature configurations.
-type PackageApis = HashMap<FeatureConfig, public_api::PublicApi>;
+/// A public API for a single feature configuration, plus crate attribution data
+/// for detecting re-exports of private dependencies.
+struct PackageApiEntry {
+    api: public_api::PublicApi,
+    origins: ItemOrigins,
+}
+
+/// Public APIs for a package across feature configurations.
+type PackageApis = HashMap<FeatureConfig, PackageApiEntry>;
+
+/// Maps a public item's rustdoc `Id` to the external crate that defines it.
+struct ItemOrigins(HashMap<u32, String>);
+
+impl ItemOrigins {
+    /// Traverses json to attribute re-exported items to their origin crate.
+    fn from_rustdoc_json(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let raw = fs::read_to_string(path)?;
+        let crate_: Crate = serde_json::from_str(&raw)?;
+
+        let mut origins = HashMap::new();
+
+        for (id, item) in &crate_.index {
+            let ItemEnum::Use(use_) = &item.inner else { continue };
+            let Some(target) = use_.id else { continue };
+            let Some(summary) = crate_.paths.get(&target) else { continue };
+            let Some(ext) = crate_.external_crates.get(&summary.crate_id) else { continue };
+            origins.insert(id.0, ext.name.clone());
+        }
+
+        Ok(Self(origins))
+    }
+
+    /// The external crate that defines this item, if not the local crate.
+    fn get(&self, item: &public_api::PublicItem) -> Option<&str> {
+        self.0.get(&item.id().0).map(String::as_str)
+    }
+}
 
 /// API-specific configuration, read from `[package.metadata.rbmt.api]` in `Cargo.toml`.
 #[derive(Debug, Default, serde::Deserialize)]
@@ -255,24 +290,24 @@ pub fn run(
 
         rbmt_eprintln!("API check enabled in {}", package.name);
 
-        let current_apis = get_package_apis(sh, &package.name, &package.dir)?;
+        let current = get_package_apis(sh, &package.name, &package.dir)?;
         check_private_deps(
             &package.name,
-            &current_apis,
+            &current,
             &api_config.private,
             &package.dep_aliases,
             &package.deps,
         )?;
 
         if snapshot || api_config.snapshot {
-            write_api_files(&package, &current_apis)?;
+            write_api_files(&package, &current)?;
         }
         if let Some(baseline) = &baseline {
-            if let Some(package_diff) = check_baseline(sh, &package, baseline, current_apis)? {
+            if let Some(package_diff) = check_baseline(sh, &package, baseline, current)? {
                 package_diffs.push(package_diff);
             }
         } else {
-            package_apis.push((package.name, current_apis));
+            package_apis.push((package.name, current));
         }
     }
 
@@ -284,9 +319,10 @@ pub fn run(
     if baseline.is_none() {
         progress.disable();
         for (package_name, feature_apis) in package_apis {
-            for (feature_config, api) in feature_apis {
+            for (feature_config, entry) in feature_apis {
+                let api = &entry.api;
                 println!("--- {} API ({})", package_name, feature_config.name());
-                let context = ItemContext::new(&api);
+                let context = ItemContext::new(api);
                 for item in api.items() {
                     println!("{}", context.format(item));
                 }
@@ -337,7 +373,8 @@ fn get_package_apis(
             .with_extension("json");
 
         let public_api = public_api::Builder::from_rustdoc_json(&json_path).build()?;
-        apis.insert(config, public_api);
+        let origins = ItemOrigins::from_rustdoc_json(&json_path)?;
+        apis.insert(config, PackageApiEntry { api: public_api, origins });
     }
 
     Ok(apis)
@@ -362,7 +399,8 @@ fn write_api_files(
 
     let package_api_dir = package.dir.join(API_DIR);
     fs::create_dir_all(&package_api_dir)?;
-    for (config, public_api) in apis {
+    for (config, entry) in apis {
+        let public_api = &entry.api;
         let output_file = package_api_dir.join(config.filename());
         let context = ItemContext::new(public_api);
         let api_display =
@@ -387,11 +425,13 @@ fn check_baseline(
     };
 
     let mut feature_diffs = Vec::new();
-    for (feature_config, current_api) in current_apis {
-        let baseline_api = baseline_apis.remove(&feature_config).ok_or(format!(
+    for (feature_config, entry) in current_apis {
+        let current_api = entry.api;
+        let baseline_entry = baseline_apis.remove(&feature_config).ok_or(format!(
             "Feature {:?} not found in baseline for {}",
             feature_config, package.name
         ))?;
+        let baseline_api = baseline_entry.api;
 
         let baseline_context = ItemContext::new(&baseline_api);
         let current_context = ItemContext::new(&current_api);
@@ -415,12 +455,23 @@ fn check_baseline(
 
 /// Check if any private dependencies are exposed in the public API.
 ///
-/// `dep_aliases` maps Cargo.toml dependency aliases (the `rename` field from cargo
-/// metadata) to their actual package names. This allows users to list either the
-/// alias or the package name in their `private` config.
+/// Two detection strategies are used:
+///
+/// * **Identifier scan**: checks rendered tokens for the private crate's name (catches return
+///   types, generics, type aliases).
+/// * **Crate-origin scan**: attributes items to their defining crate via rustdoc JSON metadata
+///   (catches re-exports, which render with the local crate path).
+///
+/// # Arguments
+///
+/// * `package_name` - package being analyzed.
+/// * `current` - package public API and crate-origin data per feature config.
+/// * `private_deps` - dependencies which should not leak through the exposed API.
+/// * `dep_aliases` - maps manifest alias names to package names for ease of configuration.
+/// * `deps` - package's full dependency list, used to validate `private_deps` entries.
 fn check_private_deps(
     package_name: &str,
-    apis: &PackageApis,
+    current: &PackageApis,
     private_deps: &[String],
     dep_aliases: &HashMap<String, String>,
     deps: &[String],
@@ -450,19 +501,29 @@ fn check_private_deps(
 
     let mut leaked_items = Vec::new();
 
-    for (feature_config, api) in apis {
-        for item in api.items() {
-            // Check if any token is an identifier matching a private dependency.
-            for token in item.tokens() {
-                if let public_api::tokens::Token::Identifier(ident) = token {
-                    for private_dep in &resolved {
-                        if ident == private_dep || ident.starts_with(&format!("{}::", private_dep))
-                        {
-                            leaked_items.push((feature_config.name(), item.to_string()));
-                            break;
+    for (feature_config, entry) in current {
+        for item in entry.api.items() {
+            // Check local package API types.
+            let token_leak = || {
+                for token in item.tokens() {
+                    if let public_api::tokens::Token::Identifier(ident) = token {
+                        for dep in &resolved {
+                            if ident == dep || ident.starts_with(&format!("{}::", dep)) {
+                                return true;
+                            }
                         }
                     }
                 }
+                false
+            };
+
+            if token_leak()
+                || entry
+                    .origins
+                    .get(item)
+                    .is_some_and(|d| resolved.contains(&normalize_crate_name(d)))
+            {
+                leaked_items.push((feature_config.name(), item.to_string()));
             }
         }
     }
