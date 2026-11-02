@@ -48,14 +48,14 @@ impl Drop for TempBranchGuard {
 /// Verifies exit code 1 when a package's public API leaks a private dependency.
 fn test_private_dep_leak(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
     let output =
-        cmd!(sh, "cargo rbmt api -p api-leaky --lockfile existing").ignore_status().output()?;
+        cmd!(sh, "cargo rbmt api -p api-leaky").ignore_status().output()?;
     Ok(output.status)
 }
 
 /// Verifies exit code 1 when a public re-export leaks a private dependency.
 fn test_private_reexport(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
     let output =
-        cmd!(sh, "cargo rbmt api -p api-reexport --lockfile existing").ignore_status().output()?;
+        cmd!(sh, "cargo rbmt api -p api-reexport").ignore_status().output()?;
     Ok(output.status)
 }
 
@@ -73,7 +73,7 @@ fn test_api_diff(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
     cmd!(sh, "git add {lib_path}").run()?;
     cmd!(sh, "git commit -m 'temp: add diff for api test'").run()?;
 
-    let output = cmd!(sh, "cargo rbmt api -p api-diff --lockfile existing --baseline HEAD~1")
+    let output = cmd!(sh, "cargo rbmt api -p api-diff --baseline HEAD~1")
         .ignore_status()
         .output()?;
 

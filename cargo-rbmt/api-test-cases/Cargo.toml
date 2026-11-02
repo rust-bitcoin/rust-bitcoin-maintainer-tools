@@ -2,5 +2,6 @@
 resolver = "2"
 members = ["api-diff", "api-leaky", "api-reexport", "internal-helper", "test-runner"]
 
-[workspace.metadata.rbmt.toolchains]
-nightly = "nightly-2026-05-04"
+[workspace.metadata.rbmt]
+lock.lockfiles = ["minimal"]
+toolchains.nightly = "nightly-2026-05-04"

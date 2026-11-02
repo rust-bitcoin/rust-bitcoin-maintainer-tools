@@ -28,7 +28,7 @@ jobs:
         run: |
           cargo rbmt tools --update
           if git add . && git commit -m "Update tools"; then
-            echo "TOOL_UPDATE=true" >> $GITHUB_ENV
+            echo "TOOL_UPDATE=true" >> $FORGEJO_ENV
           fi
       - name: Create pull request using agit
         if: ${{ env.TOOL_UPDATE == 'true' }}
