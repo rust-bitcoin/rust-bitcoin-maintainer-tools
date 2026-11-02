@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Track per-package test time and show it in the `test` summary.
+
 ## [0.5.4] - 2026-10-21
 
 * Add `[workspace.metadata.rbmt.lock.lockfiles]` to declare which lockfiles `lock` generates by default.
