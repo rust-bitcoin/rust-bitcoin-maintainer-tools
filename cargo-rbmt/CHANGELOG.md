@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* Add `with` subcommand for running an arbitrary command with the selected lockfile and toolchain. Unlike `run`, `with` does not resolve workspace packages, iterate commits, or capture/redirect output.
 * Track per-package test time and show it in the `test` summary.
 * [BREAKING] Remove the `generate` command.
 
