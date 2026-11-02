@@ -1,0 +1,11 @@
+[package]
+name = "api-leaky"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+internal = { package = "internal-helper", path = "../internal-helper" }
+
+[package.metadata.rbmt]
+api = { enabled = true, private = ["internal"] }

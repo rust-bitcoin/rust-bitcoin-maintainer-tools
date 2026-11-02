@@ -1,16 +1,6 @@
 [workspace]
-members = ["internal-helper"]
+resolver = "2"
+members = ["api-diff", "api-leaky", "internal-helper", "test-runner"]
 
-[package]
-name = "api-test-cases"
-version = "0.1.0"
-edition = "2021"
-publish = false
-exclude = ["api"]
-
-[dependencies]
-internal = { package = "internal-helper", path = "internal-helper" }
-
-[package.metadata.rbmt]
-api = { enabled = true, snapshot = true, private = ["internal"] }
-toolchains = { nightly = "nightly-2026-05-04" }
+[workspace.metadata.rbmt.toolchains]
+nightly = "nightly-2026-05-04"

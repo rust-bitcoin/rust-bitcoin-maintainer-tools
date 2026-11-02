@@ -1,0 +1,8 @@
+[package]
+name = "api-diff"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata.rbmt]
+api = { enabled = true }
