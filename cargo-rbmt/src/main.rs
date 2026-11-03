@@ -155,7 +155,7 @@ enum Commands {
         #[arg(long)]
         force: bool,
         /// Git ref to use as baseline for version bump detection (tag, branch, or commit).
-        #[arg(long, default_value = "master")]
+        #[arg(long)]
         baseline: String,
     },
     /// Install and manage nightly, stable, and MSRV toolchains.

@@ -21,15 +21,20 @@ pub fn run(
     baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _progress = ProgressGuard::new();
-    if let Some(baseline) = baseline {
-        rbmt_eprintln!("Showing packages changed since baseline: {}", &baseline);
-    }
+    let baseline = match baseline {
+        Some(ref_name) => {
+            let resolved = git::resolve_baseline(sh, ref_name)?;
+            rbmt_eprintln!("Showing packages changed since baseline: {}", &resolved);
+            Some(resolved)
+        }
+        None => None,
+    };
     let packages = internal_packages(sh, roots)?;
     rbmt_eprintln!("Found {} publishable package(s)", packages.len());
     if packages.is_empty() {
         return Err("No publishable packages found".into());
     }
-    print_release_waves(sh, &packages, baseline)
+    print_release_waves(sh, &packages, baseline.as_deref())
 }
 
 /// Collect publishable workspace packages with only their internal dependencies.
