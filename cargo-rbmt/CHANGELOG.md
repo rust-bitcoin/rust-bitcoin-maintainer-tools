@@ -5,6 +5,8 @@
 * Add `with` subcommand for running an arbitrary command with the selected lockfile and toolchain. Unlike `run`, `with` does not resolve workspace packages, iterate commits, or capture/redirect output.
 * Track per-package test time and show it in the `test` summary.
 * [BREAKING] Remove the `generate` command.
+* [BREAKING] `lock` no longer syncs the `Cargo.lock` of nested workspaces; each workspace now declares and maintains its own lockfiles by running `cargo rbmt lock` from its own directory.
+* `integration` now activates the integration package's lockfile (defaulting to the minimum declared lockfile) and gains a `--lockfile` flag.
 
 ## [0.5.4] - 2026-10-21
 

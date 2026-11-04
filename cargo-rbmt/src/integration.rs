@@ -10,6 +10,7 @@ use xshell::Shell;
 use crate::environment::{
     cargo_cmd, get_workspace_packages, CmdExt, PackageManifest, ProgressGuard,
 };
+use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
 /// Integration-specific configuration, read from `[package.metadata.rbmt.integration]` in `Cargo.toml`.
@@ -57,8 +58,13 @@ impl IntegrationConfig {
 ///
 /// # Arguments
 ///
+/// * `lockfile` - Lockfile to use for the integration package. Defaults to the minimum declared lockfile.
 /// * `packages` - Optional filter for specific package names.
-pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    sh: &Shell,
+    lockfile: Option<LockFile>,
+    packages: &[String],
+) -> Result<(), Box<dyn std::error::Error>> {
     let packages = get_workspace_packages(sh, packages)?;
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Looking for integration tests in {} crate(s)", packages.len());
@@ -78,6 +84,9 @@ pub fn run(sh: &Shell, packages: &[String]) -> Result<(), Box<dyn std::error::Er
         rbmt_eprintln!("Running integration tests for {}", package.name);
 
         let _dir = sh.push_dir(&integration_dir);
+
+        let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::min(sh)? };
+        let _lockfile_guard = lockfile.activate(sh)?;
         // The integration package must defines its own [package.metadata.rbmt.toolchains].
         prepare_toolchain(sh, Toolchain::Stable)?;
         let integration_packages = get_workspace_packages(sh, &[])?;

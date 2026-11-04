@@ -115,6 +115,8 @@ The `integration` command runs tests in isolated integration sub-packages design
 
 Integration sub-packages should be *standalone*, not members of a workspace. This ensures test infrastructure dependencies don't influence workspace dependency resolution which could change the minimum versions for tests.
 
+The integration package declares and maintains its own lockfiles (see [lock](#lock)). `cargo rbmt integration` activates the package's lockfile before running tests, defaulting to the minimum declared lockfile; override with `--lockfile`.
+
 ```toml
 [package.metadata.rbmt.integration]
 # Integration tests package name, defaults to "bitcoind-tests".
@@ -161,11 +163,13 @@ cargo rbmt lock
 cargo rbmt lock --lockfiles minimal,maximum,recent
 ```
 
-The `lock` command also keeps the single `Cargo.lock` of any nested workspaces (e.g. embedded test crates excluded from the main workspace) in sync using the same conservative strategy as `Cargo-recent.lock`. Only git-tracked lockfiles are managed. A nested workspace can opt-out via its configuration.
+The `lock` command operates on the workspace it is run in. Nested workspaces (e.g. embedded test crates excluded from the main workspace) declare and maintain their own lockfiles by running `cargo rbmt lock` from their own directory.
 
-```toml
-[workspace.metadata.rbmt.lock]
-enabled = false
+```bash
+# Generate lockfiles for the current workspace.
+cargo rbmt lock
+# Generate lockfiles for a nested workspace.
+(cd fuzz && cargo rbmt lock)
 ```
 
 When you specify `--lockfile`, the tool copies that lockfile to `Cargo.lock` before running the command. This allows you to test your code against different dependency version constraints.
