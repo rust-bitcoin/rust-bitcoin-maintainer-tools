@@ -12,6 +12,7 @@ use xshell::Shell;
 use crate::environment::{
     cargo_cmd, get_target_dir, get_workspace_packages, CmdExt, PackageManifest, ProgressGuard,
 };
+use crate::git;
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
@@ -60,6 +61,9 @@ pub fn run(
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running pre-release checks on {} packages", packages.len());
 
+    let baseline = git::resolve_baseline(sh, baseline)?;
+    rbmt_eprintln!("Comparing against baseline: {}", baseline);
+
     for package in packages {
         let config = PrereleaseConfig::load(&package.dir)?;
 
@@ -68,7 +72,7 @@ pub fn run(
             continue;
         }
 
-        if !force && !has_version_bump(sh, &package.dir, baseline)? {
+        if !force && !has_version_bump(sh, &package.dir, &baseline)? {
             rbmt_eprintln!(
                 "Skipping {} (no version bump detected since {})",
                 package.name,

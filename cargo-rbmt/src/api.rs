@@ -253,7 +253,7 @@ pub enum ApiOutcome {
 ///
 /// * `lockfile` - Optional lockfile variant to use.
 /// * `packages` - Optional list of packages to check. If empty, checks all packages in the workspace.
-/// * `baseline` - Git ref for optional baseline diff comparison. When not provided, outputs APIs to stdout.
+/// * `baseline` - Git ref for baseline diff comparison. When not provided, outputs APIs to stdout.
 /// * `snapshot` - Whether to generate API snapshot files to disk.
 ///
 /// # Returns
@@ -275,6 +275,15 @@ pub fn run(
     rbmt_eprintln!("Running API check...");
     toolchain::prepare_toolchain(sh, toolchain::Toolchain::Nightly)?;
 
+    let baseline = match baseline {
+        Some(ref_name) => {
+            let resolved = git::resolve_baseline(sh, ref_name)?;
+            rbmt_eprintln!("Comparing against baseline: {}", resolved);
+            Some(resolved)
+        }
+        None => None,
+    };
+
     let mut package_diffs = Vec::new();
     let mut package_apis: Vec<(String, PackageApis)> = Vec::new();
 
@@ -293,7 +302,7 @@ pub fn run(
         if snapshot || api_config.snapshot {
             write_api_files(&package, &current_apis)?;
         }
-        if let Some(baseline) = baseline {
+        if let Some(baseline) = &baseline {
             if let Some(package_diff) = check_baseline(sh, &package, baseline, current_apis)? {
                 package_diffs.push(package_diff);
             }

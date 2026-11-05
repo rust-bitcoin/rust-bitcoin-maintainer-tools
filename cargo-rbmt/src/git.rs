@@ -126,6 +126,16 @@ impl Drop for GitSwitchGuard {
     }
 }
 
+/// Resolve a baseline ref to a merge-base commit SHA.
+///
+/// Returns `git merge-base HEAD <baseline>`. This ensures the comparison
+/// captures only commits on the current branch, excluding changes that
+/// landed on the baseline ref after the branch diverged.
+pub fn resolve_baseline(sh: &Shell, baseline: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let merge_base = rbmt_cmd!(sh, "git merge-base HEAD {baseline}").read()?;
+    Ok(merge_base.trim().to_string())
+}
+
 /// Get the current git commit ID.
 ///
 /// Returns `None` if the working directory is not inside a git repository or
