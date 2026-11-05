@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-02
+
 * `pr merge` no longer drops into an interactive shell for manual inspection.
 * Rename config fields to `https_host` and `ssh_host` (the HTTPS value no longer includes a scheme).
 * `pr merge` now defaults the PR number to the currently checked out `pr-<number>` branch.
@@ -12,4 +14,5 @@
 
 Initial release of `forge`, a CLI tool for common rust-bitcoin Forgejo patterns.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/forge-rbmt-0.1.0...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/forge-rbmt-0.2.0...HEAD
+[0.2.0]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/forge-rbmt-0.1.0...forge-rbmt-0.2.0
