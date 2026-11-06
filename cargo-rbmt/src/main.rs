@@ -115,7 +115,11 @@ enum Commands {
         cargo_args: Vec<String>,
     },
     /// Run bitcoin core integration tests.
-    Integration,
+    Integration {
+        /// Lockfile to use for the integration package. Defaults to the minimum declared lockfile.
+        #[arg(long = "lockfile", alias = "lock-file", value_enum)]
+        lockfile: Option<LockFile>,
+    },
     /// Update dependency versions in lockfiles.
     Lock {
         /// Lockfile types to generate. Defaults to the workspace's configured lockfiles.
@@ -259,8 +263,8 @@ fn main() {
                 eprintln!("Error running tests: {}", e);
                 process::exit(1);
             },
-        Commands::Integration =>
-            if let Err(e) = integration::run(&sh, &cli.packages) {
+        Commands::Integration { lockfile } =>
+            if let Err(e) = integration::run(&sh, lockfile, &cli.packages) {
                 eprintln!("Error running integration tests: {}", e);
                 process::exit(1);
             },

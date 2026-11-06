@@ -7,7 +7,6 @@
 //! resolution we need here.
 
 use std::cmp::Ordering;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,8 +21,6 @@ use crate::toolchain::{prepare_toolchain, Toolchain};
 const CARGO_LOCK: &str = "Cargo.lock";
 /// The temporary backup file for Cargo.lock.
 const CARGO_LOCK_BACKUP: &str = "Cargo.lock.backup";
-/// The null character, used as the record delimiter of `git ls-files -z` output.
-const NUL: char = '\0';
 
 /// RAII guard that backs up and restores the original Cargo.lock.
 ///
@@ -220,18 +217,13 @@ struct RbmtLockConfig {
 #[derive(serde::Deserialize)]
 #[serde(default)]
 struct LockConfig {
-    /// Whether nested lockfile syncing is enabled. Defaults to `true`.
-    enabled: bool,
     /// The lockfiles this workspace maintains, used as the `lock` command's default.
     lockfiles: Vec<GeneratableLockFile>,
 }
 
 impl Default for LockConfig {
     fn default() -> Self {
-        Self {
-            enabled: true,
-            lockfiles: vec![GeneratableLockFile::Minimal, GeneratableLockFile::Maximum],
-        }
+        Self { lockfiles: vec![GeneratableLockFile::Minimal, GeneratableLockFile::Maximum] }
     }
 }
 
@@ -266,11 +258,6 @@ impl LockConfig {
 /// The original Cargo.lock is preserved and restored after generation in case
 /// it is being tracked for publication.
 ///
-/// Additionally, the single `Cargo.lock` of every nested workspace in the
-/// repository is conservatively synced (see [`sync_nested_lockfiles`]). These
-/// are usally helper packages for fuzzing or embedded tests and don't require as
-/// much lockfile managment.
-///
 /// # Arguments
 ///
 /// * `cli_lockfiles` - Lockfile types to generate (minimal, maximum, recent), overriding config.
@@ -297,99 +284,8 @@ pub fn run(
         LockFile::from(lockfile).derive(sh)?;
     }
 
-    sync_nested_lockfiles(sh)?;
-
     rbmt_eprintln!("Lockfiles updated successfully");
     Ok(())
-}
-
-/// Conservatively sync the `Cargo.lock` files of nested workspaces.
-///
-/// Cargo only writes `Cargo.lock` at workspace roots, so each tracked lockfile below the workspace
-/// root represents a nested workspace (e.g. embedded test crates). Only tracked lockfiles are
-/// managed, as reported by the git index.
-///
-/// A nested workspace can opt out with `[workspace.metadata.rbmt.lock]` `enabled = false`
-/// (`[package.metadata.rbmt.lock]` fallback for nested packages without a `[workspace]` table).
-fn sync_nested_lockfiles(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
-    let workspace_root = get_workspace_root(sh)?;
-    let lockfiles = find_nested_lockfiles(sh, &workspace_root);
-    if lockfiles.is_empty() {
-        return Ok(());
-    }
-
-    rbmt_eprintln!("Syncing nested workspace lockfiles...");
-    for lockfile in lockfiles {
-        let dir = lockfile.parent().ok_or("Cargo.lock has no parent directory")?;
-        let relative_path = lockfile.strip_prefix(&workspace_root).unwrap_or(&lockfile);
-        let manifest = dir.join("Cargo.toml");
-
-        if !manifest.exists() {
-            rbmt_eprintln!("Skipping {}: no adjacent Cargo.toml", relative_path.display());
-            continue;
-        }
-
-        // Run cargo commands from the lockfile's directory.
-        let _dir = sh.push_dir(dir);
-        match get_workspace_root(sh) {
-            Ok(root) if root == dir => {}
-            Ok(_) => {
-                rbmt_eprintln!(
-                    "Skipping {}: directory is not a workspace root (stray lockfile?)",
-                    relative_path.display()
-                );
-                continue;
-            }
-            Err(e) => {
-                rbmt_eprintln!(
-                    "Skipping {}: failed to read cargo metadata: {}",
-                    relative_path.display(),
-                    e
-                );
-                continue;
-            }
-        }
-
-        // Syncing is enabled by default.
-        let enabled = LockConfig::load(dir)?.enabled;
-        if !enabled {
-            rbmt_eprintln!("Skipping {}: disabled by rbmt.lock metadata", relative_path.display());
-            continue;
-        }
-
-        rbmt_eprintln!("Syncing {}...", relative_path.display());
-        // fetch does the bare minimum amount of work to conservatively update a lockfile.
-        rbmt_cmd!(sh, "cargo fetch").run_with_capture()?;
-    }
-    Ok(())
-}
-
-/// Collect tracked `Cargo.lock` files below the workspace root.
-///
-/// Uses the git index instead of walking the filesystem so that only tracked files are considered.
-fn find_nested_lockfiles(sh: &Shell, workspace_root: &Path) -> Vec<PathBuf> {
-    let _dir = sh.push_dir(workspace_root);
-    // Use more robust nul character terminator option `-z`.
-    let output = match rbmt_cmd!(sh, "git ls-files --cached -z -- .").read() {
-        Ok(output) => output,
-        Err(e) => {
-            rbmt_eprintln!("Skipping nested lockfile sync: git ls-files failed: {}", e);
-            return Vec::new();
-        }
-    };
-
-    let mut lockfiles: Vec<PathBuf> = output
-        .split_terminator(NUL)
-        .map(PathBuf::from)
-        .filter(|path| path.file_name() == Some(OsStr::new(CARGO_LOCK)))
-        .map(|path| workspace_root.join(path))
-        // Excude the workspace root lockfile.
-        .filter(|path| path.parent() != Some(workspace_root))
-        // Skip stale entries deleted in the worktree.
-        .filter(|path| path.exists())
-        .collect();
-    lockfiles.sort();
-    lockfiles
 }
 
 /// Derive a minimal versions lockfile.
