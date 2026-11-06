@@ -31,7 +31,7 @@ struct TempBranchGuard {
 impl TempBranchGuard {
     fn new(sh: &Shell) -> Result<Self, Box<dyn Error>> {
         let orig_ref = cmd!(sh, "git rev-parse HEAD").read()?;
-        cmd!(sh, "git switch -c {TEMP_BRANCH}").run()?;
+        cmd!(sh, "git switch -c {TEMP_BRANCH}").quiet().output()?;
         Ok(Self { orig_ref: orig_ref.trim().to_string() })
     }
 }
@@ -40,8 +40,8 @@ impl Drop for TempBranchGuard {
     fn drop(&mut self) {
         let sh = Shell::new().unwrap();
         let orig = &self.orig_ref;
-        let _ = cmd!(sh, "git switch --detach {orig}").run();
-        let _ = cmd!(sh, "git branch -D {TEMP_BRANCH}").run();
+        let _ = cmd!(sh, "git switch --detach {orig}").quiet().output();
+        let _ = cmd!(sh, "git branch -D {TEMP_BRANCH}").quiet().output();
     }
 }
 
@@ -73,8 +73,8 @@ fn test_api_diff(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
     std::fs::write(&lib_path, content)?;
 
     // Commit the change.
-    cmd!(sh, "git add {lib_path}").run()?;
-    cmd!(sh, "git -c user.name='RBMT Bot' -c user.email='bot@example.com' commit -m 'temp: add diff for api test'").run()?;
+    cmd!(sh, "git add {lib_path}").quiet().output()?;
+    cmd!(sh, "git -c user.name='RBMT Bot' -c user.email='bot@example.com' commit -m 'temp: add diff for api test'").quiet().output()?;
 
     let output =
         cmd!(sh, "cargo rbmt api -p api-diff --baseline HEAD~1").ignore_status().output()?;
@@ -93,7 +93,7 @@ fn main() -> ExitCode {
     ];
 
     if tests.iter().fold(true, |acc, test| {
-        eprintln!("--- {} (expect exit {}) ---", test.name, test.expected_exit);
+        eprintln!("--- {} (expect exit {})", test.name, test.expected_exit);
         let passed = match (test.run)(&sh) {
             Ok(status) => match status.code() {
                 Some(code) if code == test.expected_exit => {
