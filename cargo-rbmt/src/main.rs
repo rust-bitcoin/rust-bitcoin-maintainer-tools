@@ -234,6 +234,10 @@ fn main() {
                     eprintln!("{}", e);
                     process::exit(2);
                 }
+                Ok(api::ApiOutcome::PrivateDepLeak(msg)) => {
+                    eprintln!("{}", msg);
+                    process::exit(3);
+                }
                 Err(e) => {
                     eprintln!("Error running API check: {}", e);
                     process::exit(1);

@@ -8,6 +8,7 @@
 * [BREAKING] `lock` no longer syncs the `Cargo.lock` of nested workspaces; each workspace now declares and maintains its own lockfiles by running `cargo rbmt lock` from its own directory.
 * `integration` now activates the integration package's lockfile (defaulting to the minimum declared lockfile) and gains a `--lockfile` flag.
 * Beef up the `api` command's private dependency leak configuration handling.
+* [BREAKING] `api` now exits 3 on private dependency leak (was 1, which is now reserved for tool errors). Exit code 2 remains for API diffs.
 
 ## [0.5.4] - 2026-10-21
 

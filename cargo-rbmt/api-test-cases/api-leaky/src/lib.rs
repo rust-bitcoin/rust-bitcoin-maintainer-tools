@@ -1,7 +1,7 @@
 //! Private dependency leak detection test cases for the `cargo rbmt api` command.
 //!
 //! Every item in this package leaks `internal_helper` into the public API.
-//! The private check should catch all of them (exit 1).
+//! The private check should catch all of them (exit 3).
 
 use internal::InternalHelper;
 

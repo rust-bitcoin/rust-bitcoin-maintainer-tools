@@ -258,13 +258,16 @@ impl std::error::Error for ApiDiffError {}
 
 /// Outcome of the API check.
 ///
-/// Distinguished from hard errors (I/O, build failures, private dep leaks) so callers
-/// can map API diffs to a different exit code (e.g. 2) vs hard failures (1).
+/// Distinguished from hard errors (I/O, build failures) so callers can map
+/// each outcome to a different exit code: 2 for diffs, 3 for leaks, 1 for
+/// hard failures.
 pub enum ApiOutcome {
-    /// No API changes detected; all checks passed.
+    /// No API changes or leaks detected; all checks passed.
     Success,
     /// API diffs detected against the baseline.
     DiffDetected(ApiDiffError),
+    /// Private dependency exposed in public API.
+    PrivateDepLeak(String),
 }
 
 /// Run the API task to check or generate API snapshots for packages.
@@ -278,9 +281,10 @@ pub enum ApiOutcome {
 ///
 /// # Returns
 ///
-/// * `Ok(ApiOutcome::Success)` - No API diffs detected.
+/// * `Ok(ApiOutcome::Success)` - No API diffs or leaks detected.
 /// * `Ok(ApiOutcome::DiffDetected(ApiDiffError))` - API diffs found vs baseline.
-/// * `Err(_)` - Hard failure (build error, I/O error, private dep leak, etc.).
+/// * `Ok(ApiOutcome::PrivateDepLeak(String))` - Private dependency exposed in public API.
+/// * `Err(_)` - Hard failure (build error, I/O error, etc.).
 pub fn run(
     sh: &Shell,
     lockfile: Option<LockFile>,
@@ -317,13 +321,15 @@ pub fn run(
         rbmt_eprintln!("API check enabled in {}", package.name);
 
         let current = get_package_apis(sh, &package.name, &package.dir)?;
-        check_private_deps(
+        if let Some(msg) = check_private_deps(
             &package.name,
             &current,
             &api_config.private,
             &package.dep_aliases,
             &package.deps,
-        )?;
+        )? {
+            return Ok(ApiOutcome::PrivateDepLeak(msg));
+        }
 
         if snapshot || api_config.snapshot {
             write_api_files(&package, &current)?;
@@ -395,7 +401,7 @@ fn get_package_apis(
         let json_path = get_target_dir(sh)?
             .join("doc")
             // Rustdoc replaces hyphens with underscores in the filename.
-            .join(normalize_crate_name(package_name))
+            .join(CrateName::from_package_name(package_name).to_string())
             .with_extension("json");
 
         let public_api = public_api::Builder::from_rustdoc_json(&json_path).build()?;
@@ -479,6 +485,40 @@ fn check_baseline(
     }
 }
 
+/// A crate name in underscored form, as it appears in Rust import paths.
+///
+/// Rust identifiers use underscores, but crate and package names in TOML or
+/// cargo metadata use hyphens. `CrateName` normalises to the underscored form
+/// for comparison against public API tokens.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct CrateName(String);
+
+impl CrateName {
+    /// Create from a package name (e.g. from rustdoc `external_crates` or
+    /// `cargo metadata`). Hyphens are replaced with underscores; names already
+    /// in underscored form pass through unchanged.
+    fn from_package_name(name: &str) -> Self { Self(name.replace('-', "_")) }
+
+    /// Create from a manifest key, the dependency key as written under
+    /// `[dependencies]` in `Cargo.toml`. If the key is an alias for a different
+    /// package (via `package = "..."`), resolves through `aliases` to the actual
+    /// package name. Falls back to simple normalisation when the name is not a
+    /// known alias.
+    fn from_manifest_key(name: &str, aliases: &HashMap<String, String>) -> Self {
+        let normalized = name.replace('-', "_");
+        let resolved = aliases
+            .iter()
+            .find(|(alias, _)| alias.replace('-', "_") == normalized)
+            .map(|(_, package)| package.replace('-', "_"))
+            .unwrap_or(normalized);
+        Self(resolved)
+    }
+}
+
+impl std::fmt::Display for CrateName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+}
+
 /// Check if any private dependencies are exposed in the public API.
 ///
 /// Three detection strategies are used:
@@ -503,19 +543,20 @@ fn check_private_deps(
     private_deps: &[String],
     dep_aliases: &HashMap<String, String>,
     deps: &[String],
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
     if private_deps.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
 
-    let resolved = resolve_private(private_deps, dep_aliases);
+    let resolved: Vec<CrateName> =
+        private_deps.iter().map(|d| CrateName::from_manifest_key(d, dep_aliases)).collect();
 
     // Validate entries resolve to an actual dependency, else a typo in `private` silently
     // passes giving false confidence.
-    let known: HashSet<String> = deps.iter().map(|d| normalize_crate_name(d)).collect();
+    let known: HashSet<CrateName> = deps.iter().map(|d| CrateName::from_package_name(d)).collect();
     for (entry, dep) in private_deps.iter().zip(&resolved) {
-        if !known.contains(dep.as_str()) {
-            let resolved_suffix = if *dep == normalize_crate_name(entry) {
+        if !known.contains(dep) {
+            let resolved_suffix = if *dep == CrateName::from_package_name(entry) {
                 String::new()
             } else {
                 format!(" (resolved to '{dep}')")
@@ -538,7 +579,7 @@ fn check_private_deps(
             let token_leak = || {
                 item.tokens()
                     .filter(|t| matches!(t, public_api::tokens::Token::Identifier(_)))
-                    .any(|t| resolved.iter().any(|dep| t.text() == dep))
+                    .any(|t| resolved.contains(&CrateName::from_package_name(t.text())))
             };
 
             // Crate-origin scan: traces `pub use` re-exports to their defining
@@ -548,17 +589,17 @@ fn check_private_deps(
                 entry
                     .origins
                     .use_origin(item)
-                    .is_some_and(|d| resolved.contains(&normalize_crate_name(d)))
+                    .is_some_and(|d| resolved.contains(&CrateName::from_package_name(d)))
             };
 
             // Extern crate scan: checks `pub extern crate` declarations. These
             // have no `id` in rustdoc JSON so the crate-origin scan can't trace
-            // them. Matches against `private` entries. `extern crate` uses the
-            // dependency name in the manifest, not the package name so alias
-            // resolution doesn't apply.
+            // them. The extern crate name is the manifest key, i.e. the alias
+            // for renamed deps, so resolve it the same way as `private` entries
+            // before comparing.
             let extern_crate_leak = || {
                 entry.origins.extern_crate_origin(item).is_some_and(|name| {
-                    private_deps.iter().any(|d| normalize_crate_name(d) == name)
+                    resolved.contains(&CrateName::from_manifest_key(name, dep_aliases))
                 })
             };
 
@@ -574,48 +615,11 @@ fn check_private_deps(
         for (feature, item) in leaked_items {
             message.push_str(&format!("  [{}] {}\n", feature, item));
         }
-        return Err(message.into());
+        return Ok(Some(message));
     }
 
-    Ok(())
+    Ok(None)
 }
-
-/// Resolve dependency aliases in a list of private dependency names.
-///
-/// When a dependency is aliased with `package = "..."` in `Cargo.toml`:
-///
-/// ```toml
-/// hex = { package = "hex-conservative", version = "0.2" }
-/// ```
-///
-/// The public API will contain the actual crate name (`hex_conservative`), but
-/// users may naturally put the alias (`hex`) in the `private` list. This function
-/// resolves aliases via `cargo metadata` data so both forms are accepted.
-///
-/// Both the entries and the alias map keys are normalized here, so either form may be
-/// written with hyphens or underscores regardless of how the dependency is spelled in
-/// `Cargo.toml`.
-fn resolve_private(private: &[String], dep_aliases: &HashMap<String, String>) -> Vec<String> {
-    let aliases: HashMap<String, &str> = dep_aliases
-        .iter()
-        .map(|(alias, name)| (normalize_crate_name(alias), name.as_str()))
-        .collect();
-
-    private
-        .iter()
-        .map(|dep| {
-            let normalized = normalize_crate_name(dep);
-            aliases.get(&normalized).map_or(normalized.clone(), |name| normalize_crate_name(name))
-        })
-        .collect()
-}
-
-/// Normalize a crate name for comparison against public API tokens.
-///
-/// Rust identifiers use underscores; crate and package names from TOML or cargo
-/// metadata use hyphens. The public API tokenizer produces underscore form, so
-/// all names must be normalized before comparison.
-fn normalize_crate_name(name: &str) -> String { name.replace('-', "_") }
 
 #[cfg(test)]
 mod tests {
@@ -627,26 +631,48 @@ mod tests {
     }
 
     #[test]
-    fn accepts_alias() {
+    fn from_manifest_key_accepts_alias() {
         let deps = aliases(&[("internal", "internal-helper")]);
-        assert_eq!(resolve_private(&["internal".to_string()], &deps), ["internal_helper"]);
+        assert_eq!(
+            CrateName::from_manifest_key("internal", &deps),
+            CrateName::from_package_name("internal-helper"),
+        );
     }
 
     #[test]
-    fn accepts_hyphenated_alias_written_with_underscores() {
+    fn from_manifest_key_accepts_underscored_alias() {
         let deps = aliases(&[("hex-lite", "hex-conservative")]);
-        assert_eq!(resolve_private(&["hex_lite".to_string()], &deps), ["hex_conservative"]);
+        assert_eq!(
+            CrateName::from_manifest_key("hex_lite", &deps),
+            CrateName::from_package_name("hex-conservative"),
+        );
     }
 
     #[test]
-    fn accepts_package_name() {
+    fn from_manifest_key_accepts_package_name() {
         let deps = aliases(&[("internal", "internal-helper")]);
-        assert_eq!(resolve_private(&["internal-helper".to_string()], &deps), ["internal_helper"]);
+        assert_eq!(
+            CrateName::from_manifest_key("internal-helper", &deps),
+            CrateName::from_package_name("internal-helper"),
+        );
     }
 
     #[test]
-    fn passes_through_unknown_name() {
+    fn from_manifest_key_passes_through_unknown_name() {
         let deps = aliases(&[("internal", "internal-helper")]);
-        assert_eq!(resolve_private(&["typo".to_string()], &deps), ["typo"]);
+        assert_eq!(
+            CrateName::from_manifest_key("typo", &deps),
+            CrateName::from_package_name("typo"),
+        );
+    }
+
+    #[test]
+    fn from_package_name_normalizes_hyphens() {
+        assert_eq!(CrateName::from_package_name("internal-helper").to_string(), "internal_helper",);
+    }
+
+    #[test]
+    fn from_package_name_passes_through_underscores() {
+        assert_eq!(CrateName::from_package_name("internal_helper").to_string(), "internal_helper",);
     }
 }
