@@ -34,8 +34,16 @@ struct PackageApiEntry {
 /// Public APIs for a package across feature configurations.
 type PackageApis = HashMap<FeatureConfig, PackageApiEntry>;
 
+/// How a public item came from an external crate.
+enum Origin {
+    /// Item re-export, `pub use`.
+    Use(String),
+    /// Crate re-export, `pub extern crate`.
+    ExternCrate(String),
+}
+
 /// Maps a public item's rustdoc `Id` to the external crate that defines it.
-struct ItemOrigins(HashMap<u32, String>);
+struct ItemOrigins(HashMap<u32, Origin>);
 
 impl ItemOrigins {
     /// Traverses json to attribute re-exported items to their origin crate.
@@ -46,19 +54,37 @@ impl ItemOrigins {
         let mut origins = HashMap::new();
 
         for (id, item) in &crate_.index {
-            let ItemEnum::Use(use_) = &item.inner else { continue };
-            let Some(target) = use_.id else { continue };
-            let Some(summary) = crate_.paths.get(&target) else { continue };
-            let Some(ext) = crate_.external_crates.get(&summary.crate_id) else { continue };
-            origins.insert(id.0, ext.name.clone());
+            match &item.inner {
+                ItemEnum::Use(use_) => {
+                    let Some(target) = use_.id else { continue };
+                    let Some(summary) = crate_.paths.get(&target) else { continue };
+                    let Some(ext) = crate_.external_crates.get(&summary.crate_id) else { continue };
+                    origins.insert(id.0, Origin::Use(ext.name.clone()));
+                }
+                ItemEnum::ExternCrate { name, .. } => {
+                    origins.insert(id.0, Origin::ExternCrate(name.clone()));
+                }
+                _ => {}
+            }
         }
 
         Ok(Self(origins))
     }
 
-    /// The external crate that defines this item, if not the local crate.
-    fn get(&self, item: &public_api::PublicItem) -> Option<&str> {
-        self.0.get(&item.id().0).map(String::as_str)
+    /// The external crate that defines this item via `pub use`, if not the local crate.
+    fn use_origin(&self, item: &public_api::PublicItem) -> Option<&str> {
+        match self.0.get(&item.id().0)? {
+            Origin::Use(name) => Some(name.as_str()),
+            Origin::ExternCrate(_) => None,
+        }
+    }
+
+    /// The external crate that defines this item via `pub extern crate`, if not the local crate.
+    fn extern_crate_origin(&self, item: &public_api::PublicItem) -> Option<&str> {
+        match self.0.get(&item.id().0)? {
+            Origin::ExternCrate(name) => Some(name.as_str()),
+            Origin::Use(_) => None,
+        }
     }
 }
 
@@ -460,7 +486,8 @@ fn check_baseline(
 /// * **Identifier scan**: checks rendered tokens for the private crate's name (catches return
 ///   types, generics, type aliases).
 /// * **Crate-origin scan**: attributes items to their defining crate via rustdoc JSON metadata
-///   (catches re-exports, which render with the local crate path).
+///   (catches item re-exports, which render with the local crate path).
+/// * **Extern crate scan**: checks `pub extern crate` declarations against private deps.
 ///
 /// # Arguments
 ///
@@ -520,8 +547,12 @@ fn check_private_deps(
             if token_leak()
                 || entry
                     .origins
-                    .get(item)
+                    .use_origin(item)
                     .is_some_and(|d| resolved.contains(&normalize_crate_name(d)))
+                || entry
+                    .origins
+                    .extern_crate_origin(item)
+                    .is_some_and(|name| resolved.contains(&normalize_crate_name(name)))
             {
                 leaked_items.push((feature_config.name(), item.to_string()));
             }

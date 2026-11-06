@@ -53,9 +53,15 @@ fn test_private_dep_leak(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
 }
 
 /// Verifies exit code 1 when a public re-export leaks a private dependency.
-fn test_private_reexport(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
+fn test_item_reexport(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
     let output =
-        cmd!(sh, "cargo rbmt api -p api-reexport").ignore_status().output()?;
+        cmd!(sh, "cargo rbmt api -p api-item-reexport").ignore_status().output()?;
+    Ok(output.status)
+}
+
+fn test_crate_reexport(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
+    let output =
+        cmd!(sh, "cargo rbmt api -p api-crate-reexport").ignore_status().output()?;
     Ok(output.status)
 }
 
@@ -85,7 +91,8 @@ fn main() -> ExitCode {
 
     let tests = [
         Test { name: "API leak", expected_exit: 1, run: test_private_dep_leak },
-        Test { name: "API re-export leak", expected_exit: 1, run: test_private_reexport },
+        Test { name: "API item re-export", expected_exit: 1, run: test_item_reexport },
+        Test { name: "API crate re-export", expected_exit: 1, run: test_crate_reexport },
         Test { name: "API diff", expected_exit: 2, run: test_api_diff },
     ];
 
