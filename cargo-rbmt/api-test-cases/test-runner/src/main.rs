@@ -47,21 +47,18 @@ impl Drop for TempBranchGuard {
 
 /// Verifies exit code 1 when a package's public API leaks a private dependency.
 fn test_private_dep_leak(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
-    let output =
-        cmd!(sh, "cargo rbmt api -p api-leaky").ignore_status().output()?;
+    let output = cmd!(sh, "cargo rbmt api -p api-leaky").ignore_status().output()?;
     Ok(output.status)
 }
 
 /// Verifies exit code 1 when a public re-export leaks a private dependency.
 fn test_item_reexport(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
-    let output =
-        cmd!(sh, "cargo rbmt api -p api-item-reexport").ignore_status().output()?;
+    let output = cmd!(sh, "cargo rbmt api -p api-item-reexport").ignore_status().output()?;
     Ok(output.status)
 }
 
 fn test_crate_reexport(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
-    let output =
-        cmd!(sh, "cargo rbmt api -p api-crate-reexport").ignore_status().output()?;
+    let output = cmd!(sh, "cargo rbmt api -p api-crate-reexport").ignore_status().output()?;
     Ok(output.status)
 }
 
@@ -77,11 +74,10 @@ fn test_api_diff(sh: &Shell) -> Result<ExitStatus, Box<dyn Error>> {
 
     // Commit the change.
     cmd!(sh, "git add {lib_path}").run()?;
-    cmd!(sh, "git commit -m 'temp: add diff for api test'").run()?;
+    cmd!(sh, "git -c user.name='RBMT Bot' -c user.email='bot@example.com' commit -m 'temp: add diff for api test'").run()?;
 
-    let output = cmd!(sh, "cargo rbmt api -p api-diff --baseline HEAD~1")
-        .ignore_status()
-        .output()?;
+    let output =
+        cmd!(sh, "cargo rbmt api -p api-diff --baseline HEAD~1").ignore_status().output()?;
 
     Ok(output.status)
 }

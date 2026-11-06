@@ -481,13 +481,14 @@ fn check_baseline(
 
 /// Check if any private dependencies are exposed in the public API.
 ///
-/// Two detection strategies are used:
+/// Three detection strategies are used:
 ///
 /// * **Identifier scan**: checks rendered tokens for the private crate's name (catches return
 ///   types, generics, type aliases).
-/// * **Crate-origin scan**: attributes items to their defining crate via rustdoc JSON metadata
-///   (catches item re-exports, which render with the local crate path).
-/// * **Extern crate scan**: checks `pub extern crate` declarations against private deps.
+/// * **Crate-origin scan**: traces `pub use` items to their defining crate via rustdoc JSON
+///   metadata (catches item re-exports, which render with the local crate path).
+/// * **Extern crate scan**: checks `pub extern crate` declarations against private deps
+///   (catches whole-crate re-exports, which the crate-origin scan can't trace).
 ///
 /// # Arguments
 ///
@@ -530,30 +531,38 @@ fn check_private_deps(
 
     for (feature_config, entry) in current {
         for item in entry.api.items() {
-            // Check local package API types.
+            // Identifier scan: intermediate path segments (e.g. the
+            // `internal_helper` in `internal_helper::InternalHelper`) are
+            // rendered as `Identifier` tokens. Catches return types, generics,
+            // and type aliases that leak a private dep's name.
             let token_leak = || {
-                for token in item.tokens() {
-                    if let public_api::tokens::Token::Identifier(ident) = token {
-                        for dep in &resolved {
-                            if ident == dep || ident.starts_with(&format!("{}::", dep)) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-                false
+                item.tokens()
+                    .filter(|t| matches!(t, public_api::tokens::Token::Identifier(_)))
+                    .any(|t| resolved.iter().any(|dep| t.text() == dep))
             };
 
-            if token_leak()
-                || entry
+            // Crate-origin scan: traces `pub use` re-exports to their defining
+            // crate via rustdoc JSON metadata. These items render with the local
+            // crate's path, so the identifier scan can't catch them.
+            let use_origin_leak = || {
+                entry
                     .origins
                     .use_origin(item)
                     .is_some_and(|d| resolved.contains(&normalize_crate_name(d)))
-                || entry
-                    .origins
-                    .extern_crate_origin(item)
-                    .is_some_and(|name| resolved.contains(&normalize_crate_name(name)))
-            {
+            };
+
+            // Extern crate scan: checks `pub extern crate` declarations. These
+            // have no `id` in rustdoc JSON so the crate-origin scan can't trace
+            // them. Matches against `private` entries. `extern crate` uses the
+            // dependency name in the manifest, not the package name so alias
+            // resolution doesn't apply.
+            let extern_crate_leak = || {
+                entry.origins.extern_crate_origin(item).is_some_and(|name| {
+                    private_deps.iter().any(|d| normalize_crate_name(d) == name)
+                })
+            };
+
+            if token_leak() || use_origin_leak() || extern_crate_leak() {
                 leaked_items.push((feature_config.name(), item.to_string()));
             }
         }
