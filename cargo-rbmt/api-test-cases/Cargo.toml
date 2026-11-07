@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["api-crate-reexport", "api-diff", "api-leaky", "api-item-reexport", "internal-helper", "test-runner"]
+members = ["api-crate-reexport", "api-crate-reexport-package-name", "api-diff", "api-leaky", "api-item-reexport", "api-no-leak", "internal-helper", "test-runner"]
 
 [workspace.metadata.rbmt]
 lock.lockfiles = ["minimal"]

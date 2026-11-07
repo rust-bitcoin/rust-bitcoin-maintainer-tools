@@ -11,5 +11,10 @@ A workspace of packages for testing the `cargo-rbmt api` subcommand. The
 * `api-item-reexport`: Package whose only public item is a `pub use` of a private
   dependency; exercises the crate-origin re-export detection (exit 3).
 * `api-crate-reexport`: Package whose only public item is a `pub extern crate` of a private
-  dependency; exercises the extern-crate re-export detection (exit 3).
-* `internal-helper`: An internal crate that `api-leaky` depends on.
+  dependency with the manifest-key spelling (`private = ["internal"]`); exercises the
+  extern-crate re-export detection (exit 3).
+* `api-crate-reexport-package-name`: Same as `api-crate-reexport` but with the package-name
+  spelling (`private = ["internal-helper"]`); verifies both spellings are caught (exit 3).
+* `api-no-leak`: Package that uses a private dependency internally without exposing it
+  in the public API; exercises the happy path (exit 0).
+* `internal-helper`: An internal crate that the leak test packages depend on.

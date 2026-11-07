@@ -10,6 +10,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "api-crate-reexport-package-name"
+version = "0.1.0"
+dependencies = [
+ "internal-helper",
+]
+
+[[package]]
 name = "api-diff"
 version = "0.1.0"
 
@@ -28,6 +35,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "api-no-leak"
+version = "0.1.0"
+dependencies = [
+ "internal-helper",
+]
+
+[[package]]
 name = "internal-helper"
 version = "0.1.0"
 
@@ -40,15 +54,15 @@ dependencies = [
 
 [[package]]
 name = "xshell"
-version = "0.2.0"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3332cab90be2998a2aacb6494db45344bd16dfcc43ff36c42255018c6bcc96be"
+checksum = "9e7290c623014758632efe00737145b6867b66292c42167f2ec381eb566a373d"
 dependencies = [
  "xshell-macros",
 ]
 
 [[package]]
 name = "xshell-macros"
-version = "0.2.0"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f47e54cffa76000b7641328ab3bb1e146f93a1690ab86c5909c656f49d91019c"
+checksum = "32ac00cd3f8ec9c1d33fb3e7958a82df6989c42d747bd326c822b1d625283547"
