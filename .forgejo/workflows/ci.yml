@@ -52,7 +52,7 @@ jobs:
         run: cargo rbmt toolchains --force
       - name: Run API tests
         working-directory: cargo-rbmt/api-test-cases
-        run: cargo run --bin test-runner
+        run: cargo test
 
   dogfood-tests:
     runs-on: debian-trixie

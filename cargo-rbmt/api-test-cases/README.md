@@ -1,7 +1,8 @@
 # API Test Cases
 
-A workspace of packages for testing the `cargo-rbmt api` subcommand. The
-`test-runner` bin acts as a lightweight test framework.
+A workspace of packages for testing the `cargo-rbmt api` subcommand. The root
+package hosts integration tests (in `tests/`) that run the subcommand against
+these fixtures and assert on the exit code. Run them with `cargo test`.
 
 * `api-diff`: lean package with a known API change vs a synthetic baseline; exercises the
   diff-detection path (exit 2).

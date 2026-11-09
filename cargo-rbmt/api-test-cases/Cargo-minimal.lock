@@ -42,15 +42,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "internal-helper"
-version = "0.1.0"
-
-[[package]]
-name = "test-runner"
-version = "0.1.0"
+name = "api-test-cases"
+version = "0.0.0"
 dependencies = [
  "xshell",
 ]
+
+[[package]]
+name = "internal-helper"
+version = "0.1.0"
 
 [[package]]
 name = "xshell"

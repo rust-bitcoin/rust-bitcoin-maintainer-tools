@@ -1,6 +1,23 @@
+[package]
+name = "api-test-cases"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
 [workspace]
 resolver = "2"
-members = ["api-crate-reexport", "api-crate-reexport-package-name", "api-diff", "api-leaky", "api-item-reexport", "api-no-leak", "internal-helper", "test-runner"]
+members = [
+    "api-crate-reexport",
+    "api-crate-reexport-package-name",
+    "api-diff",
+    "api-leaky",
+    "api-item-reexport",
+    "api-no-leak",
+    "internal-helper",
+]
+
+[dev-dependencies]
+xshell = "0.2.7"
 
 [workspace.metadata.rbmt]
 lock.lockfiles = ["minimal"]
