@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
       - name: Install cargo-rbmt from local source
         run: cargo install --locked --path cargo-rbmt
-      - run: cargo rbmt toolchains
+      - run: cargo rbmt toolchains --force
       - run: cargo rbmt prerelease --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
 
   dogfood-api:
@@ -45,14 +45,14 @@ jobs:
       - uses: https://data.forgejo.org/actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
         with:
           persist-credentials: false
-          fetch-depth: 0 # Context for baseline API comparison.
       - name: Install cargo-rbmt from local source
         run: cargo install --locked --path cargo-rbmt
-      - name: Setup api-test-cases toolchains and check API fails as expected
+      - name: Install api-test-cases toolchains
         working-directory: cargo-rbmt/api-test-cases
-        run: |
-          cargo rbmt toolchains
-          ! cargo rbmt api --baseline f1975147
+        run: cargo rbmt toolchains --force
+      - name: Run API tests
+        working-directory: cargo-rbmt/api-test-cases
+        run: cargo rbmt run -- test
 
   dogfood-tests:
     runs-on: debian-trixie
@@ -67,6 +67,6 @@ jobs:
           persist-credentials: false
       - name: Install cargo-rbmt from local source
         run: cargo install --locked --path cargo-rbmt
-      - run: cargo rbmt toolchains
+      - run: cargo rbmt toolchains --force
       - name: Run tests
         run: cargo rbmt test --lockfile ${{ matrix.lockfile }} --toolchain ${{ matrix.toolchain }} --baseline ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}

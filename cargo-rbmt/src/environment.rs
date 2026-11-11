@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
+use std::collections::HashMap;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -142,6 +143,10 @@ pub struct Package {
     /// Names of the package's direct, non-dev (normal and build), external and internal
     /// dependencies.
     pub deps: Vec<String>,
+    /// Map from Cargo.toml dependency alias (rename) to actual package name.
+    /// Only populated for dependencies using `package = "..."`. Key is the alias,
+    /// value is the actual crate name from the registry.
+    pub dep_aliases: HashMap<String, String>,
     /// Features defined in the package's `[features]` table, excluding `"default"`
     /// since it cannot be passed directly to `--features`. Optional dependencies
     /// appear as implicit features.
@@ -227,6 +232,18 @@ pub fn get_workspace_packages(
                 .collect();
             deps.sort();
             deps.dedup();
+
+            // Collect dependency aliases, rename to actual package name.
+            let dep_aliases: HashMap<String, String> = package["dependencies"]
+                .as_array()?
+                .iter()
+                .filter_map(|d| {
+                    // Only collect renamed dependencies.
+                    let alias = d["rename"].as_str()?;
+                    let name = d["name"].as_str().expect("cargo metadata: name is always present");
+                    Some((alias.to_string(), name.to_string()))
+                })
+                .collect();
             // Includes implicit features cargo synthesizes for optional dependencies,
             // `default` is excluded.
             let features: Vec<String> = package["features"]
@@ -241,6 +258,7 @@ pub fn get_workspace_packages(
                 dir: manifest_path.parent()?.to_path_buf(),
                 id: package["id"].as_str()?.to_string(),
                 deps,
+                dep_aliases,
                 features,
                 // `publish = false` in a manifest is an empty array in metadata;
                 // a missing field or a list of registries both mean publishable.

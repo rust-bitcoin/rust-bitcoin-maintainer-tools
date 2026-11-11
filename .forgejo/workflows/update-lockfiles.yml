@@ -28,7 +28,14 @@ jobs:
         run: |
           cargo rbmt lock
           if git add Cargo-*.lock && git commit -m "Update lockfiles"; then
-            echo "LOCKFILE_UPDATE=true" >> $GITHUB_ENV
+            echo "LOCKFILE_UPDATE=true" >> $FORGEJO_ENV
+          fi
+      - name: Generate api-test-cases lockfiles and commit
+        working-directory: cargo-rbmt/api-test-cases
+        run: |
+          cargo rbmt lock
+          if git add Cargo-*.lock && git commit -m "Update api-test-cases lockfiles"; then
+            echo "LOCKFILE_UPDATE=true" >> $FORGEJO_ENV
           fi
       - name: Create pull request using agit
         if: ${{ env.LOCKFILE_UPDATE == 'true' }}

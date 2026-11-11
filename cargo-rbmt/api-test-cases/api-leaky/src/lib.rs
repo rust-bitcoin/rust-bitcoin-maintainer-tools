@@ -1,17 +1,11 @@
-//! # API Test Cases
+//! Private dependency leak detection test cases for the `cargo rbmt api` command.
 //!
-//! This package contains fun scenarios for the cargo-rbmt `api` subcommand.
+//! Every item in this package leaks `internal_helper` into the public API.
+//! The private check should catch all of them (exit 3).
 
-pub mod associated_types;
-pub mod blanket_trait_bounds;
-pub mod generic_specialized_impls;
-pub mod multiple_from_impls;
-pub mod multiple_trait_impls;
-pub mod trait_default_methods;
+use internal::InternalHelper;
 
-use internal::{InternalHelper, InternalTrait};
-
-/// This function leaks an internal type in its return type.
+/// Leaks an internal type in the return type.
 pub fn use_internal_helper() -> InternalHelper {
     InternalHelper::new(42)
 }

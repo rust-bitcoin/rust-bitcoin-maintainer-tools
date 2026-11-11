@@ -1,16 +1,24 @@
-[workspace]
-members = ["internal"]
-
 [package]
 name = "api-test-cases"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
 publish = false
-exclude = ["api"]
 
-[dependencies]
-internal = { path = "internal" }
+[workspace]
+resolver = "2"
+members = [
+    "api-crate-reexport",
+    "api-crate-reexport-package-name",
+    "api-diff",
+    "api-leaky",
+    "api-item-reexport",
+    "api-no-leak",
+    "internal-helper",
+]
 
-[package.metadata.rbmt]
-api = { enabled = true, snapshot = true, private = ["internal"] }
-toolchains = { nightly = "nightly-2026-05-04" }
+[dev-dependencies]
+xshell = "0.2.7"
+
+[workspace.metadata.rbmt]
+lock.lockfiles = ["minimal"]
+toolchains.nightly = "nightly-2026-05-04"

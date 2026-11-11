@@ -83,7 +83,7 @@ A package must opt-in to api checking through the `api.enabled` configuration si
 cargo rbmt api --snapshot --baseline v0.1.0
 ```
 
-If the `--snapshot` flag is passed in, API files are generated under `<package-dir>/api/<feature-set>/`. If the `--baseline` flag is set, the current APIs are compared to their versions at the given git ref. Any changes are reported and the command exits with code `2`. This distinguishes API diffs (exit `2`) from hard failures like build errors or private dependency leaks (exit `1`), so CI can flag API changes for developer review without treating them as infrastructure failures.
+If the `--snapshot` flag is passed in, API files are generated under `<package-dir>/api/<feature-set>/`. If the `--baseline` flag is set, the current APIs are compared to their versions at the given git ref. Any changes are reported and the command exits with code `2`. Private dependency leaks exit with code `3`, and hard failures like build errors exit with code `1`. Three distinct exit codes let CI flag API changes and leaks for developer review without treating them as infrastructure failures.
 
 If there are dependencies which should not be a part of the public API, they can be listed in the `private` config. The command will fail if they are detected. This is a hack until RFC #3516 lands in cargo.
 

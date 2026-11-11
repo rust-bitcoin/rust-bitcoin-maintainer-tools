@@ -28,13 +28,20 @@ jobs:
         run: |
           cargo rbmt toolchains --update-nightly
           if git add . && git commit -m "Update nightly toolchain"; then
-            echo "TOOLCHAIN_UPDATE=true" >> $GITHUB_ENV
+            echo "TOOLCHAIN_UPDATE=true" >> $FORGEJO_ENV
+          fi
+      - name: Update api-test-cases nightly and commit
+        working-directory: cargo-rbmt/api-test-cases
+        run: |
+          cargo rbmt toolchains --update-nightly
+          if git add . && git commit -m "Update api-test-cases nightly toolchain"; then
+            echo "TOOLCHAIN_UPDATE=true" >> $FORGEJO_ENV
           fi
       - name: Update stable version and commit
         run: |
           cargo rbmt toolchains --update-stable
           if git add . && git commit -m "Update stable toolchain"; then
-            echo "TOOLCHAIN_UPDATE=true" >> $GITHUB_ENV
+            echo "TOOLCHAIN_UPDATE=true" >> $FORGEJO_ENV
           fi
       - name: Create pull request using agit
         if: ${{ env.TOOLCHAIN_UPDATE == 'true' }}

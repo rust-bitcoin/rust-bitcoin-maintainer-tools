@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT AND Apache-2.0
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use public_api::rustdoc_types::Id;
+use public_api::rustdoc_types::{Crate, Id, ItemEnum};
 use xshell::Shell;
 
 use crate::environment::{
@@ -24,8 +24,69 @@ const API_DIR: &str = "api";
 /// This flag suppresses those warnings so we can focus on actual API changes.
 const RUSTDOCFLAGS_ALLOW_BROKEN_LINKS: &str = "-A rustdoc::broken_intra_doc_links";
 
-/// A collection of public APIs for a single package across different feature configurations.
-type PackageApis = HashMap<FeatureConfig, public_api::PublicApi>;
+/// A public API for a single feature configuration, plus crate attribution data
+/// for detecting re-exports of private dependencies.
+struct PackageApiEntry {
+    api: public_api::PublicApi,
+    origins: ItemOrigins,
+}
+
+/// Public APIs for a package across feature configurations.
+type PackageApis = HashMap<FeatureConfig, PackageApiEntry>;
+
+/// How a public item came from an external crate.
+enum Origin {
+    /// Item re-export, `pub use`.
+    Use(String),
+    /// Crate re-export, `pub extern crate`.
+    ExternCrate(String),
+}
+
+/// Maps a public item's rustdoc `Id` to the external crate that defines it.
+struct ItemOrigins(HashMap<u32, Origin>);
+
+impl ItemOrigins {
+    /// Traverses json to attribute re-exported items to their origin crate.
+    fn from_rustdoc_json(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let raw = fs::read_to_string(path)?;
+        let crate_: Crate = serde_json::from_str(&raw)?;
+
+        let mut origins = HashMap::new();
+
+        for (id, item) in &crate_.index {
+            match &item.inner {
+                ItemEnum::Use(use_) => {
+                    let Some(target) = use_.id else { continue };
+                    let Some(summary) = crate_.paths.get(&target) else { continue };
+                    let Some(ext) = crate_.external_crates.get(&summary.crate_id) else { continue };
+                    origins.insert(id.0, Origin::Use(ext.name.clone()));
+                }
+                ItemEnum::ExternCrate { name, .. } => {
+                    origins.insert(id.0, Origin::ExternCrate(name.clone()));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Self(origins))
+    }
+
+    /// The external crate that defines this item via `pub use`, if not the local crate.
+    fn use_origin(&self, item: &public_api::PublicItem) -> Option<&str> {
+        match self.0.get(&item.id().0)? {
+            Origin::Use(name) => Some(name.as_str()),
+            Origin::ExternCrate(_) => None,
+        }
+    }
+
+    /// The external crate that defines this item via `pub extern crate`, if not the local crate.
+    fn extern_crate_origin(&self, item: &public_api::PublicItem) -> Option<&str> {
+        match self.0.get(&item.id().0)? {
+            Origin::ExternCrate(name) => Some(name.as_str()),
+            Origin::Use(_) => None,
+        }
+    }
+}
 
 /// API-specific configuration, read from `[package.metadata.rbmt.api]` in `Cargo.toml`.
 #[derive(Debug, Default, serde::Deserialize)]
@@ -195,56 +256,18 @@ impl std::fmt::Debug for ApiDiffError {
 
 impl std::error::Error for ApiDiffError {}
 
-/// Check if any private dependencies are exposed in the public API.
-fn check_private_deps(
-    package_name: &str,
-    apis: &PackageApis,
-    private_deps: &[String],
-) -> Result<(), Box<dyn std::error::Error>> {
-    if private_deps.is_empty() {
-        return Ok(());
-    }
-
-    let mut leaked_items = Vec::new();
-
-    for (feature_config, api) in apis {
-        for item in api.items() {
-            // Check if any token is an identifier matching a private dependency.
-            for token in item.tokens() {
-                if let public_api::tokens::Token::Identifier(ident) = token {
-                    for private_dep in private_deps {
-                        if ident == private_dep || ident.starts_with(&format!("{}::", private_dep))
-                        {
-                            leaked_items.push((feature_config.name(), item.to_string()));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if !leaked_items.is_empty() {
-        let mut message =
-            format!("Private dependency exposed in public API of {}:\n", package_name);
-        for (feature, item) in leaked_items {
-            message.push_str(&format!("  [{}] {}\n", feature, item));
-        }
-        return Err(message.into());
-    }
-
-    Ok(())
-}
-
 /// Outcome of the API check.
 ///
-/// Distinguished from hard errors (I/O, build failures, private dep leaks) so callers
-/// can map API diffs to a different exit code (e.g. 2) vs hard failures (1).
+/// Distinguished from hard errors (I/O, build failures) so callers can map
+/// each outcome to a different exit code: 2 for diffs, 3 for leaks, 1 for
+/// hard failures.
 pub enum ApiOutcome {
-    /// No API changes detected; all checks passed.
+    /// No API changes or leaks detected; all checks passed.
     Success,
     /// API diffs detected against the baseline.
     DiffDetected(ApiDiffError),
+    /// Private dependency exposed in public API.
+    PrivateDepLeak(String),
 }
 
 /// Run the API task to check or generate API snapshots for packages.
@@ -258,9 +281,10 @@ pub enum ApiOutcome {
 ///
 /// # Returns
 ///
-/// * `Ok(ApiOutcome::Success)` - No API diffs detected.
+/// * `Ok(ApiOutcome::Success)` - No API diffs or leaks detected.
 /// * `Ok(ApiOutcome::DiffDetected(ApiDiffError))` - API diffs found vs baseline.
-/// * `Err(_)` - Hard failure (build error, I/O error, private dep leak, etc.).
+/// * `Ok(ApiOutcome::PrivateDepLeak(String))` - Private dependency exposed in public API.
+/// * `Err(_)` - Hard failure (build error, I/O error, etc.).
 pub fn run(
     sh: &Shell,
     lockfile: Option<LockFile>,
@@ -296,18 +320,26 @@ pub fn run(
 
         rbmt_eprintln!("API check enabled in {}", package.name);
 
-        let current_apis = get_package_apis(sh, &package.name, &package.dir)?;
-        check_private_deps(&package.name, &current_apis, &api_config.private)?;
+        let current = get_package_apis(sh, &package.name, &package.dir)?;
+        if let Some(msg) = check_private_deps(
+            &package.name,
+            &current,
+            &api_config.private,
+            &package.dep_aliases,
+            &package.deps,
+        )? {
+            return Ok(ApiOutcome::PrivateDepLeak(msg));
+        }
 
         if snapshot || api_config.snapshot {
-            write_api_files(&package, &current_apis)?;
+            write_api_files(&package, &current)?;
         }
         if let Some(baseline) = &baseline {
-            if let Some(package_diff) = check_baseline(sh, &package, baseline, current_apis)? {
+            if let Some(package_diff) = check_baseline(sh, &package, baseline, current)? {
                 package_diffs.push(package_diff);
             }
         } else {
-            package_apis.push((package.name, current_apis));
+            package_apis.push((package.name, current));
         }
     }
 
@@ -319,9 +351,10 @@ pub fn run(
     if baseline.is_none() {
         progress.disable();
         for (package_name, feature_apis) in package_apis {
-            for (feature_config, api) in feature_apis {
+            for (feature_config, entry) in feature_apis {
+                let api = &entry.api;
                 println!("--- {} API ({})", package_name, feature_config.name());
-                let context = ItemContext::new(&api);
+                let context = ItemContext::new(api);
                 for item in api.items() {
                     println!("{}", context.format(item));
                 }
@@ -368,11 +401,12 @@ fn get_package_apis(
         let json_path = get_target_dir(sh)?
             .join("doc")
             // Rustdoc replaces hyphens with underscores in the filename.
-            .join(package_name.replace('-', "_"))
+            .join(CrateName::from_package_name(package_name).to_string())
             .with_extension("json");
 
         let public_api = public_api::Builder::from_rustdoc_json(&json_path).build()?;
-        apis.insert(config, public_api);
+        let origins = ItemOrigins::from_rustdoc_json(&json_path)?;
+        apis.insert(config, PackageApiEntry { api: public_api, origins });
     }
 
     Ok(apis)
@@ -397,7 +431,8 @@ fn write_api_files(
 
     let package_api_dir = package.dir.join(API_DIR);
     fs::create_dir_all(&package_api_dir)?;
-    for (config, public_api) in apis {
+    for (config, entry) in apis {
+        let public_api = &entry.api;
         let output_file = package_api_dir.join(config.filename());
         let context = ItemContext::new(public_api);
         let api_display =
@@ -422,11 +457,13 @@ fn check_baseline(
     };
 
     let mut feature_diffs = Vec::new();
-    for (feature_config, current_api) in current_apis {
-        let baseline_api = baseline_apis.remove(&feature_config).ok_or(format!(
+    for (feature_config, entry) in current_apis {
+        let current_api = entry.api;
+        let baseline_entry = baseline_apis.remove(&feature_config).ok_or(format!(
             "Feature {:?} not found in baseline for {}",
             feature_config, package.name
         ))?;
+        let baseline_api = baseline_entry.api;
 
         let baseline_context = ItemContext::new(&baseline_api);
         let current_context = ItemContext::new(&current_api);
@@ -445,5 +482,197 @@ fn check_baseline(
         Ok(None)
     } else {
         Ok(Some(PackageDiff { package_name: package.name.clone(), feature_diffs }))
+    }
+}
+
+/// A crate name in underscored form, as it appears in Rust import paths.
+///
+/// Rust identifiers use underscores, but crate and package names in TOML or
+/// cargo metadata use hyphens. `CrateName` normalises to the underscored form
+/// for comparison against public API tokens.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct CrateName(String);
+
+impl CrateName {
+    /// Create from a package name (e.g. from rustdoc `external_crates` or
+    /// `cargo metadata`). Hyphens are replaced with underscores; names already
+    /// in underscored form pass through unchanged.
+    fn from_package_name(name: &str) -> Self { Self(name.replace('-', "_")) }
+
+    /// Create from a manifest key, the dependency key as written under
+    /// `[dependencies]` in `Cargo.toml`. If the key is an alias for a different
+    /// package (via `package = "..."`), resolves through `aliases` to the actual
+    /// package name. Falls back to simple normalisation when the name is not a
+    /// known alias.
+    fn from_manifest_key(name: &str, aliases: &HashMap<String, String>) -> Self {
+        let normalized = name.replace('-', "_");
+        let resolved = aliases
+            .iter()
+            .find(|(alias, _)| alias.replace('-', "_") == normalized)
+            .map(|(_, package)| package.replace('-', "_"))
+            .unwrap_or(normalized);
+        Self(resolved)
+    }
+}
+
+impl std::fmt::Display for CrateName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+}
+
+/// Check if any private dependencies are exposed in the public API.
+///
+/// Three detection strategies are used:
+///
+/// * **Identifier scan**: checks rendered tokens for the private crate's name (catches return
+///   types, generics, type aliases).
+/// * **Crate-origin scan**: traces `pub use` items to their defining crate via rustdoc JSON
+///   metadata (catches item re-exports, which render with the local crate path).
+/// * **Extern crate scan**: checks `pub extern crate` declarations against private deps
+///   (catches whole-crate re-exports, which the crate-origin scan can't trace).
+///
+/// # Arguments
+///
+/// * `package_name` - package being analyzed.
+/// * `current` - package public API and crate-origin data per feature config.
+/// * `private_deps` - dependencies which should not leak through the exposed API.
+/// * `dep_aliases` - maps manifest alias names to package names for ease of configuration.
+/// * `deps` - package's full dependency list, used to validate `private_deps` entries.
+fn check_private_deps(
+    package_name: &str,
+    current: &PackageApis,
+    private_deps: &[String],
+    dep_aliases: &HashMap<String, String>,
+    deps: &[String],
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    if private_deps.is_empty() {
+        return Ok(None);
+    }
+
+    let resolved: Vec<CrateName> =
+        private_deps.iter().map(|d| CrateName::from_manifest_key(d, dep_aliases)).collect();
+
+    // Validate entries resolve to an actual dependency, else a typo in `private` silently
+    // passes giving false confidence.
+    let known: HashSet<CrateName> = deps.iter().map(|d| CrateName::from_package_name(d)).collect();
+    for (entry, dep) in private_deps.iter().zip(&resolved) {
+        if !known.contains(dep) {
+            let resolved_suffix = if *dep == CrateName::from_package_name(entry) {
+                String::new()
+            } else {
+                format!(" (resolved to '{dep}')")
+            };
+            return Err(format!(
+                "'{entry}'{resolved_suffix} in [package.metadata.rbmt.api] private list is not a dependency of {package_name}",
+            )
+            .into());
+        }
+    }
+
+    let mut leaked_items = Vec::new();
+
+    for (feature_config, entry) in current {
+        for item in entry.api.items() {
+            // Identifier scan: intermediate path segments (e.g. the
+            // `internal_helper` in `internal_helper::InternalHelper`) are
+            // rendered as `Identifier` tokens. Catches return types, generics,
+            // and type aliases that leak a private dep's name.
+            let token_leak = || {
+                item.tokens()
+                    .filter(|t| matches!(t, public_api::tokens::Token::Identifier(_)))
+                    .any(|t| resolved.contains(&CrateName::from_package_name(t.text())))
+            };
+
+            // Crate-origin scan: traces `pub use` re-exports to their defining
+            // crate via rustdoc JSON metadata. These items render with the local
+            // crate's path, so the identifier scan can't catch them.
+            let use_origin_leak = || {
+                entry
+                    .origins
+                    .use_origin(item)
+                    .is_some_and(|d| resolved.contains(&CrateName::from_package_name(d)))
+            };
+
+            // Extern crate scan: checks `pub extern crate` declarations. These
+            // have no `id` in rustdoc JSON so the crate-origin scan can't trace
+            // them. The extern crate name is the manifest key, i.e. the alias
+            // for renamed deps, so resolve it the same way as `private` entries
+            // before comparing.
+            let extern_crate_leak = || {
+                entry.origins.extern_crate_origin(item).is_some_and(|name| {
+                    resolved.contains(&CrateName::from_manifest_key(name, dep_aliases))
+                })
+            };
+
+            if token_leak() || use_origin_leak() || extern_crate_leak() {
+                leaked_items.push((feature_config.name(), item.to_string()));
+            }
+        }
+    }
+
+    if !leaked_items.is_empty() {
+        let mut message =
+            format!("Private dependency exposed in public API of {}:\n", package_name);
+        for (feature, item) in leaked_items {
+            message.push_str(&format!("  [{}] {}\n", feature, item));
+        }
+        return Ok(Some(message));
+    }
+
+    Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build an alias map in the shape `cargo metadata` reports it (raw strings).
+    fn aliases(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(alias, name)| (alias.to_string(), name.to_string())).collect()
+    }
+
+    #[test]
+    fn from_manifest_key_accepts_alias() {
+        let deps = aliases(&[("internal", "internal-helper")]);
+        assert_eq!(
+            CrateName::from_manifest_key("internal", &deps),
+            CrateName::from_package_name("internal-helper"),
+        );
+    }
+
+    #[test]
+    fn from_manifest_key_accepts_underscored_alias() {
+        let deps = aliases(&[("hex-lite", "hex-conservative")]);
+        assert_eq!(
+            CrateName::from_manifest_key("hex_lite", &deps),
+            CrateName::from_package_name("hex-conservative"),
+        );
+    }
+
+    #[test]
+    fn from_manifest_key_accepts_package_name() {
+        let deps = aliases(&[("internal", "internal-helper")]);
+        assert_eq!(
+            CrateName::from_manifest_key("internal-helper", &deps),
+            CrateName::from_package_name("internal-helper"),
+        );
+    }
+
+    #[test]
+    fn from_manifest_key_passes_through_unknown_name() {
+        let deps = aliases(&[("internal", "internal-helper")]);
+        assert_eq!(
+            CrateName::from_manifest_key("typo", &deps),
+            CrateName::from_package_name("typo"),
+        );
+    }
+
+    #[test]
+    fn from_package_name_normalizes_hyphens() {
+        assert_eq!(CrateName::from_package_name("internal-helper").to_string(), "internal_helper",);
+    }
+
+    #[test]
+    fn from_package_name_passes_through_underscores() {
+        assert_eq!(CrateName::from_package_name("internal_helper").to_string(), "internal_helper",);
     }
 }
