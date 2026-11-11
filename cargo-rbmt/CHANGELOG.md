@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-11
+
 * Add `with` subcommand for running an arbitrary command with the selected lockfile and toolchain. Unlike `run`, `with` does not resolve workspace packages, iterate commits, or capture/redirect output.
 * Track per-package test time and show it in the `test` summary.
 * [BREAKING] Remove the `generate` command.
@@ -9,6 +11,8 @@
 * `integration` now activates the integration package's lockfile (defaulting to the minimum declared lockfile) and gains a `--lockfile` flag.
 * Beef up the `api` command's private dependency leak configuration handling.
 * [BREAKING] `api` now exits 3 on private dependency leak (was 1, which is now reserved for tool errors). Exit code 2 remains for API diffs.
+* More robust default merge base detection for `api`, `tree`, and `prerelease` commands.
+* Output more debug information, especially for lockfile and toolchain selection.
 
 ## [0.5.4] - 2026-10-21
 
@@ -100,7 +104,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.4...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.5...HEAD
+[0.5.5]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.4...cargo-rbmt-0.5.5
 [0.5.4]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.3...cargo-rbmt-0.5.4
 [0.5.3]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.2...cargo-rbmt-0.5.3
 [0.5.2]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.1...cargo-rbmt-0.5.2
