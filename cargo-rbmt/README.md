@@ -49,7 +49,7 @@ Pin a specific version of `cargo-rbmt` by setting `rbmt.version` in the `[worksp
 
 ```toml
 [workspace.metadata]
-rbmt.version = "0.5.3"
+rbmt.version = "0.5.5"
 ```
 
 Two global flags control the behaviour on mismatch.
