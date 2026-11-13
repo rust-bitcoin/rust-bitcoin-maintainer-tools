@@ -71,13 +71,12 @@ The `api` command helps maintain API stability by generating and diff'ing a pack
 
 ```toml
 [api]
-enabled = true
 snapshot = false
 features = [ ["alloc"], ["alloc", "serde"] ]
 private = ["bitcoin-internals"]
 ```
 
-A package must opt-in to api checking through the `api.enabled` configuration since it can be quite noisy during heavy development. Since a package's API depends on what features are enabled, no features enabled and all features enabled are always generated. Specific feature sets can be added through the `api.features` configuration.
+A package's API depends on what features are enabled, so no features enabled and all features enabled are always generated. Specific feature sets can be added through the `api.features` configuration. Use `-p` to scope the check to specific packages.
 
 ```bash
 cargo rbmt api --snapshot --baseline v0.1.0

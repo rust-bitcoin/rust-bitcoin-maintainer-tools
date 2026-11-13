@@ -92,8 +92,6 @@ impl ItemOrigins {
 #[derive(Debug, Default, serde::Deserialize)]
 #[serde(default)]
 struct ApiConfig {
-    /// Whether to run API checks for this package. Defaults to `false`.
-    enabled: bool,
     /// Whether to generate API snapshot files. Defaults to `false`.
     snapshot: bool,
     /// Feature combinations to test (in addition to no-features and all-features).
@@ -313,12 +311,6 @@ pub fn run(
 
     for package in packages {
         let api_config = ApiConfig::load(&package.dir)?;
-
-        if !api_config.enabled {
-            continue;
-        }
-
-        rbmt_eprintln!("API check enabled in {}", package.name);
 
         let current = get_package_apis(sh, &package.name, &package.dir)?;
         if let Some(msg) = check_private_deps(

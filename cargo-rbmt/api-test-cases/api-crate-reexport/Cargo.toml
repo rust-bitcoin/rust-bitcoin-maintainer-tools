@@ -7,5 +7,5 @@ publish = false
 [dependencies]
 internal = { package = "internal-helper", path = "../internal-helper" }
 
-[package.metadata.rbmt]
-api = { enabled = true, private = ["internal"] }
+[package.metadata.rbmt.api]
+private = ["internal"]
