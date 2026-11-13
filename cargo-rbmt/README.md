@@ -18,6 +18,7 @@ A `cargo` orchestrator built with [xshell](https://github.com/matklad/xshell) th
   - [run](#run)
   - [test](#test)
     - [no_std](#no_std)
+    - [matrix](#matrix)
   - [toolchains](#toolchains)
   - [tools](#tools)
   - [tree](#tree)
@@ -267,6 +268,17 @@ msrv_overrides = { "serde" = "1.75.0" }
 #### no_std
 
 When a package declares `#![no_std]` in its library source, `cargo-rbmt test` automatically performs an additional verification step on the `thumbv7m-none-eabi` target to try and detect unintentional std library usage.
+
+#### matrix
+
+While `cargo rbmt test` runs the feature matrix for a single toolchain/lockfile pair, CI should test across multiple pairs to cover the compatibility space. Testing the *extremes*, the oldest compiler with the oldest dependencies and the newest compiler with the newest dependencies, catches the two categories of problems that matter.
+
+| Pair          | Toolchain   | Lockfile   | Catches |
+|---------------|-------------|------------|---------|
+| Lower bound   | `msrv`      | `minimal`  | Code that requires a newer compiler than the declared MSRV; dependency version constraints declared too low. |
+| Upper bound   | `stable`    | `maximum`  | Breaks caused by newer dependency versions (API changes, trait conflicts, version clashes). |
+
+The combinations between these extremes (`stable/minimal`, `msrv/maximum`) are not as interesting. If the MSRV compiler builds the oldest deps, then a strictly more capable stable compiler will also build them. And the library's obligation is to ensure *some* valid dependency resolution works on the MSRV, whether users can resolve *newer* deps on their MSRV toolchain is between them and their `Cargo.lock`.
 
 ### toolchains
 
