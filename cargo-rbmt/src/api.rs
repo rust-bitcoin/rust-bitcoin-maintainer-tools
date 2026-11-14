@@ -310,6 +310,11 @@ pub fn run(
     let mut package_apis: Vec<(String, PackageApis)> = Vec::new();
 
     for package in packages {
+        if !package.library {
+            rbmt_eprintln!("Skipping {} (no library target)", package.name);
+            continue;
+        }
+
         let api_config = ApiConfig::load(&package.dir)?;
 
         let current = get_package_apis(sh, &package.name, &package.dir)?;

@@ -12,6 +12,10 @@ const LOG_LEVEL_ENV_VAR: &str = "RBMT_LOG_LEVEL";
 /// Progress message output symbols (flair).
 pub const PROGRESS_SYMBOLS: &[&str] = &["b", "B", "$", "#"];
 
+/// Cargo metadata `target.kind` values for library targets, regardless of
+/// crate-type. `cargo rustdoc --lib` works on all of these.
+pub const LIB_KINDS: &[&str] = &["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
+
 /// Controls how much output is shown during command execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputMode {
@@ -153,6 +157,8 @@ pub struct Package {
     pub features: Vec<String>,
     /// Whether the package can be published (`false` if the manifest sets `publish = false`).
     pub publish: bool,
+    /// Whether the package has a library target.
+    pub library: bool,
 }
 
 /// Wrap commands to respect rbmt output mode.
@@ -253,6 +259,15 @@ pub fn get_workspace_packages(
                 .cloned()
                 .collect();
 
+            // Defaults to `false` if the target list is missing or malformed.
+            let library = package["targets"].as_array().is_some_and(|targets| {
+                targets.iter().any(|target| {
+                    target["kind"].as_array().is_some_and(|kinds| {
+                        kinds.iter().any(|kind| LIB_KINDS.contains(&kind.as_str().unwrap_or("")))
+                    })
+                })
+            });
+
             Some(Package {
                 name: package["name"].as_str()?.to_string(),
                 dir: manifest_path.parent()?.to_path_buf(),
@@ -263,6 +278,7 @@ pub fn get_workspace_packages(
                 // `publish = false` in a manifest is an empty array in metadata;
                 // a missing field or a list of registries both mean publishable.
                 publish: package["publish"].as_array() != Some(&vec![]),
+                library,
             })
         })
         .collect();

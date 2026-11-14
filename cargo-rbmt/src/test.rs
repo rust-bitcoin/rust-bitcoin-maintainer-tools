@@ -16,7 +16,7 @@ use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    cargo_cmd, get_workspace_packages, CmdExt, Package, PackageManifest, ProgressGuard,
+    cargo_cmd, get_workspace_packages, CmdExt, Package, PackageManifest, ProgressGuard, LIB_KINDS,
 };
 use crate::git;
 use crate::lock::LockFile;
@@ -611,9 +611,11 @@ fn is_no_std_package(sh: &Shell, package_dir: &Path) -> Result<bool, Box<dyn std
 
     // Find the lib source file.
     let targets = package["targets"].as_array().ok_or("Missing 'targets' field")?;
-    let lib_target = targets
-        .iter()
-        .find(|t| t["kind"].as_array().is_some_and(|kinds| kinds.iter().any(|k| k == "lib")));
+    let lib_target = targets.iter().find(|t| {
+        t["kind"].as_array().is_some_and(|kinds| {
+            kinds.iter().any(|k| LIB_KINDS.contains(&k.as_str().unwrap_or("")))
+        })
+    });
     let Some(lib_target) = lib_target else {
         return Ok(false);
     };

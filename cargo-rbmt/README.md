@@ -78,6 +78,8 @@ private = ["bitcoin-internals"]
 
 A package's API depends on what features are enabled, so no features enabled and all features enabled are always generated. Specific feature sets can be added through the `api.features` configuration. Use `-p` to scope the check to specific packages.
 
+Packages without a library target (bin-only crates) are skipped automatically.
+
 ```bash
 cargo rbmt api --snapshot --baseline v0.1.0
 ```
