@@ -104,9 +104,9 @@ enum Commands {
         /// Lockfile to use for dependencies. Defaults to the minimum declared lockfile.
         #[arg(long = "lockfile", alias = "lock-file", value_enum)]
         lockfile: Option<LockFile>,
-        /// Toolchain to use: stable, nightly, or msrv.
-        #[arg(long, value_enum, default_value_t = Toolchain::Stable)]
-        toolchain: Toolchain,
+        /// Toolchain to use: stable, nightly, or msrv. Defaults to the oldest configured.
+        #[arg(long, value_enum)]
+        toolchain: Option<Toolchain>,
         /// Test every commit between the given baseline ref and HEAD to verify bisectability.
         #[arg(long)]
         baseline: Option<String>,

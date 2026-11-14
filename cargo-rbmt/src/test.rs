@@ -365,19 +365,23 @@ fn test_features(
 ///
 /// * `sh` - The shell environment.
 /// * `lockfile` - Which lockfile variant to use.
-/// * `toolchain` - Which toolchain to use.
+/// * `toolchain` - Which toolchain to use, defaults to the oldest configured.
 /// * `baseline` - Optional baseline ref for testing multiple commits.
 /// * `packages` - Packages to test (empty = all).
 /// * `cargo_args` - Additional arguments to pass to cargo build and test commands.
 pub fn run(
     sh: &Shell,
     lockfile: Option<LockFile>,
-    toolchain: Toolchain,
+    toolchain: Option<Toolchain>,
     baseline: Option<&str>,
     packages: &[String],
     cargo_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::min(sh)? };
+    let toolchain = match toolchain {
+        Some(t) => t,
+        None => Toolchain::min(sh)?,
+    };
     let mut progress = ProgressGuard::new();
     let mut summary = TestSummary::default();
 
