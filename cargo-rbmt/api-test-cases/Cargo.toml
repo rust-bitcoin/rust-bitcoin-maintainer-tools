@@ -21,4 +21,4 @@ xshell = "0.2.7"
 
 [workspace.metadata.rbmt]
 lock.lockfiles = ["minimal"]
-toolchains.nightly = "nightly-2026-05-04"
+toolchains.nightly = "nightly-2026-11-16"

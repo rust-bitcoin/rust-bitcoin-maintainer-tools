@@ -749,7 +749,7 @@ mod tests {
         let tree = DuplicateTree::parse(output, &allowed);
         let stale = tree.stale_allowed_duplicates();
         assert_eq!(stale, &["bitcoin_hashes".to_string()]);
-        assert!(!stale.contains(&"hex-conservative".to_string()));
+        assert!(!stale.iter().any(|i| i == "hex-conservative"));
     }
 
     #[test]
@@ -792,7 +792,7 @@ mod tests {
         let tree = DuplicateTree::parse(output, &[]);
         // Both versions should be filtered out as semver trick.
         assert!(tree.duplicates().is_empty(), "semver trick duplicates should be filtered");
-        assert!(tree.semver_trick_packages().contains(&"units".to_string()));
+        assert!(tree.semver_trick_packages().iter().any(|i| i == "units"));
     }
 
     #[test]
@@ -814,6 +814,6 @@ mod tests {
         // my_crate should be filtered as semver trick.
         assert!(!tree.duplicates().contains_key("my_crate"));
         assert!(tree.duplicates().contains_key("hex_conservative"));
-        assert!(tree.semver_trick_packages().contains(&"my_crate".to_string()));
+        assert!(tree.semver_trick_packages().iter().any(|i| i == "my_crate"));
     }
 }
