@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 * [BREAKING] Remove `api.enabled` configuration. The `api` command now runs on all workspace packages (or those selected with `-p`), skipping packages without a library target.
+* `test` now defaults to the oldest configured toolchain.
 
 ## [0.5.5] - 2026-11-11
 

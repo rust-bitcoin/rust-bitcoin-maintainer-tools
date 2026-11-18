@@ -15,6 +15,7 @@
 //! For single-package repos with no explicit `[workspace]` table,
 //! `[package.metadata.rbmt.toolchains]` is used as a fallback.
 
+use std::cmp::Ordering;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -89,15 +90,36 @@ pub enum Toolchain {
     Msrv,
 }
 
+impl Ord for Toolchain {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Order by compiler version: MSRV < stable < nightly.
+        fn rank(t: Toolchain) -> u8 {
+            match t {
+                Toolchain::Msrv => 0,
+                Toolchain::Stable => 1,
+                Toolchain::Nightly => 2,
+            }
+        }
+        rank(*self).cmp(&rank(*other))
+    }
+}
+
+impl PartialOrd for Toolchain {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
+}
+
 impl Toolchain {
     /// Try to read the pinned version for this toolchain, returning `None` if not configured.
     ///
     /// For nightly and stable, returns `None` if not in `[workspace.metadata.rbmt.toolchains]`
     /// or `[package.metadata.rbmt.toolchains]`. For MSRV, returns `None` if no `rust-version`
     /// is found in any workspace package.
+    ///
+    /// Failures while reading the configuration (e.g. conflicting MSRVs or a malformed
+    /// manifest) are warned about and also result in `None`.
     pub fn try_read_version(self, sh: &Shell) -> Option<std::string::String> {
         let config = match Self::read_toolchains_config(sh) {
-            Ok(c) => Some(c),
+            Ok(c) => c,
             Err(e) => {
                 rbmt_eprintln!("Warning: Could not read toolchains config: {}", e);
                 None
@@ -108,13 +130,41 @@ impl Toolchain {
             Self::Nightly => config.and_then(|c| c.nightly),
             Self::Stable => config.and_then(|c| c.stable),
             Self::Msrv => match get_workspace_msrv(sh) {
-                Ok(msrv) => Some(msrv),
+                Ok(msrv) => msrv,
                 Err(e) => {
                     rbmt_eprintln!("Unable to determine MSRV: {}", e);
                     None
                 }
             },
         }
+    }
+
+    /// The oldest toolchain configured in the workspace.
+    ///
+    /// Returns an error if no toolchains are configured, or if determining the configured
+    /// toolchains fails (e.g. conflicting MSRVs or a malformed manifest).
+    pub fn min(sh: &Shell) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::configured(sh)?.into_iter().min().ok_or_else(|| "no toolchain configured".into())
+    }
+
+    /// Collect the toolchain variants that have a pinned version or MSRV.
+    ///
+    /// Fails if the configured toolchains cannot be determined, but a missing MSRV or
+    /// toolchains table is treated as "not configured" rather than an error.
+    fn configured(sh: &Shell) -> Result<Vec<Self>, Box<dyn std::error::Error>> {
+        let mut v = Vec::new();
+        if get_workspace_msrv(sh)?.is_some() {
+            v.push(Self::Msrv);
+        }
+        if let Some(config) = Self::read_toolchains_config(sh)? {
+            if config.stable.is_some() {
+                v.push(Self::Stable);
+            }
+            if config.nightly.is_some() {
+                v.push(Self::Nightly);
+            }
+        }
+        Ok(v)
     }
 
     /// Update the pinned version for this toolchain to the latest available.
@@ -126,7 +176,10 @@ impl Toolchain {
         let path = root.join("Cargo.toml");
         let contents = std::fs::read_to_string(&path)?;
         let mut doc: toml_edit::DocumentMut = contents.parse()?;
-        let table = match Self::read_toolchains_config(sh)?.location {
+        let config = Self::read_toolchains_config(sh)?.ok_or(
+            "No [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains] exists.",
+        )?;
+        let table = match config.location {
             ToolchainsLocation::Workspace =>
                 &mut doc["workspace"]["metadata"]["rbmt"]["toolchains"],
             ToolchainsLocation::Package => &mut doc["package"]["metadata"]["rbmt"]["toolchains"],
@@ -157,34 +210,33 @@ impl Toolchain {
     /// Read toolchain pins from the root `Cargo.toml`.
     ///
     /// Tries `[workspace.metadata.rbmt.toolchains]` first, then falls back to
-    /// `[package.metadata.rbmt.toolchains]`. Returns an error if neither is present.
+    /// `[package.metadata.rbmt.toolchains]`. Returns `Ok(None)` if neither is present.
     fn read_toolchains_config(
         sh: &Shell,
-    ) -> Result<ToolchainsConfigData, Box<dyn std::error::Error>> {
+    ) -> Result<Option<ToolchainsConfigData>, Box<dyn std::error::Error>> {
         let root = get_workspace_root(sh)?;
         let contents = std::fs::read_to_string(root.join("Cargo.toml"))?;
         let cargo_toml = toml::from_str::<WorkspaceManifest<RbmtTable>>(&contents)?;
 
         // Try workspace first.
         if let Some(toolchains) = cargo_toml.workspace.metadata.rbmt.toolchains {
-            return Ok(ToolchainsConfigData {
+            return Ok(Some(ToolchainsConfigData {
                 nightly: toolchains.nightly,
                 stable: toolchains.stable,
                 location: ToolchainsLocation::Workspace,
-            });
+            }));
         }
 
         // Fall back to package.
         if let Some(toolchains) = cargo_toml.package.metadata.rbmt.toolchains {
-            return Ok(ToolchainsConfigData {
+            return Ok(Some(ToolchainsConfigData {
                 nightly: toolchains.nightly,
                 stable: toolchains.stable,
                 location: ToolchainsLocation::Package,
-            });
+            }));
         }
 
-        Err("No [workspace.metadata.rbmt.toolchains] or [package.metadata.rbmt.toolchains] exists."
-            .into())
+        Ok(None)
     }
 
     /// Fetch the latest nightly version from the rust release channel API.
@@ -358,7 +410,9 @@ pub fn prepare_toolchain_with_override(
 /// Collects all `rust-version` fields declared by packages in the workspace and
 /// requires exactly one distinct value. Workspaces with multiple MSRVs are
 /// not supported.
-pub fn get_workspace_msrv(sh: &Shell) -> Result<String, Box<dyn std::error::Error>> {
+///
+/// Returns `Ok(None)` when no package declares an MSRV.
+pub fn get_workspace_msrv(sh: &Shell) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let mut msrvs: Vec<String> =
         collect_msrvs(sh)?.into_iter().filter_map(|(_, rust_version)| rust_version).collect();
 
@@ -366,8 +420,8 @@ pub fn get_workspace_msrv(sh: &Shell) -> Result<String, Box<dyn std::error::Erro
     msrvs.dedup();
 
     match msrvs.as_slice() {
-        [] => Err("No MSRV (rust-version) found in any Cargo.toml in the workspace".into()),
-        [msrv] => Ok(msrv.clone()),
+        [] => Ok(None),
+        [msrv] => Ok(Some(msrv.clone())),
         _ => Err(format!("Workspace packages have conflicting MSRVs: {}", msrvs.join(", ")).into()),
     }
 }
@@ -469,5 +523,16 @@ mod tests {
         assert_eq!(extract_version("rustc 1.74.0"), Some("1.74.0"));
         assert_eq!(extract_version("rustc unknown version"), None);
         assert_eq!(extract_version("no version here"), None);
+    }
+
+    #[test]
+    fn toolchain_ordering_oldest_to_newest() {
+        assert!(Toolchain::Msrv < Toolchain::Stable);
+        assert!(Toolchain::Stable < Toolchain::Nightly);
+        assert!(Toolchain::Msrv < Toolchain::Nightly);
+
+        let mut toolchains = [Toolchain::Nightly, Toolchain::Msrv, Toolchain::Stable];
+        toolchains.sort();
+        assert_eq!(toolchains, [Toolchain::Msrv, Toolchain::Stable, Toolchain::Nightly],);
     }
 }
