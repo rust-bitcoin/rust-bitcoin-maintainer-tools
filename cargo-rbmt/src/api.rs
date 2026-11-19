@@ -309,6 +309,25 @@ pub fn run(
     let mut package_diffs = Vec::new();
     let mut package_apis: Vec<(String, PackageApis)> = Vec::new();
 
+    // Validate before producing any side-effects.
+    {
+        let errors: Vec<String> = packages
+            .iter()
+            // Only check library packages.
+            .filter(|p| p.library)
+            // Check snapshots are not published.
+            .filter_map(|p| {
+                let api_config = ApiConfig::load(&p.dir).ok()?;
+                (snapshot || api_config.snapshot)
+                    .then(|| validate_snapshot(p).err().map(|e| e.to_string()))
+                    .flatten()
+            })
+            .collect();
+        if !errors.is_empty() {
+            return Err(errors.join("\n").into());
+        }
+    }
+
     for package in packages {
         if !package.library {
             rbmt_eprintln!("Skipping {} (no library target)", package.name);
@@ -409,12 +428,11 @@ fn get_package_apis(
     Ok(apis)
 }
 
-/// Write API files to disk.
-fn write_api_files(
-    package: &Package,
-    apis: &PackageApis,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Check that the package's manifest excludes the `api/` directory from publishing.
+/// Validate that a package is ready for API snapshot writing.
+fn validate_snapshot(package: &Package) -> Result<(), Box<dyn std::error::Error>> {
+    if !package.publish {
+        return Ok(());
+    }
     let manifest = Manifest::read(&package.dir)?;
     if !manifest.exclude.iter().any(|e| e.starts_with("api")) {
         return Err(format!(
@@ -425,7 +443,14 @@ fn write_api_files(
         )
         .into());
     }
+    Ok(())
+}
 
+/// Write API files to disk.
+fn write_api_files(
+    package: &Package,
+    apis: &PackageApis,
+) -> Result<(), Box<dyn std::error::Error>> {
     let package_api_dir = package.dir.join(API_DIR);
     fs::create_dir_all(&package_api_dir)?;
     for (config, entry) in apis {
