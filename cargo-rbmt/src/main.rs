@@ -155,12 +155,10 @@ enum Commands {
     },
     /// Run pre-release readiness checks.
     Prerelease {
-        /// Run checks even for packages that have pre-release checks disabled.
-        #[arg(long)]
-        force: bool,
         /// Git ref to use as baseline for version bump detection (tag, branch, or commit).
+        /// When not given, runs checks on all packages.
         #[arg(long)]
-        baseline: String,
+        baseline: Option<String>,
     },
     /// Install and manage nightly, stable, and MSRV toolchains.
     Toolchains {
@@ -292,8 +290,8 @@ fn main() {
                     process::exit(1);
                 }
             },
-        Commands::Prerelease { force, baseline } =>
-            if let Err(e) = prerelease::run(&sh, &cli.packages, force, &baseline) {
+        Commands::Prerelease { baseline } =>
+            if let Err(e) = prerelease::run(&sh, &cli.packages, baseline.as_deref()) {
                 eprintln!("Error running pre-release checks: {}", e);
                 process::exit(1);
             },

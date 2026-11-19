@@ -185,18 +185,19 @@ cargo rbmt test --lockfile maximum
 
 ### prerelease
 
-The `prerelease` command performs readiness checks before releasing a package. Checks only run for packages that have a version bump in `Cargo.toml` since the baseline ref.
-
-```toml
-[package.metadata.rbmt.prerelease]
-enabled = true
-baseline = "master"
-```
-
-Use `--force` to run checks regardless of whether a version bump is detected.
+The `prerelease` command performs readiness checks before releasing a package. Without `--baseline`, checks run on all packages unconditionally. With `--baseline <ref>`, only packages with a version bump in `Cargo.toml` since `<ref>` are checked.
 
 ```bash
-cargo rbmt prerelease --force
+# Check all packages unconditionally.
+cargo rbmt prerelease
+# Only check packages that have bumped their version since the given ref.
+cargo rbmt prerelease --baseline v0.5.5
+```
+
+Use `-p` to scope checks to specific packages.
+
+```bash
+cargo rbmt prerelease -p bitcoin -p hashes
 ```
 
 ### run

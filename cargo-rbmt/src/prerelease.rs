@@ -6,79 +6,40 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
 use xshell::Shell;
 
 use crate::environment::{
-    cargo_cmd, get_target_dir, get_workspace_packages, CmdExt, PackageManifest, ProgressGuard,
+    cargo_cmd, get_target_dir, get_workspace_packages, CmdExt, ProgressGuard,
 };
 use crate::git;
 use crate::lock::LockFile;
 use crate::toolchain::{prepare_toolchain, Toolchain};
 
-/// Pre-release-specific configuration, read from `[package.metadata.rbmt.prerelease]` in `Cargo.toml`.
-#[derive(Debug, Deserialize)]
-#[serde(default)]
-struct PrereleaseConfig {
-    /// Whether to run pre-release checks for this package. Defaults to `true`.
-    enabled: bool,
-}
-
-impl Default for PrereleaseConfig {
-    fn default() -> Self { Self { enabled: true } }
-}
-
-impl PrereleaseConfig {
-    /// Load pre-release configuration from `[package.metadata.rbmt.prerelease]` in the package's `Cargo.toml`.
-    fn load(package_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        #[derive(serde::Deserialize, Default)]
-        struct RbmtTable {
-            #[serde(default)]
-            prerelease: PrereleaseConfig,
-        }
-
-        let path = package_dir.join("Cargo.toml");
-        if !path.exists() {
-            return Ok(Self::default());
-        }
-        let contents = std::fs::read_to_string(&path)?;
-        Ok(toml::from_str::<PackageManifest<RbmtTable>>(&contents)?
-            .package
-            .metadata
-            .rbmt
-            .prerelease)
-    }
-}
-
 /// Run pre-release readiness checks for all packages.
 pub fn run(
     sh: &Shell,
     packages: &[String],
-    force: bool,
-    baseline: &str,
+    baseline: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let packages = get_workspace_packages(sh, packages)?;
     let _progress = ProgressGuard::new();
     rbmt_eprintln!("Running pre-release checks on {} packages", packages.len());
 
-    let baseline = git::resolve_baseline(sh, baseline)?;
-    rbmt_eprintln!("Comparing against baseline: {}", baseline);
+    let baseline = baseline.map(|b| git::resolve_baseline(sh, b)).transpose()?;
+    if let Some(ref baseline) = baseline {
+        rbmt_eprintln!("Comparing against baseline: {}", baseline);
+    }
 
     for package in packages {
-        let config = PrereleaseConfig::load(&package.dir)?;
-
-        if !config.enabled {
-            rbmt_eprintln!("Skipping {} (pre-release not enabled)", package.name);
-            continue;
-        }
-
-        if !force && !has_version_bump(sh, &package.dir, &baseline)? {
-            rbmt_eprintln!(
-                "Skipping {} (no version bump detected since {})",
-                package.name,
-                baseline
-            );
-            continue;
+        if let Some(ref baseline) = baseline {
+            if !has_version_bump(sh, &package.dir, baseline)? {
+                rbmt_eprintln!(
+                    "Skipping {} (no version bump detected since {})",
+                    package.name,
+                    baseline
+                );
+                continue;
+            }
         }
 
         rbmt_eprintln!("Checking package: {}", package.name);
