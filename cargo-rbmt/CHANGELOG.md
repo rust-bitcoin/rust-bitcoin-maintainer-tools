@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+* [BREAKING] Simplify `prerelease`: remove `--force` flag and `prerelease.enabled` config; make `--baseline` optional. Without `--baseline`, checks run on all packages unconditionally. With `--baseline <ref>`, only packages with a version bump since `<ref>` are checked.
 * [BREAKING] Remove `api.enabled` configuration. The `api` command now runs on all workspace packages (or those selected with `-p`), skipping packages without a library target.
 * `test` now defaults to the oldest configured toolchain.
 
