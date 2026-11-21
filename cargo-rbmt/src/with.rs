@@ -9,6 +9,7 @@ use std::process::Command;
 
 use xshell::Shell;
 
+use crate::environment::ProgressGuard;
 use crate::lock::LockFile;
 use crate::toolchain::{self, Toolchain};
 
@@ -36,7 +37,11 @@ pub fn run(
     let lockfile = if let Some(lockfile) = lockfile { lockfile } else { LockFile::max(sh)? };
     let _lockfile_guard = lockfile.activate(sh)?;
 
-    toolchain::prepare_toolchain(sh, toolchain)?;
+    // Clear progress before handing off to given command.
+    {
+        let _progress = ProgressGuard::new();
+        toolchain::prepare_toolchain(sh, toolchain)?;
+    }
 
     let (prog, rest) = args.split_first().ok_or("no command to run")?;
 
