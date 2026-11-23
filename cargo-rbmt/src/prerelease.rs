@@ -75,11 +75,18 @@ fn has_version_bump(
 }
 
 // Things which should be patched up before release.
-const TODOS: &[&str] = &["// TODO", "/* TODO", "// FIXME", "/* FIXME", "\"TBD\""];
+// The concat was done because otherwise the file matches its own patterns.
+const TODOS: &[&str] = &[
+    concat!("// ", "TODO"),
+    concat!("/* ", "TODO"),
+    concat!("// ", "FIXME"),
+    concat!("/* ", "FIXME"),
+    concat!("\"TB", "D\""),
+];
 // Things which are banned and can't be released.
-const NONOS: &[&str] = &["doc_auto_cfg"];
+const NONOS: &[&str] = &[concat!("doc_", "auto_cfg")];
 
-/// Grep source code for TODO, FIXME, TBD, and `doc_auto_cfg`.
+/// Grep source code for TODO, FIXME, TBD, and the unstable auto cfg doc attribute.
 fn check_todos(sh: &Shell) -> Result<(), Box<dyn std::error::Error>> {
     rbmt_eprintln!("Greping source for todos and nonos...");
 
