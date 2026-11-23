@@ -2,8 +2,10 @@
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-11-23
+
 * [BREAKING] Simplify `prerelease`: remove `--force` flag and `prerelease.enabled` config; make `--baseline` optional. Without `--baseline`, checks run on all packages unconditionally. With `--baseline <ref>`, only packages with a version bump since `<ref>` are checked.
-* [BREAKING] Remove `api.enabled` configuration. The `api` command now runs on all workspace packages (or those selected with `-p`), skipping packages without a library target.
+* [BREAKING] Remove `api.enabled` configuration. The `api` command now runs on all workspace packages (or those selected with `-p`), skipping packages without a library target. API snapshot validation now runs before any side-effects produced.
 * `test` now defaults to the oldest configured toolchain.
 
 ## [0.5.5] - 2026-11-11
@@ -108,7 +110,8 @@ Initial release of `cargo-rbmt`, a cargo subcommand for rust-bitcoin maintainer 
 * **Tool Version Pinning** // Install and update tools pinned in workspace metadata with the `tools` command.
 * **Importable CI Actions** // GitHub/Forgejo actions for common tasks like toolchain and tool version updates.
 
-[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.5...HEAD
+[Unreleased]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.6...HEAD
+[0.5.6]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.5...cargo-rbmt-0.5.6
 [0.5.5]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.4...cargo-rbmt-0.5.5
 [0.5.4]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.3...cargo-rbmt-0.5.4
 [0.5.3]: https://git.rust-bitcoin.org/rust-bitcoin/rust-bitcoin-maintainer-tools/compare/cargo-rbmt-0.5.2...cargo-rbmt-0.5.3
