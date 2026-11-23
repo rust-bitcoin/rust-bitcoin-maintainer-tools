@@ -7,7 +7,7 @@ resolver = "2"
 
 [workspace.metadata]
 rbmt.version = "0.5.5"
-rbmt.toolchains = { nightly = "nightly-2026-11-16", stable = "1.100.0" }
+rbmt.toolchains = { nightly = "nightly-2026-11-22", stable = "1.100.0" }
 rbmt.tools = { zizmor = "1.32.0" }
 rbmt.lock.lockfiles = [ "minimal", "maximum", "recent" ]
 
